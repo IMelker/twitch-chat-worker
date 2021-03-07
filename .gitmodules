@@ -1,0 +1,18 @@
+[submodule "third-party/json"]
+	path = third-party/json
+	url = https://github.com/nlohmann/json.git
+[submodule "third-party/abseil"]
+	path = third-party/abseil
+	url = https://github.com/abseil/abseil-cpp.git
+[submodule "third-party/fmt"]
+	path = third-party/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "third-party/spdlog"]
+	path = third-party/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "third-party/opts"]
+	path = third-party/opts
+	url = https://github.com/jarro2783/cxxopts.git
+[submodule "third-party/toml"]
+	path = third-party/toml
+	url = https://github.com/marzer/tomlplusplus.git

@@ -12,6 +12,14 @@
 #define SOCKET_ERROR -1
 
 IRCSocket::IRCSocket() {
+    socketInit();
+}
+
+IRCSocket::~IRCSocket() {
+    disconnect();
+}
+
+void IRCSocket::socketInit() {
     if ((this->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == SOCKET_ERROR) {
         fprintf(stderr, "Socket create failed. Error: %s\n", strerror(errno));
         exit(SOCKET_ERROR);
@@ -25,10 +33,6 @@ IRCSocket::IRCSocket() {
 
     fcntl(this->sock, F_SETFL, O_NONBLOCK);
     fcntl(this->sock, F_SETFL, O_ASYNC);
-}
-
-IRCSocket::~IRCSocket() {
-    disconnect();
 }
 
 bool IRCSocket::connect(char const *host, int port) {
@@ -57,7 +61,7 @@ bool IRCSocket::connect(char const *host, int port) {
 
 void IRCSocket::disconnect() {
     if (this->established) {
-        close(this->sock);
+        ::close(this->sock);
         this->established = false;
     }
 }

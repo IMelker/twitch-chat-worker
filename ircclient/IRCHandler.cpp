@@ -1,8 +1,4 @@
 #include "IRCHandler.h"
-#include "IRCClient.h"
-
-#include <chrono>
-#include <array>
 
 IRCCommandHandler ircCommandTable[NUM_IRC_CMDS] =
 {
@@ -47,12 +43,12 @@ void IRCClient::handleCTCP(IRCMessage message) {
         if (text == "VERSION") // Respond to CTCP VERSION
         {
             sendIRC("NOTICE " + message.prefix.nickname
-                        + " :\001VERSION Open source IRC client by Fredi Machado - https://github.com/fredimachado/IRCClient \001");
+                        + " :\001VERSION Open source IRC client by Fredi Machado - https://github.com/fredimachado/IRCClient \001\n");
             return;
         }
 
         // CTCP not implemented
-        sendIRC("NOTICE " + message.prefix.nickname + " :\001ERRMSG " + text + " :Not implemented\001");
+        sendIRC("NOTICE " + message.prefix.nickname + " :\001ERRMSG " + text + " :Not implemented\001\n");
     }
 }
 
@@ -67,20 +63,10 @@ void IRCClient::handlePrivMsg(IRCMessage message) {
     }
 
     if (to[0] == '#') {
-        auto it = this->outstreams.find(to);
-        if (it == this->outstreams.end()) {
-            it = this->outstreams.emplace(std::pair(to, std::ofstream{to + ".json"})).first;
-            it->second << "[" << std::endl;
-        }
-
-        auto duration = std::chrono::system_clock::now().time_since_epoch();
-        auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-
-        it->second << "{ \"time\" : " << millis << R"(, "nick" : ")" << message.prefix.nickname << R"(", "text" : ")" << text << "\"}," << std::endl;
-        printf("[%s] %s: %s\n", to.c_str(), message.prefix.nickname.c_str(), text.c_str());
+        //printf("[%s] %s: %s\n", to.c_str(), message.prefix.nickname.c_str(), text.c_str());
+    } else {
+        //printf("< %s: %s\n", message.prefix.nickname.c_str(), text.c_str());
     }
-    else
-        printf("< %s: %s\n", message.prefix.nickname.c_str(), text.c_str());
 }
 
 void IRCClient::handleNotice(IRCMessage message) {
@@ -139,8 +125,4 @@ void IRCClient::handleServerMessage(IRCMessage message) {
     for (; it != message.parameters.end(); ++it)
         printf("%s ", it->c_str());
     printf("\n");
-}
-
-void IRCClient::handleCommand(const IRCMessage &message) {
-    printf("%s\n", message.command.c_str());
 }

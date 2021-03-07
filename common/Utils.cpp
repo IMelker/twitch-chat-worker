@@ -4,13 +4,34 @@
 
 #include "Utils.h"
 
-std::vector<std::string> split(std::string const &text, char sep) {
-    std::vector<std::string> tokens;
-    size_t start = 0, end = 0;
-    while ((end = text.find(sep, start)) != std::string::npos) {
-        tokens.push_back(text.substr(start, end - start));
-        start = end + 1;
-    }
-    tokens.push_back(text.substr(start));
-    return tokens;
+namespace Utils
+{
+
+namespace String
+{
+
+void toUpper(std::string *str) {
+    std::transform(str->begin(), str->end(), str->begin(), ::toupper);
 }
+
+std::string toUpper(std::string_view str) {
+    std::string upperStr(str);
+    toUpper(&upperStr);
+    return upperStr;
+}
+
+void toLower(std::string *str) {
+    std::transform(str->begin(), str->end(), str->begin(), ::tolower);
+}
+
+std::string toLower(std::string_view str) {
+    std::string upperStr(str);
+    toLower(&upperStr);
+    return upperStr;
+}
+
+}
+
+}
+
+

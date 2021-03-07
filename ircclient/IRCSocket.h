@@ -18,6 +18,8 @@ class IRCSocket
     int receive(char *buf, int maxSize);
 
   private:
+    void socketInit();
+
     int sock = -1;
     bool established = false;
 };

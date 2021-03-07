@@ -18,7 +18,6 @@ inline int getCommandHandler(const std::string& command) {
         if (ircCommandTable[i].command == command)
             return i;
     }
-
     return NUM_IRC_CMDS;
 }
 

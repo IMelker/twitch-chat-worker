@@ -1,0 +1,19 @@
+[general]
+log_filepath = "logs/app.log"
+log_level = "trace"
+
+[irc]
+host = "irc.chat.twitch.tv"
+port = 6667
+log_filepath = "logs/irc.log"
+log_level = "trace"
+credentials = "/home/imelker/credentials.json"
+
+[pg]
+host = "rc1b-51j42x0n0atf3wi5.mdb.yandexcloud.net"
+port = 6432
+dbname = "twitch_chat"
+user = "twitch_chat"
+password = "Hfhysqcet12"
+log_filepath = "logs/db.log"
+log_level = "trace"

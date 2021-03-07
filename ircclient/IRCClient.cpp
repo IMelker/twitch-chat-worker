@@ -9,7 +9,7 @@
 
 #define MAXDATASIZE 4096
 
-bool IRCClient::connect(char *host, int port) {
+bool IRCClient::connect(const char *host, int port) {
     return this->ircsocket.connect(host, port);
 }
 
@@ -17,9 +17,7 @@ void IRCClient::disconnect() {
     this->ircsocket.disconnect();
 }
 
-bool IRCClient::sendIRC(std::string data) {
-    std::cout << "> " << data << std::endl;
-    data.append("\n");
+bool IRCClient::sendIRC(const std::string& data) {
     return this->ircsocket.send(data.c_str(), data.size());
 }
 
@@ -27,13 +25,13 @@ bool IRCClient::login(const std::string& nick, const std::string& user, const st
     this->nick = nick;
     this->user = user;
 
-    //if (sendIRC("HELLO")) {
-        if (!password.empty() && !sendIRC("PASS " + password))
+    if (sendIRC("HELLO\n")) {
+        if (!password.empty() && !sendIRC("PASS " + password + "\n"))
             return false;
-        if (sendIRC("NICK " + nick))
-            if (sendIRC("USER " + user + " 8 * :Cpp IRC Client"))
+        if (sendIRC("NICK " + nick + "\n"))
+            if (sendIRC("USER " + user + " 8 * :Cpp IRC Client\n"))
                 return true;
-    //}
+    }
 
     return false;
 }
@@ -44,18 +42,19 @@ void IRCClient::receive() {
     if (size <= 0)
         return;
 
-    //  TODO use data from buf, to avoid copy
-    std::string line;
-    std::istringstream iss(std::string{buf, static_cast<size_t>(size)});
-    while (getline(iss, line)) {
-        if (line.find('\r') != std::string::npos)
-            line = line.substr(0, line.size() - 1);
-        parse(line);
+    int pos = 0;
+    for (int i = 0; i < size; ++i) {
+        if (buf[i] == '\r' || buf[i] == '\n') {
+            parse(std::string{buf + pos, static_cast<size_t>(i - pos)});
+            pos = i + 1;
+        }
     }
 }
 
 void IRCClient::parse(std::string data) {
-    std::string original(data);
+    if (data.empty())
+        return;
+
     IRCCommandPrefix cmdPrefix;
 
     // if command has prefix
@@ -64,7 +63,7 @@ void IRCClient::parse(std::string data) {
         data = data.substr(data.find(' ') + 1);
     }
 
-    std::string command = data.substr(0, data.find(' '));
+    auto command = data.substr(0, data.find(' '));
     std::transform(command.begin(), command.end(), command.begin(), towupper);
     if (data.find(' ') != std::string::npos)
         data = data.substr(data.find(' ') + 1);
@@ -92,13 +91,12 @@ void IRCClient::parse(std::string data) {
     }
 
     if (command == "ERROR") {
-        std::cout << original << std::endl;
         disconnect();
         return;
     }
 
     if (command == "PING") {
-        sendIRC("PONG :" + parameters.at(0));
+        sendIRC("PONG :" + parameters.at(0) + "\n");
         return;
     }
 
@@ -109,30 +107,21 @@ void IRCClient::parse(std::string data) {
     if (commandIndex < NUM_IRC_CMDS) {
         IRCCommandHandler &cmdHandler = ircCommandTable[commandIndex];
         (this->*cmdHandler.handler)(ircMessage);
-    } else if (debug)
-        std::cout << original << std::endl;
+    }
 
-    // Try to call hook (if any matches)
     callHook(command, ircMessage);
 }
 
-void IRCClient::hookIRCCommand(std::string command, void (*function)(IRCMessage /*message*/, IRCClient * /*client*/)) {
-    IRCCommandHook hook;
-
-    hook.command = std::move(command);
-    hook.function = function;
-
-    hooks.push_back(hook);
+void IRCClient::registerHook(std::string command, IRCCommandHook hook) {
+    hooks.emplace(std::pair(std::move(command), std::move(hook)));
 }
 
 void IRCClient::callHook(const std::string& command, const IRCMessage& message) {
     if (hooks.empty())
         return;
 
-    for (auto & hook : hooks) {
-        if (hook.command == command) {
-            (*(hook.function))(message, this);
-            break;
-        }
+    auto range = hooks.equal_range(command);
+    for (auto i = range.first; i != range.second; ++i) {
+        i->second(message);
     }
 }

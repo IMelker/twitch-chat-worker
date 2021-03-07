@@ -38,7 +38,7 @@ Then, after you create the IRCClient instance, you can hook it:
 IRCClient client;
 
 // Hook PRIVMSG
-client.hookIRCCommand("PRIVMSG", &onPrivMsg);
+client.registerHook("PRIVMSG", &onPrivMsg);
 ```
 
 ### Building on windows with Mingw:
