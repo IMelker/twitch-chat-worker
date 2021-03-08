@@ -19,7 +19,7 @@
 class PGConnectionPool
 {
   public:
-    explicit PGConnectionPool(PGConnectionConfig config, int connectionsCount = CONN_COUNT);
+    explicit PGConnectionPool(PGConnectionConfig config, unsigned int connectionsCount = CONN_COUNT);
 
     std::shared_ptr<PGConnection> lockConnection();
     void unlockConnection(std::shared_ptr<PGConnection> conn);
@@ -28,7 +28,7 @@ class PGConnectionPool
     void init();
 
     PGConnectionConfig config;
-    const int count = 10;
+    const unsigned int count = 10;
 
     std::mutex mutex;
     std::condition_variable condition;

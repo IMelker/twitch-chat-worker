@@ -5,57 +5,13 @@
 #include <algorithm>
 #include <chrono>
 
+#include <nlohmann/json.hpp>
+
+#include "common/SysSignal.h"
+
 #include "IRCtoDBConnector.h"
 
-IRCtoDBConnector::IRCtoDBConnector(std::shared_ptr<PGConnectionPool> pg) : pg(std::move(pg)) {
-
-}
-
-IRCtoDBConnector::~IRCtoDBConnector() = default;
-
-void IRCtoDBConnector::onConnected(IRCClient *client) {
-
-}
-
-void IRCtoDBConnector::onDisconnected(IRCClient *client) {
-
-}
-
-void insertMessageData(const std::string& channel, const std::string& from, const std::string& text,
-                       long timestamp, const std::shared_ptr<PGConnectionPool>& pgBackend) {
-    auto conn = pgBackend->lockConnection();
-
-    std::string request = "INSERT INTO \"user\" (id, name) VALUES (DEFAULT, '" + from + "') ON CONFLICT DO NOTHING;";
-    request.append("INSERT INTO message (id, text, timestamp, channel_id, user_id) VALUES (DEFAULT,'")
-           .append(text).append("', (SELECT TO_TIMESTAMP(").append(std::to_string(timestamp)).append("/1000.0)), ")
-           .append("(SELECT id from channel WHERE name='").append(channel.substr(1)).append("' ), ")
-           .append("(SELECT id FROM \"user\" WHERE name = '").append(from).append("') );");
-
-    PQsendQuery(conn->connection(), request.c_str());
-
-    while (auto resp = PQgetResult(conn->connection())) {
-        if (PQresultStatus(resp) == PGRES_FATAL_ERROR)
-            fprintf(stderr, "DB Error: %s%s\n", PQresultErrorMessage(resp), request.c_str());
-        PQclear(resp);
-    }
-    pgBackend->unlockConnection(conn);
-}
-
-void IRCtoDBConnector::onMessage(IRCMessage message, IRCClient *client) {
-    std::chrono::time_point<std::chrono::system_clock> now = std::chrono::system_clock::now();
-    auto duration = now.time_since_epoch();
-    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-    insertMessageData(message.parameters.at(0), message.prefix.nickname,
-                      message.parameters.at(message.parameters.size() - 1), timestamp, pg);
-}
-
-void joinToChannels(const std::vector<std::string>& list, IRCClient *client) {
-    if (!client || !client->connected())
-        return;
-
-    for(auto &name: list)
-        client->sendIRC("JOIN #" + name + "\n");
-}
+using json = nlohmann::json;
 
 std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
     auto conn = pgBackend->lockConnection();
@@ -79,7 +35,80 @@ std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>
     return channelsList;
 }
 
-void IRCtoDBConnector::onLogin(IRCClient *client) {
-    //20 join attempts per 10 seconds per user (2000 for verified bots)
-    joinToChannels(getChannelsList(pg), client);
+IRCtoDBConnector::IRCtoDBConnector(unsigned int threads) : pool(threads) {}
+IRCtoDBConnector::~IRCtoDBConnector() = default;
+
+void IRCtoDBConnector::initPGConnectionPool(PGConnectionConfig config, unsigned int connections) {
+    assert(!this->pg);
+    this->pg = std::make_shared<PGConnectionPool>(std::move(config), connections);
+
+    // init db based data
+    {
+        auto channels = getChannelsList(this->pg);
+
+        std::lock_guard lg(channelsMutex);
+        this->watchChannels = std::move(channels);
+    }
 }
+
+void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, const std::string &credentials) {
+    assert(workers.empty());
+
+    std::ifstream credfile(credentials);
+    json json = json::parse(credfile);
+
+    for (auto &cred : json) {
+        IRCClientConfig cfg;
+        cfg.user = cred.at("user").get<std::string>();
+        cfg.nick = cred.at("nick").get<std::string>();
+        cfg.password = cred.at("password").get<std::string>();
+        workers.emplace_back(config, std::move(cfg), this);
+    }
+}
+
+void IRCtoDBConnector::onConnected(IRCWorker *worker) {
+    printf("IRCClient onConnected\n");
+}
+
+void IRCtoDBConnector::onDisconnected(IRCWorker *worker) {
+    printf("IRCClient onDisconnected\n");
+}
+
+void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *worker) {
+    std::chrono::time_point<std::chrono::system_clock> now = std::chrono::system_clock::now();
+    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+    pool.enqueue([message = std::move(message), timestamp, this]() {
+        MessageData transformed;
+        transformed.timestamp = timestamp;
+        this->msgProcessor.transformMessage(message, transformed);
+
+        // process request to database
+        if (transformed.valid) {
+            pool.enqueue([message = std::move(transformed), this]() {
+                auto conn = pg->lockConnection();
+                dbProcessor.processMessage(message, conn->connection());
+                pg->unlockConnection(conn);
+            });
+        }
+    });
+}
+
+void IRCtoDBConnector::onLogin(IRCWorker *worker) {
+    printf("IRCClient onLogin\n");
+
+    std::lock_guard lg(channelsMutex);
+    size_t pos = 0;
+    for (pos = 0; pos < watchChannels.size(); ++pos) {
+        if (!worker->joinChannel(watchChannels[pos]))
+            break;
+    }
+    watchChannels.erase(watchChannels.begin(), watchChannels.begin() + pos);
+}
+
+void IRCtoDBConnector::loop() {
+    while (!SysSignal::serviceTerminated()){
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+}
+

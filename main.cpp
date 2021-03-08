@@ -3,20 +3,16 @@
 #include <cstdio>
 #include <unistd.h>
 #include <wait.h>
-
 #include <algorithm>
-#include <iostream>
 #include <map>
 #include <thread>
-
-#include <nlohmann/json.hpp>
 
 #include "common/SysSignal.h"
 #include "common/Options.h"
 #include "common/Config.h"
 
 #include "ircclient/IRCWorker.h"
-#include "pg/PGConnectionPool.h"
+#include "pgsql/PGConnectionPool.h"
 
 #include "IRCtoDBConnector.h"
 
@@ -55,31 +51,20 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
+    IRCtoDBConnector connector(config["pg"]["threads"].value_or(std::thread::hardware_concurrency()));
+
     PGConnectionConfig pgConfig;
     pgConfig.host = config["pg"]["host"].value_or("localhost");
     pgConfig.port = config["pg"]["port"].value_or(5432);
     pgConfig.dbname = config["pg"]["dbname"].value_or("postgres");
     pgConfig.user = config["pg"]["user"].value_or("postgres");
     pgConfig.pass = config["pg"]["password"].value_or("postgres");
+    connector.initPGConnectionPool(std::move(pgConfig),config["pg"]["connections"].value_or(std::thread::hardware_concurrency()));
 
-    auto pgBackend = std::make_shared<PGConnectionPool>(std::move(pgConfig));
+    IRCConnectConfig ircConfig;
+    ircConfig.host = config["irc"]["host"].value_or("irc.chat.twitch.tv");
+    ircConfig.port = config["irc"]["port"].value_or(6667);
+    connector.initIRCWorkers(ircConfig, config["irc"]["credentials"].value_or("credentials.json"));
 
-    IRCtoDBConnector connector(pgBackend);
-
-    std::vector<IRCWorker> workers;
-    std::string host = config["irc"]["host"].value_or("irc.chat.twitch.tv");
-    int port = config["irc"]["port"].value_or(6667);
-
-    std::ifstream credfile(config["irc"]["credentials"].value_or("credentials.json"));
-    nlohmann::json credentials;
-    credfile >> credentials;
-
-    for (auto &cred : credentials) {
-        workers.emplace_back(host, port,
-                             cred.at("nick").get<std::string>(),
-                             cred.at("user").get<std::string>(),
-                             cred.at("password").get<std::string>(),
-                             &connector);
-    }
-
+    IRCtoDBConnector::loop();
 }

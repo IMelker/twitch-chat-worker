@@ -14,19 +14,34 @@
 
 #include "IRCClient.h"
 
+class IRCWorker;
 struct IRCWorkerListener {
-    virtual void onConnected(IRCClient *client) = 0;
-    virtual void onDisconnected(IRCClient *client) = 0;
-    virtual void onMessage(IRCMessage message, IRCClient *client) = 0;
-    virtual void onLogin(IRCClient *client) = 0;
+    virtual void onConnected(IRCWorker *worker) = 0;
+    virtual void onDisconnected(IRCWorker *worker) = 0;
+    virtual void onMessage(IRCMessage message, IRCWorker *worker) = 0;
+    virtual void onLogin(IRCWorker *worker) = 0;
+};
+
+struct IRCConnectConfig {
+    std::string host;
+    int port = 6667;
+    int connect_attemps_limit = 30;
+};
+
+struct IRCClientConfig {
+    std::string user;
+    std::string nick;
+    std::string password;
+    int channels_limit = 20;
+    int command_per_sec_limit = 20 / 30;
+    int whisper_per_sec_limit = 3;
+    int auth_per_sec_limit = 2;
 };
 
 class IRCWorker
 {
   public:
-    explicit IRCWorker(std::string host, int port,
-                       std::string nick, std::string user, std::string pass,
-                       IRCWorkerListener *listener);
+    explicit IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener);
     ~IRCWorker();
 
     IRCWorker(IRCWorker&) = delete;
@@ -36,19 +51,23 @@ class IRCWorker
 
     void run();
 
-    void sendIRC(const std::string& message);
+    bool joinChannel(const std::string& channel);
+    void leaveChannel(const std::string& channel);
+    bool sendMessage(const std::string& channel, const std::string& text);
+
+    bool sendIRC(const std::string& message);
 
     void messageHook(IRCMessage message);
   private:
-    std::unique_ptr<IRCClient> client;
-    int attemps = 0;
-
-    std::string host;
-    int port;
-
-    std::string nick, user, password;
+    void resetState();
 
     IRCWorkerListener *listener;
+
+    IRCConnectConfig conConfig;
+    IRCClientConfig ircConfig;
+
+    std::unique_ptr<IRCClient> client;
+    std::set<std::string> joinedChannels;
 
     std::thread thread;
 };

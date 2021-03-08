@@ -3,24 +3,52 @@
 //
 
 #include "IRCWorker.h"
-
 #include <memory>
-#include <cmath>
 
-#define MAX_CONNECT_ATTEMPS 30
+#include <fmt/format.h>
 
-IRCWorker::IRCWorker(std::string host, int port,
-                     std::string nick, std::string user, std::string pass,
-                     IRCWorkerListener *listener)
-    : host(std::move(host)), port(port),
-      nick(std::move(nick)), user(std::move(user)), password(std::move(pass)),
-      listener(listener) {
+#define AUTH_ATTEMPTS_LIMIT 20
+
+IRCWorker::IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener)
+    : listener(listener), conConfig(std::move(conConfig)), ircConfig(std::move(ircConfig)) {
     thread = std::thread(&IRCWorker::run, this);
 }
 
 IRCWorker::~IRCWorker() {
     if (thread.joinable())
         thread.join();
+}
+
+void IRCWorker::resetState() {
+
+}
+
+inline bool connect(const IRCConnectConfig& cfg, IRCClient *client) {
+    int attempt = 0;
+    while (attempt < cfg.connect_attemps_limit) {
+        std::this_thread::sleep_for (std::chrono::seconds(2 * attempt));
+
+        if (client->connect((char *)cfg.host.c_str(), cfg.port))
+            return true;
+
+        fprintf(stderr, "Failed to connect IRC with hostname: %s:%d, attempt: %d\n", cfg.host.c_str(), cfg.port, attempt);
+
+        ++attempt;
+    }
+    return false;
+}
+
+inline bool login(const IRCClientConfig& cfg, IRCClient *client) {
+    int attempts = AUTH_ATTEMPTS_LIMIT;
+    while(--attempts > 0 && client->connected()) {
+        if (client->login(cfg.nick, cfg.user, cfg.password))
+            return true;
+
+        fprintf(stderr, "Failed to login IRC with nick: %s, user: %s, attempts left: %d\n", cfg.nick.c_str(), cfg.user.c_str(), attempts);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds ((1000 / cfg.auth_per_sec_limit) - 1));
+    }
+    return false;
 }
 
 void IRCWorker::run() {
@@ -31,40 +59,76 @@ void IRCWorker::run() {
             this->messageHook(std::move(message));
         });
 
-        printf("IRCClient connecting\n");
-        if (client->connect((char *)host.c_str(), port)) {
-            attemps = 0;
+        if (!connect(conConfig, client.get()))
+            break;
 
-            this->listener->onConnected(client.get());
+        this->listener->onConnected(this);
 
-            // 20 authenticate attempts per 10 seconds per user (200 for verified bots)
-            if (!client->login(nick, user, password)) {
-                fprintf(stderr, "Failed to login IRC with nick: %s, user: %s\n", nick.c_str(), user.c_str());
-                break;
-            }
+        if (!login(ircConfig, client.get()))
+            break;
 
-            this->listener->onLogin(client.get());
+        this->listener->onLogin(this);
 
-            while (!SysSignal::serviceTerminated() && client->connected()) {
-                client->receive();
-            }
-            printf("IRCClient disconnected\n");
-        } else {
-            if (attemps > MAX_CONNECT_ATTEMPS)
-                break;
-
-            std::this_thread::sleep_for (std::chrono::seconds(2 * attemps));
-            ++attemps;
+        for(auto &channel: joinedChannels) {
+            client->sendIRC(fmt::format("JOIN #{}\n", channel));
         }
+
+        while (!SysSignal::serviceTerminated() && client->connected()) {
+            client->receive();
+        }
+
+        listener->onDisconnected(this);
+
+        resetState();
     }
 
     if (client->connected()) {
         client->disconnect();
-        listener->onDisconnected(client.get());
+        listener->onDisconnected(this);
+    }
+    resetState();
+}
+
+
+bool IRCWorker::joinChannel(const std::string &channel) {
+    if (joinedChannels.count(channel)) {
+        printf("%s: already joined to channel: %s\n", ircConfig.nick.c_str(), channel.c_str());
+        return true;
+    }
+
+    if (joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit)) {
+        printf("%s: failed to join to channel: %s. Limit reached\n", ircConfig.nick.c_str(), channel.c_str());
+        return false;
+    }
+
+    joinedChannels.emplace(channel);
+
+    if (client && client->connected()) {
+        client->sendIRC(fmt::format("JOIN #{}\n", channel));
+    }
+    return true;
+}
+
+void IRCWorker::leaveChannel(const std::string &channel) {
+    if (joinedChannels.count(channel) == 0) {
+        printf("%s: already left from channel: %s\n", ircConfig.nick.c_str(), channel.c_str());
+        return;
+    }
+
+    joinedChannels.erase(channel);
+
+    if (client && client->connected()) {
+        client->sendIRC(fmt::format("PART #{}\n", channel));
     }
 }
 
-void IRCWorker::sendIRC(const std::string& message) {
+bool IRCWorker::sendMessage(const std::string &channel, const std::string &text) {
+    if (client && client->connected())
+        return client->sendIRC(fmt::format("PRIVMSG #{} {}\n", channel, text));
+    return false;
+}
+
+bool IRCWorker::sendIRC(const std::string& message) {
     // 20 per 30 seconds: Users sending commands or messages to channels in which
     // they do not have Moderator or Operator status
 
@@ -76,21 +140,8 @@ void IRCWorker::sendIRC(const std::string& message) {
 
     if (client && client->connected())
         client->sendIRC(message);
-
-    // [JOIN](#join)	Join a channel.
-    // [PART](#part)	Leave a channel.
-    // [PRIVMSG](#privmsg)	Send a message to a channel
 }
 
 void IRCWorker::messageHook(IRCMessage message) {
-    //std::string to = message.parameters.at(0);
-    //std::string text = message.parameters.at(message.parameters.size() - 1);
-
-    /*if (to[0] == '#') {
-        printf("[%s] %s: %s\n", to.c_str(), message.prefix.nickname.c_str(), text.c_str());
-    } else {
-        printf("< %s: %s\n", message.prefix.nickname.c_str(), text.c_str());
-    }*/
-
-    this->listener->onMessage(std::move(message), client.get());
+    this->listener->onMessage(std::move(message), this);
 }

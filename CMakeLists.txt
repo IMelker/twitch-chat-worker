@@ -46,8 +46,9 @@ message("\n[executable]")
 add_executable(chatsniffer
         main.cpp
         IRCtoDBConnector.h IRCtoDBConnector.cpp
-        pg/PGConnection.h pg/PGConnection.cpp
-        pg/PGConnectionPool.h pg/PGConnectionPool.cpp
+        Processor.h Processor.cpp
+        pgsql/PGConnection.h pgsql/PGConnection.cpp
+        pgsql/PGConnectionPool.h pgsql/PGConnectionPool.cpp
         ircclient/IRCSocket.h ircclient/IRCSocket.cpp
         ircclient/IRCClient.h ircclient/IRCClient.cpp
         ircclient/IRCHandler.h ircclient/IRCHandler.cpp

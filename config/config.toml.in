@@ -15,5 +15,7 @@ port = 6432
 dbname = "twitch_chat"
 user = "twitch_chat"
 password = "Hfhysqcet12"
+threads = 8
+connections = 4
 log_filepath = "logs/db.log"
 log_level = "trace"

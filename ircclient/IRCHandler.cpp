@@ -37,7 +37,7 @@ void IRCClient::handleCTCP(IRCMessage message) {
     // Remove '\001' from start/end of the string
     text = text.substr(1, text.size() - 2);
 
-    printf("[%s requested CTCP %s]\n", message.prefix.nickname.c_str(), text.c_str());
+    //printf("[%s requested CTCP %s]\n", message.prefix.nickname.c_str(), text.c_str());
 
     if (to == nick) {
         if (text == "VERSION") // Respond to CTCP VERSION
@@ -107,7 +107,7 @@ void IRCClient::handleUserQuit(IRCMessage message) {
 void IRCClient::handleChannelNamesList(IRCMessage message) {
     std::string channel = message.parameters.at(2);
     std::string nicks = message.parameters.at(3);
-    printf("<Channel[%s] people:\n%s\n", channel.c_str(), nicks.c_str());
+    //printf("<Channel[%s] people:\n%s\n", channel.c_str(), nicks.c_str());
 }
 
 // TODO: Reconnecting in expanential 1s, 2s, 4s, 8s.

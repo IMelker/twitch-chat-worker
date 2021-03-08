@@ -18,7 +18,7 @@
 class ThreadPool
 {
   public:
-    explicit ThreadPool(size_t);
+    explicit ThreadPool(size_t count);
     ~ThreadPool();
 
     template<class F, class... Args>
@@ -47,8 +47,11 @@ auto ThreadPool::enqueue(F &&f, Args &&... args) -> std::future<typename std::re
         std::unique_lock<std::mutex> lock(this->mutex);
 
         // don't allow enqueueing after stopping the pool
-        if (this->stop)
-            throw std::runtime_error("enqueue on stopped ThreadPool");
+        if (this->stop) {
+            fprintf(stderr, "Pool stopped executing inplace\n");
+            (*task)();
+            return res;
+        }
 
         this->tasks.emplace([task]() { (*task)(); });
     }
