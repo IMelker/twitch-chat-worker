@@ -17,16 +17,19 @@ struct PGConnectionConfig {
     std::string pass = "postgres";
 };
 
+class Logger;
 class PGConnection
 {
   public:
-    explicit PGConnection(const PGConnectionConfig& config = {});
+    explicit PGConnection(const PGConnectionConfig& config, std::shared_ptr<Logger> logger);
     ~PGConnection() = default;
 
     [[nodiscard]] PGconn *connection() const { return conn.get();}
     [[nodiscard]] bool connected() const { return established; }
+    [[nodiscard]] const std::shared_ptr<Logger>& getLogger() const { return logger; }
   private:
     bool established = false;
+    std::shared_ptr<Logger> logger;
     std::shared_ptr<PGconn> conn;
 };
 

@@ -38,10 +38,11 @@ struct IRCClientConfig {
     int auth_per_sec_limit = 2;
 };
 
+class Logger;
 class IRCWorker
 {
   public:
-    explicit IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener);
+    explicit IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger);
     ~IRCWorker();
 
     IRCWorker(IRCWorker&) = delete;
@@ -61,6 +62,7 @@ class IRCWorker
   private:
     void resetState();
 
+    std::shared_ptr<Logger> logger;
     IRCWorkerListener *listener;
 
     IRCConnectConfig conConfig;

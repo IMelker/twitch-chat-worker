@@ -10,11 +10,13 @@
 #include "common/SysSignal.h"
 #include "common/Options.h"
 #include "common/Config.h"
+#include "common/LoggerFactory.h"
 
 #include "ircclient/IRCWorker.h"
 #include "pgsql/PGConnectionPool.h"
 
 #include "IRCtoDBConnector.h"
+
 
 int main(int argc, char *argv[]) {
     SysSignal::setupSignalHandling();
@@ -51,7 +53,14 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
-    IRCtoDBConnector connector(config["pg"]["threads"].value_or(std::thread::hardware_concurrency()));
+    LoggerConfig appLogConfig;
+    appLogConfig.name = "app";
+    appLogConfig.type = LoggerFactory::typeFromString(config["general"]["log_type"].value_or("file"));
+    appLogConfig.level = LoggerFactory::levelFromString(config["general"]["log_level"].value_or("info"));
+    appLogConfig.target = config["general"]["log_target"].value_or("app.log");
+
+    int threads = config["pg"]["threads"].value_or(std::thread::hardware_concurrency());
+    IRCtoDBConnector connector(threads, LoggerFactory::create(appLogConfig));
 
     PGConnectionConfig pgConfig;
     pgConfig.host = config["pg"]["host"].value_or("localhost");
@@ -59,12 +68,41 @@ int main(int argc, char *argv[]) {
     pgConfig.dbname = config["pg"]["dbname"].value_or("postgres");
     pgConfig.user = config["pg"]["user"].value_or("postgres");
     pgConfig.pass = config["pg"]["password"].value_or("postgres");
-    connector.initPGConnectionPool(std::move(pgConfig),config["pg"]["connections"].value_or(std::thread::hardware_concurrency()));
+
+    LoggerConfig pgLogConfig;
+    pgLogConfig.name = "sql";
+    pgLogConfig.type = LoggerFactory::typeFromString(config["pg"]["log_type"].value_or("file"));
+    pgLogConfig.level = LoggerFactory::levelFromString(config["pg"]["log_level"].value_or("info"));
+    pgLogConfig.target = config["pg"]["log_target"].value_or("pg.log");
+
+    int connections = config["pg"]["connections"].value_or(std::thread::hardware_concurrency());
+    connector.initPGConnectionPool(std::move(pgConfig), connections, LoggerFactory::create(pgLogConfig));
 
     IRCConnectConfig ircConfig;
     ircConfig.host = config["irc"]["host"].value_or("irc.chat.twitch.tv");
     ircConfig.port = config["irc"]["port"].value_or(6667);
-    connector.initIRCWorkers(ircConfig, config["irc"]["credentials"].value_or("credentials.json"));
+
+    LoggerConfig ircLogConfig;
+    ircLogConfig.name = "irc";
+    ircLogConfig.type = LoggerFactory::typeFromString(config["irc"]["log_type"].value_or("file"));
+    ircLogConfig.level = LoggerFactory::levelFromString(config["irc"]["log_level"].value_or("info"));
+    ircLogConfig.target = config["irc"]["log_target"].value_or("irc.log");
+
+    auto credentials = config["irc"]["credentials"].value_or("credentials.json");
+    connector.initIRCWorkers(ircConfig, credentials, LoggerFactory::create(ircLogConfig));
+
+    // TODO add message batcher
+    // TODO add caches for channels
+    // TODO add statistics
+    // TODO add HTTP interface
+    //      /shutdown
+    //      /reload
+    //      /stats
+    //      /userlist
+    //      /info?user=""
+    //      /adduser?user=""&nick=""&password=""
+    //      /join?user=""&channel=""
+    //      /leave?user=""&channel=""
 
     IRCtoDBConnector::loop();
 }

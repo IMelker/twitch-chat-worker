@@ -1,13 +1,15 @@
 [general]
-log_filepath = "logs/app.log"
+log_type = "console"
+log_target = "logs/app.log"
 log_level = "trace"
 
 [irc]
 host = "irc.chat.twitch.tv"
 port = 6667
-log_filepath = "logs/irc.log"
-log_level = "trace"
 credentials = "/home/imelker/credentials.json"
+log_type = "file"
+log_target = "logs/irc.log"
+log_level = "trace"
 
 [pg]
 host = "rc1b-51j42x0n0atf3wi5.mdb.yandexcloud.net"
@@ -17,5 +19,6 @@ user = "twitch_chat"
 password = "Hfhysqcet12"
 threads = 8
 connections = 4
-log_filepath = "logs/db.log"
+log_type = "file"
+log_target = "logs/db.log"
 log_level = "trace"

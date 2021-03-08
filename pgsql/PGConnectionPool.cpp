@@ -6,15 +6,13 @@
 
 #include "PGConnectionPool.h"
 
-PGConnectionPool::PGConnectionPool(PGConnectionConfig config, unsigned int connectionsCount)
-  : config(std::move(config)), count(connectionsCount) {
-    init();
-}
-
-void PGConnectionPool::init() {
+PGConnectionPool::PGConnectionPool(PGConnectionConfig config,
+                                   unsigned int connectionsCount,
+                                   std::shared_ptr<Logger> logger)
+  : logger(std::move(logger)), config(std::move(config)), count(connectionsCount) {
     std::lock_guard<std::mutex> lg(mutex);
     for (unsigned int i = 0; i < count; ++i) {
-        pool.emplace(std::make_shared<PGConnection>(config));
+        pool.emplace(std::make_shared<PGConnection>(this->config, this->logger));
     }
 }
 

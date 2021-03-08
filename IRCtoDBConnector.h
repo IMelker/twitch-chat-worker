@@ -15,14 +15,15 @@
 
 #include "Processor.h"
 
+class Logger;
 class IRCtoDBConnector : public IRCWorkerListener
 {
   public:
-    explicit IRCtoDBConnector(unsigned int threads);
+    explicit IRCtoDBConnector(unsigned int threads, std::shared_ptr<Logger> logger);
     ~IRCtoDBConnector();
 
-    void initPGConnectionPool(PGConnectionConfig config, unsigned int connections);
-    void initIRCWorkers(const IRCConnectConfig& config, const std::string& credentials);
+    void initPGConnectionPool(PGConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
+    void initIRCWorkers(const IRCConnectConfig& config, const std::string& credentials, std::shared_ptr<Logger> logger);
 
     static void loop();
 
@@ -32,6 +33,7 @@ class IRCtoDBConnector : public IRCWorkerListener
     void onMessage(IRCMessage message, IRCWorker *worker) override;
     void onLogin(IRCWorker *worker) override;
   private:
+    std::shared_ptr<Logger> logger;
     std::shared_ptr<PGConnectionPool> pg;
     std::vector<IRCWorker> workers;
 

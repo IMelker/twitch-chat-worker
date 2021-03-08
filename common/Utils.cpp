@@ -2,6 +2,8 @@
 // Created by imelker on 01.03.2021.
 //
 
+#include <algorithm>
+
 #include "Utils.h"
 
 namespace Utils

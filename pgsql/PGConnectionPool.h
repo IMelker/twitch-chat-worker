@@ -14,19 +14,19 @@
 
 #include "PGConnection.h"
 
-#define CONN_COUNT 10
-
+class Logger;
 class PGConnectionPool
 {
   public:
-    explicit PGConnectionPool(PGConnectionConfig config, unsigned int connectionsCount = CONN_COUNT);
+    explicit PGConnectionPool(PGConnectionConfig config, unsigned int connectionsCount, std::shared_ptr<Logger> logger);
 
     std::shared_ptr<PGConnection> lockConnection();
     void unlockConnection(std::shared_ptr<PGConnection> conn);
 
-  private:
-    void init();
+    const std::shared_ptr<Logger>& getLogger() const { return logger; };
 
+  private:
+    std::shared_ptr<Logger> logger;
     PGConnectionConfig config;
     const unsigned int count = 10;
 

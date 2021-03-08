@@ -48,7 +48,7 @@ auto ThreadPool::enqueue(F &&f, Args &&... args) -> std::future<typename std::re
 
         // don't allow enqueueing after stopping the pool
         if (this->stop) {
-            fprintf(stderr, "Pool stopped executing inplace\n");
+            //fprintf(stderr, "Pool stopped executing inplace\n");
             (*task)();
             return res;
         }

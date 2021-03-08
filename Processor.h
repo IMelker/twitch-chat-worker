@@ -8,16 +8,12 @@
 #include <string>
 #include <vector>
 
-#include <libpq-fe.h>
-#include <fmt/format.h>
-
 #include "ircclient/IRCClient.h"
 
 struct MessageData {
     std::string user;
     std::string channel;
     std::string text;
-    std::vector<std::string> tags;
     long timestamp = 0;
     bool valid = false;
 };
@@ -29,19 +25,18 @@ class MessageProcessor {
 
     // irc handlers
     void transformMessage(const IRCMessage &message, MessageData &result);
-
   private:
 };
 
+class PGConnection;
 class DataProcessor
 {
   public:
     DataProcessor();
     ~DataProcessor();
 
-    void processMessage(const MessageData& msg, PGconn *conn);
+    void processMessage(const MessageData& msg, PGConnection *conn);
   private:
-
 };
 
 #endif //CHATSNIFFER__PROCESSOR_H_

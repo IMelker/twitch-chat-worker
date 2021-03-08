@@ -57,6 +57,7 @@ add_executable(chatsniffer
         common/Options.h common/Options.cpp
         common/Config.h common/Config.cpp
         common/ThreadPool.h common/ThreadPool.cpp
+        common/Logger.h common/Logger.cpp common/LoggerFactory.h
         common/Utils.h common/Utils.cpp
         )
 

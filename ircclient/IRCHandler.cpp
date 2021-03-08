@@ -79,29 +79,30 @@ void IRCClient::handleNotice(IRCMessage message) {
     if (!text.empty() && text[0] == '\001') {
         text = text.substr(1, text.size() - 2);
         if (text.find(' ') == std::string::npos) {
-            printf("[Invalid %s reply from %s]\n", text.c_str(), from.c_str());
+            fprintf(stderr, "[Invalid %s reply from %s]\n", text.c_str(), from.c_str());
             return;
         }
         std::string ctcp = text.substr(0, text.find(' '));
-        printf("[%s %s reply]: %s\n", from.c_str(), ctcp.c_str(), text.substr(text.find(' ') + 1).c_str());
-    } else
-        printf("-%s- %s\n", from.c_str(), text.c_str());
+        //printf("[%s %s reply]: %s\n", from.c_str(), ctcp.c_str(), text.substr(text.find(' ') + 1).c_str());
+    } else{
+        //printf("-%s- %s\n", from.c_str(), text.c_str());
+    }
 }
 
 void IRCClient::handleChannelJoinPart(IRCMessage message) {
     std::string channel = message.parameters.at(0);
     std::string action = message.command == "JOIN" ? "joins" : "leaves";
-    printf("%s %s %s\n", message.prefix.nickname.c_str(), action.c_str(), channel.c_str());
+    //printf("%s %s %s\n", message.prefix.nickname.c_str(), action.c_str(), channel.c_str());
 }
 
 void IRCClient::handleUserNickChange(IRCMessage message) {
     std::string newNick = message.parameters.at(0);
-    printf("%s changed his nick to %s\n", message.prefix.nickname.c_str(), newNick.c_str());
+    //printf("%s changed his nick to %s\n", message.prefix.nickname.c_str(), newNick.c_str());
 }
 
 void IRCClient::handleUserQuit(IRCMessage message) {
     std::string text = message.parameters.at(0);
-    printf("%s quits (%s)\n", message.prefix.nickname.c_str(), text.c_str());
+    //printf("%s quits (%s)\n", message.prefix.nickname.c_str(), text.c_str());
 }
 
 void IRCClient::handleChannelNamesList(IRCMessage message) {
@@ -110,19 +111,17 @@ void IRCClient::handleChannelNamesList(IRCMessage message) {
     //printf("<Channel[%s] people:\n%s\n", channel.c_str(), nicks.c_str());
 }
 
-// TODO: Reconnecting in expanential 1s, 2s, 4s, 8s.
-
 void IRCClient::handleNicknameInUse(IRCMessage message) {
-    printf("%s %s\n", message.parameters.at(1).c_str(), message.parameters.at(2).c_str());
+    //printf("%s %s\n", message.parameters.at(1).c_str(), message.parameters.at(2).c_str());
 }
 
 void IRCClient::handleServerMessage(IRCMessage message) {
     if (message.parameters.empty())
         return;
 
-    auto it = message.parameters.begin();
-    ++it; // skip the first parameter (our nick)
-    for (; it != message.parameters.end(); ++it)
-        printf("%s ", it->c_str());
-    printf("\n");
+    //auto it = message.parameters.begin();
+    //++it; // skip the first parameter (our nick)
+    //for (; it != message.parameters.end(); ++it)
+    //    printf("%s ", it->c_str());
+    //printf("\n");
 }

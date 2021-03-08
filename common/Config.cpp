@@ -7,15 +7,7 @@
 #include <fstream> //required for toml::parse_file()
 #include <sstream>
 
-#define DEBUG_CONFIG
-#ifdef DEBUG_CONFIG
-#define PRINT(f, ...) printf((f"\n"), ##__VA_ARGS__)
-#else
-#define PRINT()
-#endif
-
 Config::Config(const std::string &filepath) {
-    PRINT("Config: \"%s\"", filepath.c_str());
     open(filepath);
 }
 
@@ -31,7 +23,7 @@ void Config::reopen() {
     try {
         this->data = toml::parse_file(this->path);
     } catch (const toml::parse_error& error) {
-        PRINT("Failed to parse: \"%s\"", error.what());
+        fprintf(stderr, "Failed to parse: \"%s\"", error.what());
     }
 }
 
@@ -43,8 +35,6 @@ void Config::saveAs(const std::string &filepath) {
     std::ofstream out(filepath);
     out << this->data;
     out.close();
-
-    PRINT("Config saved to \"%s\"", this->path.c_str());
 }
 
 std::string Config::dump() {

@@ -2,15 +2,17 @@
 // Created by imelker on 06.03.2021.
 //
 
-#include "IRCWorker.h"
 #include <memory>
 
 #include <fmt/format.h>
 
+#include "../common/Logger.h"
+#include "IRCWorker.h"
+
 #define AUTH_ATTEMPTS_LIMIT 20
 
-IRCWorker::IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener)
-    : listener(listener), conConfig(std::move(conConfig)), ircConfig(std::move(ircConfig)) {
+IRCWorker::IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger)
+    : logger(std::move(logger)), listener(listener), conConfig(std::move(conConfig)), ircConfig(std::move(ircConfig)) {
     thread = std::thread(&IRCWorker::run, this);
 }
 
@@ -23,7 +25,7 @@ void IRCWorker::resetState() {
 
 }
 
-inline bool connect(const IRCConnectConfig& cfg, IRCClient *client) {
+inline bool connect(const IRCConnectConfig &cfg, IRCClient *client, Logger *logger) {
     int attempt = 0;
     while (attempt < cfg.connect_attemps_limit) {
         std::this_thread::sleep_for (std::chrono::seconds(2 * attempt));
@@ -31,20 +33,20 @@ inline bool connect(const IRCConnectConfig& cfg, IRCClient *client) {
         if (client->connect((char *)cfg.host.c_str(), cfg.port))
             return true;
 
-        fprintf(stderr, "Failed to connect IRC with hostname: %s:%d, attempt: %d\n", cfg.host.c_str(), cfg.port, attempt);
+        logger->logError("Failed to connect IRC with hostname: {}:{}, attempt: {}", cfg.host, cfg.port, attempt);
 
         ++attempt;
     }
     return false;
 }
 
-inline bool login(const IRCClientConfig& cfg, IRCClient *client) {
+inline bool login(const IRCClientConfig &cfg, IRCClient *client, Logger *logger) {
     int attempts = AUTH_ATTEMPTS_LIMIT;
     while(--attempts > 0 && client->connected()) {
         if (client->login(cfg.nick, cfg.user, cfg.password))
             return true;
 
-        fprintf(stderr, "Failed to login IRC with nick: %s, user: %s, attempts left: %d\n", cfg.nick.c_str(), cfg.user.c_str(), attempts);
+        logger->logError("Failed to login IRC with nick: {}, user: {}, attempts left: {}\n", cfg.nick, cfg.user, attempts);
 
         std::this_thread::sleep_for(std::chrono::milliseconds ((1000 / cfg.auth_per_sec_limit) - 1));
     }
@@ -59,24 +61,29 @@ void IRCWorker::run() {
             this->messageHook(std::move(message));
         });
 
-        if (!connect(conConfig, client.get()))
+        if (!connect(conConfig, client.get(), logger.get()))
             break;
 
-        this->listener->onConnected(this);
+        logger->logInfo("IRCWorker connected to {}:{}", conConfig.host, conConfig.port);
+        listener->onConnected(this);
 
-        if (!login(ircConfig, client.get()))
+        if (!login(ircConfig, client.get(), logger.get()))
             break;
 
-        this->listener->onLogin(this);
+        logger->logInfo("IRCWorker logged in by {}:{}", ircConfig.user, ircConfig.nick);
 
         for(auto &channel: joinedChannels) {
+            logger->logTrace("IRCWorker {} joining to {}", ircConfig.nick, channel);
             client->sendIRC(fmt::format("JOIN #{}\n", channel));
         }
+
+        listener->onLogin(this);
 
         while (!SysSignal::serviceTerminated() && client->connected()) {
             client->receive();
         }
 
+        logger->logInfo("IRCWorker disconnected from {}:{}", conConfig.host, conConfig.port);
         listener->onDisconnected(this);
 
         resetState();
@@ -84,6 +91,7 @@ void IRCWorker::run() {
 
     if (client->connected()) {
         client->disconnect();
+        logger->logInfo("IRCWorker disconnected from {}:{}", conConfig.host, conConfig.port);
         listener->onDisconnected(this);
     }
     resetState();
@@ -92,18 +100,19 @@ void IRCWorker::run() {
 
 bool IRCWorker::joinChannel(const std::string &channel) {
     if (joinedChannels.count(channel)) {
-        printf("%s: already joined to channel: %s\n", ircConfig.nick.c_str(), channel.c_str());
+        logger->logInfo(R"(IRCWorker "{}" already joined to channel({}))", ircConfig.nick, channel);
         return true;
     }
 
     if (joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit)) {
-        printf("%s: failed to join to channel: %s. Limit reached\n", ircConfig.nick.c_str(), channel.c_str());
+        logger->logError(R"(IRCWorker "{}" failed to join to channel({}). Limit reached)", ircConfig.nick, channel);
         return false;
     }
 
     joinedChannels.emplace(channel);
 
     if (client && client->connected()) {
+        logger->logInfo("IRCWorker {} joining to {}", ircConfig.nick, channel);
         client->sendIRC(fmt::format("JOIN #{}\n", channel));
     }
     return true;
@@ -111,20 +120,23 @@ bool IRCWorker::joinChannel(const std::string &channel) {
 
 void IRCWorker::leaveChannel(const std::string &channel) {
     if (joinedChannels.count(channel) == 0) {
-        printf("%s: already left from channel: %s\n", ircConfig.nick.c_str(), channel.c_str());
+        logger->logInfo(R"(IRCWorker "{}" already left from channel({}))", ircConfig.nick, channel);
         return;
     }
 
     joinedChannels.erase(channel);
 
     if (client && client->connected()) {
+        logger->logTrace("IRCWorker {} leaving {}", ircConfig.nick, channel);
         client->sendIRC(fmt::format("PART #{}\n", channel));
     }
 }
 
 bool IRCWorker::sendMessage(const std::string &channel, const std::string &text) {
-    if (client && client->connected())
+    if (client && client->connected()) {
+        logger->logTrace(R"(IRCWorker "{} send to "{}" message "{}")", ircConfig.nick, channel, text);
         return client->sendIRC(fmt::format("PRIVMSG #{} {}\n", channel, text));
+    }
     return false;
 }
 
@@ -143,5 +155,7 @@ bool IRCWorker::sendIRC(const std::string& message) {
 }
 
 void IRCWorker::messageHook(IRCMessage message) {
-    this->listener->onMessage(std::move(message), this);
+    logger->logTrace("IRCWorker {}({}): {}" , message.prefix.nickname,
+                     message.parameters.at(0), message.parameters.back());
+    listener->onMessage(std::move(message), this);
 }
