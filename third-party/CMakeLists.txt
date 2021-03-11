@@ -1,9 +1,6 @@
 message("- [json]")
 add_subdirectory(json)
 
-message("- [abseil]")
-add_subdirectory(abseil)
-
 message("- [toml]")
 
 # some checkups and settings
@@ -17,3 +14,9 @@ message("- [spdlog]")
 set(SPDLOG_FMT_EXTERNAL ON)
 set(SPDLOG_NO_EXCEPTIONS ON)
 add_subdirectory(spdlog)
+
+message("- [clickhouse]")
+add_subdirectory(clickhouse)
+
+message("- [abseil]")
+add_subdirectory(abseil)

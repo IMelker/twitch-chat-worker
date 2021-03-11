@@ -1,14 +1,35 @@
-[general]
+[app]
+main_db = "clickhouse"
 log_type = "console"
 log_target = "logs/app.log"
+log_level = "trace"
+
+[http]
+host = "192.168.15.40"
+port = 8080
+threads = 1
+log_type = "console"
+log_target = "logs/http.log"
 log_level = "trace"
 
 [irc]
 host = "irc.chat.twitch.tv"
 port = 6667
 credentials = "/home/imelker/credentials.json"
-log_type = "file"
+log_type = "console"
 log_target = "logs/irc.log"
+log_level = "trace"
+
+[clickhouse]
+host = "rc1b-51j42x0n0atf3wi5.mdb.yandexcloud.net"
+port = 6432
+dbname = "twitch_chat"
+user = "twitch_chat"
+password = "Hfhysqcet12"
+threads = 8
+connections = 4
+log_type = "console"
+log_target = "logs/db.log"
 log_level = "trace"
 
 [pg]
@@ -19,6 +40,6 @@ user = "twitch_chat"
 password = "Hfhysqcet12"
 threads = 8
 connections = 4
-log_type = "file"
+log_type = "console"
 log_target = "logs/db.log"
 log_level = "trace"

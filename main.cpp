@@ -13,10 +13,19 @@
 #include "common/LoggerFactory.h"
 
 #include "ircclient/IRCWorker.h"
-#include "pgsql/PGConnectionPool.h"
+#include "db/ch/CHConnectionPool.h"
+#include "db/pg/PGConnectionPool.h"
 
 #include "IRCtoDBConnector.h"
 
+inline LoggerConfig readLoggerConfig(Config& config, const std::string& category) {
+    LoggerConfig logConfig;
+    logConfig.name = category;
+    logConfig.type = LoggerFactory::typeFromString(config[category]["log_type"].value_or("file"));
+    logConfig.level = LoggerFactory::levelFromString(config[category]["log_level"].value_or("info"));
+    logConfig.target = config[category]["log_target"].value_or(category + ".log");
+    return logConfig;
+}
 
 int main(int argc, char *argv[]) {
     SysSignal::setupSignalHandling();
@@ -53,48 +62,45 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
-    LoggerConfig appLogConfig;
-    appLogConfig.name = "app";
-    appLogConfig.type = LoggerFactory::typeFromString(config["general"]["log_type"].value_or("file"));
-    appLogConfig.level = LoggerFactory::levelFromString(config["general"]["log_level"].value_or("info"));
-    appLogConfig.target = config["general"]["log_target"].value_or("app.log");
-
     int threads = config["pg"]["threads"].value_or(std::thread::hardware_concurrency());
-    IRCtoDBConnector connector(threads, LoggerFactory::create(appLogConfig));
+    IRCtoDBConnector connector(threads, LoggerFactory::create(readLoggerConfig(config, "app")));
 
-    PGConnectionConfig pgConfig;
-    pgConfig.host = config["pg"]["host"].value_or("localhost");
-    pgConfig.port = config["pg"]["port"].value_or(5432);
-    pgConfig.dbname = config["pg"]["dbname"].value_or("postgres");
-    pgConfig.user = config["pg"]["user"].value_or("postgres");
-    pgConfig.pass = config["pg"]["password"].value_or("postgres");
+    std::string db = config["app"]["main_db"].value_or("pg");
+    if (db == "clickhouse") {
+        CHConnectionConfig dbCfg;
+        dbCfg.host = config[db]["host"].value_or("localhost");
+        dbCfg.port = config[db]["port"].value_or(5432);
+        dbCfg.dbname = config[db]["dbname"].value_or("postgres");
+        dbCfg.user = config[db]["user"].value_or("postgres");
+        dbCfg.pass = config[db]["password"].value_or("postgres");
 
-    LoggerConfig pgLogConfig;
-    pgLogConfig.name = "sql";
-    pgLogConfig.type = LoggerFactory::typeFromString(config["pg"]["log_type"].value_or("file"));
-    pgLogConfig.level = LoggerFactory::levelFromString(config["pg"]["log_level"].value_or("info"));
-    pgLogConfig.target = config["pg"]["log_target"].value_or("pg.log");
+        int connections = config[db]["connections"].value_or(std::thread::hardware_concurrency());
+        connector.initCHConnectionPool(std::move(dbCfg), connections, LoggerFactory::create(readLoggerConfig(config, db)));
+    } else /*db == "pg"*/ {
+        PGConnectionConfig dbCfg;
+        dbCfg.host = config[db]["host"].value_or("localhost");
+        dbCfg.port = config[db]["port"].value_or(5432);
+        dbCfg.dbname = config[db]["dbname"].value_or("postgres");
+        dbCfg.user = config[db]["user"].value_or("postgres");
+        dbCfg.pass = config[db]["password"].value_or("postgres");
 
-    int connections = config["pg"]["connections"].value_or(std::thread::hardware_concurrency());
-    connector.initPGConnectionPool(std::move(pgConfig), connections, LoggerFactory::create(pgLogConfig));
+        int connections = config[db]["connections"].value_or(std::thread::hardware_concurrency());
+        connector.initPGConnectionPool(std::move(dbCfg), connections, LoggerFactory::create(readLoggerConfig(config, db)));
+    }
 
     IRCConnectConfig ircConfig;
     ircConfig.host = config["irc"]["host"].value_or("irc.chat.twitch.tv");
     ircConfig.port = config["irc"]["port"].value_or(6667);
 
-    LoggerConfig ircLogConfig;
-    ircLogConfig.name = "irc";
-    ircLogConfig.type = LoggerFactory::typeFromString(config["irc"]["log_type"].value_or("file"));
-    ircLogConfig.level = LoggerFactory::levelFromString(config["irc"]["log_level"].value_or("info"));
-    ircLogConfig.target = config["irc"]["log_target"].value_or("irc.log");
-
     auto credentials = config["irc"]["credentials"].value_or("credentials.json");
-    connector.initIRCWorkers(ircConfig, credentials, LoggerFactory::create(ircLogConfig));
+    connector.initIRCWorkers(ircConfig, credentials, LoggerFactory::create(readLoggerConfig(config, "irc")));
 
-    // TODO add message batcher
+    // TODO provide all data for Clickhouse
+    // TODO add HTTP interface, may be based on boost
+    // TODO provide data to clickhouse
     // TODO add caches for channels
     // TODO add statistics
-    // TODO add HTTP interface
+    // TODO provide http interfaces
     //      /shutdown
     //      /reload
     //      /stats
@@ -103,6 +109,7 @@ int main(int argc, char *argv[]) {
     //      /adduser?user=""&nick=""&password=""
     //      /join?user=""&channel=""
     //      /leave?user=""&channel=""
+    // TODO add lua runner or python runner
 
     IRCtoDBConnector::loop();
 }

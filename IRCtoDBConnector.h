@@ -10,8 +10,9 @@
 
 #include "common/ThreadPool.h"
 
-#include "pgsql/PGConnectionPool.h"
 #include "ircclient/IRCWorker.h"
+#include "db/pg/PGConnectionPool.h"
+#include "db/ch/CHConnectionPool.h"
 
 #include "Processor.h"
 
@@ -22,6 +23,7 @@ class IRCtoDBConnector : public IRCWorkerListener
     explicit IRCtoDBConnector(unsigned int threads, std::shared_ptr<Logger> logger);
     ~IRCtoDBConnector();
 
+    void initCHConnectionPool(CHConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
     void initPGConnectionPool(PGConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
     void initIRCWorkers(const IRCConnectConfig& config, const std::string& credentials, std::shared_ptr<Logger> logger);
 
@@ -34,7 +36,10 @@ class IRCtoDBConnector : public IRCWorkerListener
     void onLogin(IRCWorker *worker) override;
   private:
     std::shared_ptr<Logger> logger;
+
     std::shared_ptr<PGConnectionPool> pg;
+    std::shared_ptr<CHConnectionPool> ch;
+
     std::vector<IRCWorker> workers;
 
     std::mutex channelsMutex;

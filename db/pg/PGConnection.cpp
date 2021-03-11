@@ -2,11 +2,11 @@
 // Created by imelker on 07.03.2021.
 //
 
-#include "../common/Logger.h"
+#include "../../common/Logger.h"
 #include "PGConnection.h"
 
 PGConnection::PGConnection(const PGConnectionConfig& config, std::shared_ptr<Logger> logger)
-  : logger(std::move(logger)) {
+  : DBConnection(std::move(logger)) {
     conn.reset(PQsetdbLogin(config.host.c_str(), std::to_string(config.port).c_str(), nullptr, nullptr,
                                config.dbname.c_str(), config.user.c_str(), config.pass.c_str()), &PQfinish);
 

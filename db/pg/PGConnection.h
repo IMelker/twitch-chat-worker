@@ -9,6 +9,8 @@
 #include <mutex>
 #include <libpq-fe.h>
 
+#include "../DBConnection.h"
+
 struct PGConnectionConfig {
     std::string host = "localhost";
     int port = 5432;
@@ -18,18 +20,15 @@ struct PGConnectionConfig {
 };
 
 class Logger;
-class PGConnection
+class PGConnection : public DBConnection
 {
   public:
     explicit PGConnection(const PGConnectionConfig& config, std::shared_ptr<Logger> logger);
-    ~PGConnection() = default;
+    ~PGConnection() override = default;
 
-    [[nodiscard]] PGconn *connection() const { return conn.get();}
-    [[nodiscard]] bool connected() const { return established; }
-    [[nodiscard]] const std::shared_ptr<Logger>& getLogger() const { return logger; }
+    [[nodiscard]] PGconn *raw() const { return conn.get();}
+
   private:
-    bool established = false;
-    std::shared_ptr<Logger> logger;
     std::shared_ptr<PGconn> conn;
 };
 

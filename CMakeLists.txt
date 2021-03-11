@@ -3,7 +3,8 @@ message("[main]")
 cmake_minimum_required(VERSION 3.15)
 project(chatsniffer)
 
-set(CMAKE_CXX_FLAGS "-Wpedantic -Wall -Wextra -pthread")
+# -Wpedantic disabled because of https://github.com/abseil/abseil-cpp/issues/157
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -pthread")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
@@ -32,6 +33,7 @@ add_subdirectory(third-party)
 include_directories(third-party/spdlog/include)
 include_directories(third-party/toml)
 include_directories(third-party/opts/include)
+include_directories(third-party/clickhouse)
 message("- [pg]")
 find_package(PostgreSQL REQUIRED)
 include_directories(${PostgreSQL_INCLUDE_DIRS})
@@ -47,8 +49,13 @@ add_executable(chatsniffer
         main.cpp
         IRCtoDBConnector.h IRCtoDBConnector.cpp
         Processor.h Processor.cpp
-        pgsql/PGConnection.h pgsql/PGConnection.cpp
-        pgsql/PGConnectionPool.h pgsql/PGConnectionPool.cpp
+        db/DBConnectionLock.h
+        db/DBConnection.h db/DBConnection.cpp
+        db/DBConnectionPool.h db/DBConnectionPool.cpp
+        db/pg/PGConnection.h db/pg/PGConnection.cpp
+        db/pg/PGConnectionPool.h db/pg/PGConnectionPool.cpp
+        db/ch/CHConnection.h db/ch/CHConnection.cpp
+        db/ch/CHConnectionPool.h db/ch/CHConnectionPool.cpp
         ircclient/IRCSocket.h ircclient/IRCSocket.cpp
         ircclient/IRCClient.h ircclient/IRCClient.cpp
         ircclient/IRCHandler.h ircclient/IRCHandler.cpp
@@ -61,4 +68,11 @@ add_executable(chatsniffer
         common/Utils.h common/Utils.cpp
         )
 
-target_link_libraries(chatsniffer pthread nlohmann_json spdlog absl::strings stdc++fs ${PostgreSQL_LIBRARIES})
+target_link_libraries(chatsniffer
+        pthread
+        stdc++fs
+        nlohmann_json
+        spdlog
+        clickhouse-cpp-lib-static
+        ${PostgreSQL_LIBRARIES}
+        absl::strings)

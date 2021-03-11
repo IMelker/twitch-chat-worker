@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <set>
 
 #include "ircclient/IRCClient.h"
 
@@ -28,15 +29,19 @@ class MessageProcessor {
   private:
 };
 
-class PGConnection;
+class PGConnectionPool;
 class DataProcessor
 {
   public:
     DataProcessor();
     ~DataProcessor();
 
-    void processMessage(const MessageData& msg, PGConnection *conn);
+    void processMessage(MessageData &&msg, const std::shared_ptr<PGConnectionPool> &pg);
+    void flushMessages(const std::shared_ptr<PGConnectionPool> &pg);
   private:
+    std::mutex mutex;
+    std::set<std::string> users;
+    std::vector<MessageData> batch;
 };
 
 #endif //CHATSNIFFER__PROCESSOR_H_

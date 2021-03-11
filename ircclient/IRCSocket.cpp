@@ -79,7 +79,7 @@ int IRCSocket::receive(char *buf, int maxSize) {
     if (bytes > 0) {
         return bytes;
     }
-    else if (errno != EINTR)
+    else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
         disconnect();
     return bytes;
 }

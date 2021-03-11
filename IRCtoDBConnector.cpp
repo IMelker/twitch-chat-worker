@@ -10,60 +10,68 @@
 #include "common/SysSignal.h"
 #include "common/Logger.h"
 
+#include "db/DBConnectionLock.h"
 #include "IRCtoDBConnector.h"
 
 using json = nlohmann::json;
 
 std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
     auto &logger = pgBackend->getLogger();
-    auto conn = pgBackend->lockConnection();
 
     std::string request = "SELECT name FROM channel WHERE active IS TRUE;";
     logger->logTrace("PGConnection request: \"{}\"", request);
 
     std::vector<std::string> channelsList;
-    PQsendQuery(conn->connection(), request.c_str());
-    while (auto resp = PQgetResult(conn->connection())) {
-        if (PQresultStatus(resp) == PGRES_TUPLES_OK) {
-            for (int i = 0; i < PQntuples(resp); ++i) {
-                channelsList.emplace_back(PQgetvalue(resp, i, 0));
+    {
+        DBConnectionLock dbl(pgBackend);
+        PQsendQuery(dbl->raw(), request.c_str());
+        while (auto resp = PQgetResult(dbl->raw())) {
+            if (PQresultStatus(resp) == PGRES_TUPLES_OK) {
+                for (int i = 0; i < PQntuples(resp); ++i) {
+                    channelsList.emplace_back(PQgetvalue(resp, i, 0));
+                }
             }
-        }
 
-        if (PQresultStatus(resp) == PGRES_FATAL_ERROR) {
-            logger->logError("DBConnection Error: %s\n", PQresultErrorMessage(resp));
+            if (PQresultStatus(resp) == PGRES_FATAL_ERROR) {
+                logger->logError("DBConnection Error: %s\n", PQresultErrorMessage(resp));
+            }
+            PQclear(resp);
         }
-        PQclear(resp);
     }
-
-    pgBackend->unlockConnection(conn);
 
     return channelsList;
 }
 
 IRCtoDBConnector::IRCtoDBConnector(unsigned int threads, std::shared_ptr<Logger> logger)
-  : logger(std::move(logger)), pool(threads) {
+    : logger(std::move(logger)), pool(threads) {
     this->logger->logInfo("IRCtoDBConnector created with {} threads", threads);
 }
 
 IRCtoDBConnector::~IRCtoDBConnector() {
-    this->logger->logTrace("IRCtoDBConnector end of connector");
+    dbProcessor.flushMessages(pg);
+    logger->logTrace("IRCtoDBConnector end of connector");
 };
 
 void IRCtoDBConnector::initPGConnectionPool(PGConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger) {
     assert(!this->pg);
-    this->logger->logInfo("IRCtoDBConnector init DB pool with {} connections", connections);
-    this->pg = std::make_shared<PGConnectionPool>(std::move(config), connections, std::move(logger));
+    this->logger->logInfo("IRCtoDBConnector init PostgreSQL DB pool with {} connections", connections);
+    pg = std::make_shared<PGConnectionPool>(std::move(config), connections, std::move(logger));
 
     // init db based data
     {
-        auto channels = getChannelsList(this->pg);
+        auto channels = getChannelsList(pg);
 
         this->logger->logInfo("IRCtoDBConnector {} channels added to watch list", channels.size());
 
         std::lock_guard lg(channelsMutex);
         this->watchChannels = std::move(channels);
     }
+}
+
+void IRCtoDBConnector::initCHConnectionPool(CHConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger) {
+    assert(!this->ch);
+    this->logger->logInfo("IRCtoDBConnector init Clickhouse DB pool with {} connections", connections);
+    ch = std::make_shared<CHConnectionPool>(std::move(config), connections, std::move(logger));
 }
 
 void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, const std::string &credentials, std::shared_ptr<Logger> logger) {
@@ -84,11 +92,11 @@ void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, const std:
 }
 
 void IRCtoDBConnector::onConnected(IRCWorker *worker) {
-    this->logger->logTrace("IRCtoDBConnector IRCWorker[{}] connected", fmt::ptr(worker));
+    logger->logTrace("IRCtoDBConnector IRCWorker[{}] connected", fmt::ptr(worker));
 }
 
 void IRCtoDBConnector::onDisconnected(IRCWorker *worker) {
-    this->logger->logTrace("IRCtoDBConnector IRCWorker[{}] disconnected", fmt::ptr(worker));
+    logger->logTrace("IRCtoDBConnector IRCWorker[{}] disconnected", fmt::ptr(worker));
 }
 
 void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *worker) {
@@ -98,24 +106,24 @@ void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *worker) {
     pool.enqueue([message = std::move(message), timestamp, this]() {
         MessageData transformed;
         transformed.timestamp = timestamp;
-        this->msgProcessor.transformMessage(message, transformed);
+        msgProcessor.transformMessage(message, transformed);
 
-        this->logger->logTrace(R"(IRCtoDBConnector process {{channel: "{}",from: "{}", text: "{}", valid: {}}})",
+        logger->logTrace(R"(IRCtoDBConnector process {{channel: "{}",from: "{}", text: "{}", valid: {}}})",
                                transformed.channel, transformed.user, transformed.text, transformed.valid);
 
         // process request to database
         if (transformed.valid) {
-            pool.enqueue([message = std::move(transformed), this]() {
-                auto conn = pg->lockConnection();
-                dbProcessor.processMessage(message, conn.get());
-                pg->unlockConnection(conn);
+            pool.enqueue([message = std::move(transformed), this]() mutable {
+                if (pg) {
+                    dbProcessor.processMessage(std::move(message), pg);
+                }
             });
         }
     });
 }
 
 void IRCtoDBConnector::onLogin(IRCWorker *worker) {
-    this->logger->logTrace("IRCtoDBConnector IRCWorker[{}] logged in", fmt::ptr(worker));
+    logger->logTrace("IRCtoDBConnector IRCWorker[{}] logged in", fmt::ptr(worker));
 
     std::lock_guard lg(channelsMutex);
     size_t pos = 0;

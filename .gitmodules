@@ -16,3 +16,6 @@
 [submodule "third-party/toml"]
 	path = third-party/toml
 	url = https://github.com/marzer/tomlplusplus.git
+[submodule "third-party/clickhouse"]
+	path = third-party/clickhouse
+	url = https://github.com/ClickHouse/clickhouse-cpp.git
