@@ -9,6 +9,7 @@
 #include "common/Utils.h"
 #include "common/Logger.h"
 #include "db/pg/PGConnectionPool.h"
+#include "db/ch/CHConnectionPool.h"
 #include "db/DBConnectionLock.h"
 
 #include "Processor.h"
@@ -36,12 +37,12 @@ void MessageProcessor::transformMessage(const IRCMessage &message, MessageData &
     result.valid = !result.text.empty();
 }
 
-static const std::string kInsertUserFmt = "INSERT INTO \"user\" (id, name) VALUES (DEFAULT, '{}') ON CONFLICT DO NOTHING;";
-static const std::string kInsertValueFmt = "(DEFAULT,'{}',(SELECT TO_TIMESTAMP({}/1000.0)),"
-                                           "(SELECT id FROM channel WHERE name = '{}'),"
-                                           "(SELECT id FROM \"user\" WHERE name = '{}')){}";
+//static const std::string kInsertUserFmt = "INSERT INTO \"user\" (id, name) VALUES (DEFAULT, '{}') ON CONFLICT DO NOTHING;";
+//static const std::string kInsertValueFmt = "(DEFAULT,'{}',(SELECT TO_TIMESTAMP({}/1000.0)),"
+//                                           "(SELECT id FROM channel WHERE name = '{}'),"
+//                                           "(SELECT id FROM \"user\" WHERE name = '{}')){}";
 
-inline void sqlRequest(const std::string& request, const std::shared_ptr<PGConnectionPool> &pg) {
+/*inline void sqlRequest(const std::string& request, const std::shared_ptr<PGConnectionPool> &pg) {
     auto &logger = pg->getLogger();
     logger->logTrace("PGConnection request: \"{}\"", request);
     {
@@ -53,29 +54,37 @@ inline void sqlRequest(const std::string& request, const std::shared_ptr<PGConne
             PQclear(resp);
         }
     }
-}
+}*/
 
-inline void insertUsers(const std::set<std::string>& users, const std::shared_ptr<PGConnectionPool> &pg) {
-    std::string request;
-    for (auto &user: users) {
-        request.reserve(request.size() + kInsertUserFmt.size() + user.size());
-        request.append(fmt::format(kInsertUserFmt, user));
+inline void insertMessages(const std::vector<MessageData>& messages, const std::shared_ptr<CHConnectionPool> &ch) {
+    using namespace clickhouse;
+
+    auto channels = std::make_shared<ColumnFixedString>(256);
+    auto user = std::make_shared<ColumnFixedString>(256);
+    auto text = std::make_shared<ColumnString>();
+    //auto tags = std::make_shared<ColumnString>();
+    auto timestamps = std::make_shared<ColumnDateTime64>(3);
+    for (const auto & message : messages) {
+        channels->Append(message.channel);
+        user->Append(message.user);
+        text->Append(message.text);
+        //tags->Append("{}");
+        timestamps->Append(message.timestamp);
     }
 
-    sqlRequest(request, pg);
-}
-
-inline void insertMessages(const std::vector<MessageData>& messages, const std::shared_ptr<PGConnectionPool> &pg) {
-    std::string request;
-    request.append("INSERT INTO message (id, text, timestamp, channel_id, user_id) VALUES ");
-    for (size_t i = 0; i < messages.size(); ++i) {
-        auto &message = messages[i];
-        request.reserve(request.size() + message.text.size() + message.channel.size() + message.user.size());
-        request.append(fmt::format(kInsertValueFmt, message.text, message.timestamp, message.channel, message.user,
-                                   ((i != messages.size() - 1) ? "," : ";")));
+    Block block;
+    block.AppendColumn("channel", channels);
+    block.AppendColumn("from", user);
+    block.AppendColumn("text", text);
+    //block.AppendColumn("tags", tags);
+    block.AppendColumn("timestamp", timestamps);
+    try {
+        DBConnectionLock chl(ch);
+        chl->raw()->Insert("twitch_chat.messages", block);
+        ch->getLogger()->logInfo("Clickhouse insert {} messages", messages.size());
+    } catch (const clickhouse::ServerException& err) {
+        ch->getLogger()->logError("Clickhouse {}", err.what());
     }
-
-    sqlRequest(request, pg);
 }
 
 DataProcessor::DataProcessor() {
@@ -84,32 +93,29 @@ DataProcessor::DataProcessor() {
 
 DataProcessor::~DataProcessor() = default;
 
-void DataProcessor::processMessage(MessageData &&msg, const std::shared_ptr<PGConnectionPool> &pg) {
+
+void DataProcessor::processMessage(MessageData &&msg, const std::shared_ptr<CHConnectionPool> &ch) {
     thread_local std::vector<MessageData> tempMessages;
-    thread_local std::set<std::string> tempUsers;
     if (std::lock_guard lg(mutex); batch.size() < MESSAGE_BATCH_SIZE) {
-        users.insert(msg.user);
         batch.push_back(std::move(msg));
         return;
     } else {
-        tempUsers.swap(users);
         tempMessages.reserve(MESSAGE_BATCH_SIZE);
         tempMessages.swap(batch);
     }
 
-    insertUsers(tempUsers, pg);
-    tempUsers.clear();
-
-    insertMessages(tempMessages, pg);
+    insertMessages(tempMessages, ch);
     tempMessages.clear();
 }
 
-void DataProcessor::flushMessages(const std::shared_ptr<PGConnectionPool> &pg) {
-    std::lock_guard lg(mutex);
+void DataProcessor::flushMessages(const std::shared_ptr<CHConnectionPool> &ch) {
+    std::vector<MessageData> tempMessages;
+    {
+        std::lock_guard lg(mutex);
+        tempMessages.swap(batch);
+    }
 
-    insertUsers(users, pg);
-    users.clear();
+    insertMessages(tempMessages, ch);
 
-    insertMessages(batch, pg);
-    batch.clear();
+    ch->getLogger()->flush();
 }

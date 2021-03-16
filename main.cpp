@@ -62,31 +62,28 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
-    int threads = config["pg"]["threads"].value_or(std::thread::hardware_concurrency());
+    int threads = config["app"]["threads"].value_or(std::thread::hardware_concurrency());
     IRCtoDBConnector connector(threads, LoggerFactory::create(readLoggerConfig(config, "app")));
 
-    std::string db = config["app"]["main_db"].value_or("pg");
-    if (db == "clickhouse") {
-        CHConnectionConfig dbCfg;
-        dbCfg.host = config[db]["host"].value_or("localhost");
-        dbCfg.port = config[db]["port"].value_or(5432);
-        dbCfg.dbname = config[db]["dbname"].value_or("postgres");
-        dbCfg.user = config[db]["user"].value_or("postgres");
-        dbCfg.pass = config[db]["password"].value_or("postgres");
+    CHConnectionConfig chCfg;
+    chCfg.host = config["clickhouse"]["host"].value_or("localhost");
+    chCfg.port = config["clickhouse"]["port"].value_or(5432);
+    chCfg.dbname = config["clickhouse"]["dbname"].value_or("postgres");
+    chCfg.user = config["clickhouse"]["user"].value_or("postgres");
+    chCfg.pass = config["clickhouse"]["password"].value_or("postgres");
+    chCfg.secure = config["clickhouse"]["secure"].value_or(false);
+    chCfg.verify = config["clickhouse"]["verify"].value_or(true);
+    int chConns = config["clickhouse"]["connections"].value_or(std::thread::hardware_concurrency());
+    connector.initCHConnectionPool(std::move(chCfg), chConns, LoggerFactory::create(readLoggerConfig(config, "ch")));
 
-        int connections = config[db]["connections"].value_or(std::thread::hardware_concurrency());
-        connector.initCHConnectionPool(std::move(dbCfg), connections, LoggerFactory::create(readLoggerConfig(config, db)));
-    } else /*db == "pg"*/ {
-        PGConnectionConfig dbCfg;
-        dbCfg.host = config[db]["host"].value_or("localhost");
-        dbCfg.port = config[db]["port"].value_or(5432);
-        dbCfg.dbname = config[db]["dbname"].value_or("postgres");
-        dbCfg.user = config[db]["user"].value_or("postgres");
-        dbCfg.pass = config[db]["password"].value_or("postgres");
-
-        int connections = config[db]["connections"].value_or(std::thread::hardware_concurrency());
-        connector.initPGConnectionPool(std::move(dbCfg), connections, LoggerFactory::create(readLoggerConfig(config, db)));
-    }
+    PGConnectionConfig pgCfg;
+    pgCfg.host = config["pg"]["host"].value_or("localhost");
+    pgCfg.port = config["pg"]["port"].value_or(5432);
+    pgCfg.dbname = config["pg"]["dbname"].value_or("postgres");
+    pgCfg.user = config["pg"]["user"].value_or("postgres");
+    pgCfg.pass = config["pg"]["password"].value_or("postgres");
+    int pgConns = config["pg"]["connections"].value_or(std::thread::hardware_concurrency());
+    connector.initPGConnectionPool(std::move(pgCfg), pgConns, LoggerFactory::create(readLoggerConfig(config, "pg")));
 
     IRCConnectConfig ircConfig;
     ircConfig.host = config["irc"]["host"].value_or("irc.chat.twitch.tv");
@@ -95,11 +92,8 @@ int main(int argc, char *argv[]) {
     auto credentials = config["irc"]["credentials"].value_or("credentials.json");
     connector.initIRCWorkers(ircConfig, credentials, LoggerFactory::create(readLoggerConfig(config, "irc")));
 
-    // TODO provide all data for Clickhouse
-    // TODO add HTTP interface, may be based on boost
-    // TODO provide data to clickhouse
-    // TODO add caches for channels
     // TODO add statistics
+    // TODO add HTTP interface, may be based on boost
     // TODO provide http interfaces
     //      /shutdown
     //      /reload
@@ -109,6 +103,7 @@ int main(int argc, char *argv[]) {
     //      /adduser?user=""&nick=""&password=""
     //      /join?user=""&channel=""
     //      /leave?user=""&channel=""
+    // TODO rewrite message hooks
     // TODO add lua runner or python runner
 
     IRCtoDBConnector::loop();

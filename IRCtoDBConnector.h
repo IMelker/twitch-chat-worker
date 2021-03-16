@@ -37,18 +37,18 @@ class IRCtoDBConnector : public IRCWorkerListener
   private:
     std::shared_ptr<Logger> logger;
 
+    DataProcessor dbProcessor;
+    MessageProcessor msgProcessor;
+
     std::shared_ptr<PGConnectionPool> pg;
     std::shared_ptr<CHConnectionPool> ch;
+
+    ThreadPool pool;
 
     std::vector<IRCWorker> workers;
 
     std::mutex channelsMutex;
     std::vector<std::string> watchChannels;
-
-    MessageProcessor msgProcessor;
-    DataProcessor dbProcessor;
-
-    ThreadPool pool;
 };
 
 #endif //CHATSNIFFER__IRCTODBCONNECTOR_H_

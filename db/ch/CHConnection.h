@@ -17,6 +17,8 @@ struct CHConnectionConfig {
     std::string dbname = "demo";
     std::string user = "postgres";
     std::string pass = "postgres";
+    bool secure = true;
+    bool verify = true;
 };
 
 class Logger;

@@ -29,18 +29,17 @@ class MessageProcessor {
   private:
 };
 
-class PGConnectionPool;
+class CHConnectionPool;
 class DataProcessor
 {
   public:
     DataProcessor();
     ~DataProcessor();
 
-    void processMessage(MessageData &&msg, const std::shared_ptr<PGConnectionPool> &pg);
-    void flushMessages(const std::shared_ptr<PGConnectionPool> &pg);
+    void processMessage(MessageData &&msg, const std::shared_ptr<CHConnectionPool> &pg);
+    void flushMessages(const std::shared_ptr<CHConnectionPool> &pg);
   private:
     std::mutex mutex;
-    std::set<std::string> users;
     std::vector<MessageData> batch;
 };
 

@@ -18,7 +18,7 @@ using json = nlohmann::json;
 std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
     auto &logger = pgBackend->getLogger();
 
-    std::string request = "SELECT name FROM channel WHERE active IS TRUE;";
+    std::string request = "SELECT name FROM channel WHERE watch IS TRUE;";
     logger->logTrace("PGConnection request: \"{}\"", request);
 
     std::vector<std::string> channelsList;
@@ -33,7 +33,7 @@ std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>
             }
 
             if (PQresultStatus(resp) == PGRES_FATAL_ERROR) {
-                logger->logError("DBConnection Error: %s\n", PQresultErrorMessage(resp));
+                logger->logError("DBConnection Error: {}\n", PQresultErrorMessage(resp));
             }
             PQclear(resp);
         }
@@ -48,7 +48,7 @@ IRCtoDBConnector::IRCtoDBConnector(unsigned int threads, std::shared_ptr<Logger>
 }
 
 IRCtoDBConnector::~IRCtoDBConnector() {
-    dbProcessor.flushMessages(pg);
+    dbProcessor.flushMessages(ch);
     logger->logTrace("IRCtoDBConnector end of connector");
 };
 
@@ -113,9 +113,9 @@ void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *worker) {
 
         // process request to database
         if (transformed.valid) {
-            pool.enqueue([message = std::move(transformed), this]() mutable {
-                if (pg) {
-                    dbProcessor.processMessage(std::move(message), pg);
+            pool.enqueue([msg = std::move(transformed), this]() mutable {
+                if (ch) {
+                    dbProcessor.processMessage(std::move(msg), ch);
                 }
             });
         }

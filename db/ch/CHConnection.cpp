@@ -19,8 +19,8 @@ CHConnection::CHConnection(const CHConnectionConfig &config, std::shared_ptr<Log
         conn = std::make_shared<clickhouse::Client>(std::move(opt));
         this->logger->logInfo("CHConnection connected on {}:{}/{}", config.host, config.port, config.dbname);
         established = true;
-    } catch (const std::system_error& err) {
-        this->logger->logCritical("CHConnection {}:{} {}", config.host, config.port, err.what());
+    } catch (const std::runtime_error& err) {
+        this->logger->logCritical("CHConnection {}", err.what());
     }
 }
 

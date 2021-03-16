@@ -24,7 +24,9 @@ Logger::Logger() {
     this->logger = spdlog::default_logger();
 }
 
-Logger::~Logger() = default;
+Logger::~Logger() {
+    logger->flush();
+};
 
 void Logger::setLogLevel(LoggerLevel level) {
     this->logger->set_level(static_cast<spdlog::level::level_enum>(level));

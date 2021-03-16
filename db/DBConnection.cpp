@@ -7,4 +7,3 @@
 DBConnection::DBConnection(std::shared_ptr<Logger> logger) : logger(std::move(logger)) {};
 
 DBConnection::~DBConnection() = default;
-
