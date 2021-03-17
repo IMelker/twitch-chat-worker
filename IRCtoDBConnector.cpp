@@ -5,15 +5,53 @@
 #include <algorithm>
 #include <chrono>
 
-#include <nlohmann/json.hpp>
-
 #include "common/SysSignal.h"
 #include "common/Logger.h"
 
 #include "db/DBConnectionLock.h"
 #include "IRCtoDBConnector.h"
 
-using json = nlohmann::json;
+std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
+    auto &logger = pgBackend->getLogger();
+
+    std::string request = "SELECT username, display, oauth, channels_limit, whisper_per_sec_limit,"
+                                 "auth_per_sec_limit, command_per_sec_limit "
+                           "FROM accounts "
+                           "WHERE active IS TRUE;";
+    logger->logTrace("PGConnection request: \"{}\"", request);
+
+    std::vector<IRCClientConfig> accounts;
+    {
+        DBConnectionLock dbl(pgBackend);
+        PQsendQuery(dbl->raw(), request.c_str());
+        while (auto resp = PQgetResult(dbl->raw())) {
+            if (PQresultStatus(resp) == PGRES_TUPLES_OK) {
+                int size = PQntuples(resp);
+                accounts.reserve(size);
+
+                for (int i = 0; i < size; ++i) {
+                    IRCClientConfig config;
+                    config.nick = PQgetvalue(resp, i, 0);
+                    config.user = PQgetvalue(resp, i, 1);
+                    config.password = PQgetvalue(resp, i, 2);
+                    config.channels_limit = std::atoi(PQgetvalue(resp, i, 3));
+                    config.whisper_per_sec_limit = std::atoi(PQgetvalue(resp, i, 4));
+                    config.auth_per_sec_limit = std::atoi(PQgetvalue(resp, i, 5));
+                    config.command_per_sec_limit = std::atoi(PQgetvalue(resp, i, 6));
+
+                    accounts.push_back(std::move(config));
+                }
+            }
+
+            if (PQresultStatus(resp) == PGRES_FATAL_ERROR) {
+                logger->logError("DBConnection Error: {}\n", PQresultErrorMessage(resp));
+            }
+            PQclear(resp);
+        }
+    }
+
+    return accounts;
+}
 
 std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
     auto &logger = pgBackend->getLogger();
@@ -27,7 +65,10 @@ std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>
         PQsendQuery(dbl->raw(), request.c_str());
         while (auto resp = PQgetResult(dbl->raw())) {
             if (PQresultStatus(resp) == PGRES_TUPLES_OK) {
-                for (int i = 0; i < PQntuples(resp); ++i) {
+                int size = PQntuples(resp);
+                channelsList.reserve(size);
+
+                for (int i = 0; i < size; ++i) {
                     channelsList.emplace_back(PQgetvalue(resp, i, 0));
                 }
             }
@@ -48,7 +89,8 @@ IRCtoDBConnector::IRCtoDBConnector(unsigned int threads, std::shared_ptr<Logger>
 }
 
 IRCtoDBConnector::~IRCtoDBConnector() {
-    dbProcessor.flushMessages(ch);
+    if (ch)
+        dbProcessor.flushMessages(ch);
     logger->logTrace("IRCtoDBConnector end of connector");
 };
 
@@ -56,16 +98,6 @@ void IRCtoDBConnector::initPGConnectionPool(PGConnectionConfig config, unsigned 
     assert(!this->pg);
     this->logger->logInfo("IRCtoDBConnector init PostgreSQL DB pool with {} connections", connections);
     pg = std::make_shared<PGConnectionPool>(std::move(config), connections, std::move(logger));
-
-    // init db based data
-    {
-        auto channels = getChannelsList(pg);
-
-        this->logger->logInfo("IRCtoDBConnector {} channels added to watch list", channels.size());
-
-        std::lock_guard lg(channelsMutex);
-        this->watchChannels = std::move(channels);
-    }
 }
 
 void IRCtoDBConnector::initCHConnectionPool(CHConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger) {
@@ -74,21 +106,42 @@ void IRCtoDBConnector::initCHConnectionPool(CHConnectionConfig config, unsigned 
     ch = std::make_shared<CHConnectionPool>(std::move(config), connections, std::move(logger));
 }
 
-void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, const std::string &credentials, std::shared_ptr<Logger> logger) {
+void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, std::vector<IRCClientConfig> accounts, std::shared_ptr<Logger> ircLogger) {
     assert(workers.empty());
 
-    std::ifstream credfile(credentials);
-    json json = json::parse(credfile);
+    this->logger->logInfo("IRCtoDBConnector {} users loaded", accounts.size());
 
-    this->logger->logInfo("IRCtoDBConnector {} users loaded from {}", json.size(), credentials);
-
-    for (auto &cred : json) {
-        IRCClientConfig cfg;
-        cfg.user = cred.at("user").get<std::string>();
-        cfg.nick = cred.at("nick").get<std::string>();
-        cfg.password = cred.at("password").get<std::string>();
-        workers.emplace_back(config, std::move(cfg), this, logger);
+    for (auto &account : accounts) {
+        workers.push_back(std::make_shared<IRCWorker>(config, std::move(account), this, ircLogger));
     }
+}
+
+std::vector<IRCClientConfig> IRCtoDBConnector::loadAccounts() {
+    std::vector<IRCClientConfig> accounts;
+
+    if (pg)
+        accounts = getAccountsList(pg);
+
+    this->logger->logInfo("IRCtoDBConnector {} accounts loaded", accounts.size());
+    return accounts;
+}
+
+
+std::vector<std::string> IRCtoDBConnector::loadChannels() {
+    std::vector<std::string> channels;
+
+    if (pg)
+        channels = getChannelsList(pg);
+
+    this->logger->logInfo("IRCtoDBConnector {} channels loaded", channels.size());
+    return channels;
+}
+
+void IRCtoDBConnector::updateChannelsList(std::vector<std::string> &&channels) {
+    this->logger->logInfo("IRCtoDBConnector {} channels updated a watch list", channels.size());
+
+    std::lock_guard lg(channelsMutex);
+    this->watchChannels = std::move(channels);
 }
 
 void IRCtoDBConnector::onConnected(IRCWorker *worker) {

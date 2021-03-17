@@ -73,6 +73,10 @@ void Logger::flushEvery(std::chrono::seconds interval) {
     spdlog::flush_every(interval);
 }
 
+void Logger::flushEvery(int sec) {
+    flushEvery(std::chrono::seconds(sec));
+}
+
 ConsoleLogger::ConsoleLogger(const std::string &name) {
     this->logger = spdlog::stdout_color_mt(name);
 }

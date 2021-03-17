@@ -15,7 +15,6 @@ log_level = "trace"
 [irc]
 host = "irc.chat.twitch.tv"
 port = 6667
-credentials = "/home/imelker/credentials.json"
 log_type = "console"
 log_target = "logs/irc.log"
 log_level = "info"
@@ -28,7 +27,7 @@ user = "service"
 password = "Hfhysqcet12"
 connections = 1
 log_type = "console"
-log_target = "logs/db.log"
+log_target = "logs/ch.log"
 log_level = "trace"
 
 [pg]
@@ -39,5 +38,5 @@ user = "twitch_chat"
 password = "Hfhysqcet12"
 connections = 1
 log_type = "console"
-log_target = "logs/db.log"
+log_target = "logs/pg.log"
 log_level = "trace"

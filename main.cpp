@@ -24,6 +24,8 @@ inline LoggerConfig readLoggerConfig(Config& config, const std::string& category
     logConfig.type = LoggerFactory::typeFromString(config[category]["log_type"].value_or("file"));
     logConfig.level = LoggerFactory::levelFromString(config[category]["log_level"].value_or("info"));
     logConfig.target = config[category]["log_target"].value_or(category + ".log");
+    logConfig.flushEvery = config[category]["flush_every"].value_or(10);
+    logConfig.flushOn = LoggerFactory::levelFromString(config[category]["flush_on"].value_or("error"));
     return logConfig;
 }
 
@@ -32,7 +34,7 @@ int main(int argc, char *argv[]) {
 
     Options options{APP_NAME};
     options.addOption<std::string>("config", "c", "Config filepath", "config.toml");
-    options.addOption<std::string>("pid-file-name", "p", "Filepath for process ID output", "/var/run/dbgateway.pid");
+    options.addOption<std::string>("pid-file-name", "p", "Filepath for process ID output", "/var/run/chatsniffer.pid");
     options.addOption<bool>("daemon", "d", "Daemon mode", "false");
     options.addOption<bool>("trace-exit-code", "t", "Trace exit code for daemon mode", "false");
     options.parse(argc, argv);
@@ -74,7 +76,8 @@ int main(int argc, char *argv[]) {
     chCfg.secure = config["clickhouse"]["secure"].value_or(false);
     chCfg.verify = config["clickhouse"]["verify"].value_or(true);
     int chConns = config["clickhouse"]["connections"].value_or(std::thread::hardware_concurrency());
-    connector.initCHConnectionPool(std::move(chCfg), chConns, LoggerFactory::create(readLoggerConfig(config, "ch")));
+    auto chLogger = LoggerFactory::create(readLoggerConfig(config, "clickhouse"));
+    connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
 
     PGConnectionConfig pgCfg;
     pgCfg.host = config["pg"]["host"].value_or("localhost");
@@ -83,16 +86,19 @@ int main(int argc, char *argv[]) {
     pgCfg.user = config["pg"]["user"].value_or("postgres");
     pgCfg.pass = config["pg"]["password"].value_or("postgres");
     int pgConns = config["pg"]["connections"].value_or(std::thread::hardware_concurrency());
-    connector.initPGConnectionPool(std::move(pgCfg), pgConns, LoggerFactory::create(readLoggerConfig(config, "pg")));
+    auto pgLogger = LoggerFactory::create(readLoggerConfig(config, "pg"));
+    connector.initPGConnectionPool(std::move(pgCfg), pgConns, pgLogger);
+
+    connector.updateChannelsList(connector.loadChannels());
 
     IRCConnectConfig ircConfig;
     ircConfig.host = config["irc"]["host"].value_or("irc.chat.twitch.tv");
     ircConfig.port = config["irc"]["port"].value_or(6667);
 
-    auto credentials = config["irc"]["credentials"].value_or("credentials.json");
-    connector.initIRCWorkers(ircConfig, credentials, LoggerFactory::create(readLoggerConfig(config, "irc")));
+    auto ircLogger = LoggerFactory::create(readLoggerConfig(config, "irc"));
+    connector.initIRCWorkers(ircConfig, connector.loadAccounts(), ircLogger);
 
-    // TODO add statistics
+    // TODO reconnects for PG and CH, and for IRC
     // TODO add HTTP interface, may be based on boost
     // TODO provide http interfaces
     //      /shutdown
@@ -103,6 +109,7 @@ int main(int argc, char *argv[]) {
     //      /adduser?user=""&nick=""&password=""
     //      /join?user=""&channel=""
     //      /leave?user=""&channel=""
+    // TODO add statistics
     // TODO rewrite message hooks
     // TODO add lua runner or python runner
 

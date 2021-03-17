@@ -17,6 +17,8 @@ struct LoggerConfig {
     LoggerType type = LoggerType::Default;
     LoggerLevel level = LoggerLevel::Info;
     std::string target; // filename or host:port
+    LoggerLevel flushOn = LoggerLevel::Off;
+    int flushEvery = 0;
 };
 
 inline std::tuple<std::string, int> parseHostname(const std::string& hostname) {
@@ -97,6 +99,12 @@ struct LoggerFactory
         }
 
         logger->setLogLevel(config.level);
+
+        if(config.flushOn != LoggerLevel::Off)
+            logger->flushOn(config.flushOn);
+
+        if (config.flushEvery > 0)
+            logger->flushEvery(config.flushEvery);
 
         return logger;
     };

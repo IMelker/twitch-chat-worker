@@ -45,6 +45,8 @@ class Logger // Global log
 
     virtual void flush();
     virtual void flushOn(LoggerLevel level);
+    virtual void flushEvery(int sec);
+    static void flushEvery(std::chrono::seconds interval);
 
     template<typename FormatString, typename... Args>
     inline void logTrace(const FormatString &fmt, Args &&...args) {
@@ -75,8 +77,6 @@ class Logger // Global log
     inline void logCritical(const FormatString &fmt, Args &&...args) {
         this->logger->critical(fmt, std::forward<Args>(args)...);
     }
-
-    static void flushEvery(std::chrono::seconds interval);
 
   protected:
     std::shared_ptr<spdlog::logger> logger;

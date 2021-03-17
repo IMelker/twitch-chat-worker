@@ -25,9 +25,16 @@ class IRCtoDBConnector : public IRCWorkerListener
 
     void initCHConnectionPool(CHConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
     void initPGConnectionPool(PGConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
-    void initIRCWorkers(const IRCConnectConfig& config, const std::string& credentials, std::shared_ptr<Logger> logger);
+    void initIRCWorkers(const IRCConnectConfig& config, std::vector<IRCClientConfig> accounts, std::shared_ptr<Logger> ircLogger);
 
     static void loop();
+
+    // controll data
+    std::vector<IRCClientConfig> loadAccounts();
+    std::vector<std::string> loadChannels();
+
+    // irc settings
+    void updateChannelsList(std::vector<std::string>&& channels);
 
     // implement IRCWorkerListener
     void onConnected(IRCWorker *worker) override;
@@ -45,7 +52,7 @@ class IRCtoDBConnector : public IRCWorkerListener
 
     ThreadPool pool;
 
-    std::vector<IRCWorker> workers;
+    std::vector<std::shared_ptr<IRCWorker>> workers;
 
     std::mutex channelsMutex;
     std::vector<std::string> watchChannels;

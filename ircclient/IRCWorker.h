@@ -29,8 +29,8 @@ struct IRCConnectConfig {
 };
 
 struct IRCClientConfig {
-    std::string user;
     std::string nick;
+    std::string user;
     std::string password;
     int channels_limit = 20;
     int command_per_sec_limit = 20 / 30;
@@ -42,7 +42,7 @@ class Logger;
 class IRCWorker
 {
   public:
-    explicit IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger);
+    explicit IRCWorker(IRCConnectConfig  conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger);
     ~IRCWorker();
 
     IRCWorker(IRCWorker&) = delete;
