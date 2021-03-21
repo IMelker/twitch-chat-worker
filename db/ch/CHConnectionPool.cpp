@@ -12,6 +12,15 @@ CHConnectionPool::CHConnectionPool(CHConnectionConfig config, unsigned int count
 
 
 std::shared_ptr<DBConnection> CHConnectionPool::createConnection() {
-    return std::make_shared<CHConnection>(this->config, this->logger);
+    auto conn = std::make_shared<CHConnection>(this->config, this->logger);
+
+    if (!conn->connected())
+        conn.reset();
+
+    return conn;
+}
+
+std::tuple<int, std::string> CHConnectionPool::processHttpRequest(std::string_view path, const std::string &body, std::string &error) {
+    return {200, body};
 }
 

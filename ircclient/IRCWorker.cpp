@@ -22,10 +22,6 @@ IRCWorker::~IRCWorker() {
         thread.join();
 }
 
-void IRCWorker::resetState() {
-
-}
-
 inline bool connect(const IRCConnectConfig &cfg, IRCClient *client, Logger *logger) {
     int attempt = 0;
     while (attempt < cfg.connect_attemps_limit) {
@@ -65,16 +61,16 @@ void IRCWorker::run() {
         if (!connect(conConfig, client.get(), logger.get()))
             break;
 
-        logger->logInfo("IRCWorker connected to {}:{}", conConfig.host, conConfig.port);
+        logger->logInfo("IRCWorker[{}] connected to {}:{}", fmt::ptr(this), conConfig.host, conConfig.port);
         listener->onConnected(this);
 
         if (!login(ircConfig, client.get(), logger.get()))
             break;
 
-        logger->logInfo("IRCWorker logged in by {}:{}", ircConfig.user, ircConfig.nick);
+        logger->logInfo("IRCWorker[{}] logged in by {}:{}", fmt::ptr(this), ircConfig.user, ircConfig.nick);
 
         for(auto &channel: joinedChannels) {
-            logger->logTrace("IRCWorker {} joining to {}", ircConfig.nick, channel);
+            logger->logTrace("IRCWorker[{}] {} joining to {}", fmt::ptr(this), ircConfig.nick, channel);
             client->sendIRC(fmt::format("JOIN #{}\n", channel));
         }
 
@@ -84,36 +80,33 @@ void IRCWorker::run() {
             client->receive();
         }
 
-        logger->logInfo("IRCWorker disconnected from {}:{}", conConfig.host, conConfig.port);
+        logger->logInfo("IRCWorker[{}] disconnected from {}:{}", fmt::ptr(this), conConfig.host, conConfig.port);
         listener->onDisconnected(this);
-
-        resetState();
     }
 
     if (client->connected()) {
         client->disconnect();
-        logger->logInfo("IRCWorker disconnected from {}:{}", conConfig.host, conConfig.port);
+        logger->logInfo("IRCWorker[{}] fully disconnected from {}:{}", fmt::ptr(this), conConfig.host, conConfig.port);
         listener->onDisconnected(this);
     }
-    resetState();
 }
 
 
 bool IRCWorker::joinChannel(const std::string &channel) {
     if (joinedChannels.count(channel)) {
-        logger->logInfo(R"(IRCWorker "{}" already joined to channel({}))", ircConfig.nick, channel);
+        logger->logInfo(R"(IRCWorker[{}] "{}" already joined to channel({}))", fmt::ptr(this), ircConfig.nick, channel);
         return true;
     }
 
     if (joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit)) {
-        logger->logError(R"(IRCWorker "{}" failed to join to channel({}). Limit reached)", ircConfig.nick, channel);
+        logger->logError(R"(IRCWorker[{}] "{}" failed to join to channel({}). Limit reached)", fmt::ptr(this), ircConfig.nick, channel);
         return false;
     }
 
     joinedChannels.emplace(channel);
 
     if (client && client->connected()) {
-        logger->logInfo("IRCWorker {} joining to {}", ircConfig.nick, channel);
+        logger->logInfo("IRCWorker[{}] {} joining to {}", fmt::ptr(this), ircConfig.nick, channel);
         client->sendIRC(fmt::format("JOIN #{}\n", channel));
     }
     return true;
@@ -121,21 +114,21 @@ bool IRCWorker::joinChannel(const std::string &channel) {
 
 void IRCWorker::leaveChannel(const std::string &channel) {
     if (joinedChannels.count(channel) == 0) {
-        logger->logInfo(R"(IRCWorker "{}" already left from channel({}))", ircConfig.nick, channel);
+        logger->logInfo(R"(IRCWorker[{}] "{}" already left from channel({}))", fmt::ptr(this), ircConfig.nick, channel);
         return;
     }
 
     joinedChannels.erase(channel);
 
     if (client && client->connected()) {
-        logger->logTrace("IRCWorker {} leaving {}", ircConfig.nick, channel);
+        logger->logTrace("IRCWorker[{}] {} leaving {}", fmt::ptr(this), ircConfig.nick, channel);
         client->sendIRC(fmt::format("PART #{}\n", channel));
     }
 }
 
 bool IRCWorker::sendMessage(const std::string &channel, const std::string &text) {
     if (client && client->connected()) {
-        logger->logTrace(R"(IRCWorker "{} send to "{}" message "{}")", ircConfig.nick, channel, text);
+        logger->logTrace(R"(IRCWorker[{}] "{} send to "{}" message "{}")", fmt::ptr(this), ircConfig.nick, channel, text);
         return client->sendIRC(fmt::format("PRIVMSG #{} {}\n", channel, text));
     }
     return false;
@@ -156,7 +149,7 @@ bool IRCWorker::sendIRC(const std::string& message) {
 }
 
 void IRCWorker::messageHook(IRCMessage message) {
-    logger->logTrace("IRCWorker {}({}): {}" , message.prefix.nickname,
+    logger->logTrace("IRCWorker[{}] {}({}): {}", fmt::ptr(this), message.prefix.nickname,
                      message.parameters.at(0), message.parameters.back());
     listener->onMessage(std::move(message), this);
 }

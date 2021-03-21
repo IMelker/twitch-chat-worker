@@ -19,6 +19,7 @@ struct CHConnectionConfig {
     std::string pass = "postgres";
     bool secure = true;
     bool verify = true;
+    unsigned int sendRetries = 5;
 };
 
 class Logger;

@@ -12,11 +12,18 @@
 #include "common/Config.h"
 #include "common/LoggerFactory.h"
 
+#include "http/server/HTTPServer.h"
 #include "ircclient/IRCWorker.h"
 #include "db/ch/CHConnectionPool.h"
 #include "db/pg/PGConnectionPool.h"
 
 #include "IRCtoDBConnector.h"
+
+#define APP "app"
+#define HTTP_CONTROL "control"
+#define POSTGRESQL "pg"
+#define CLICKHOUSE "ch"
+#define IRC "irc"
 
 inline LoggerConfig readLoggerConfig(Config& config, const std::string& category) {
     LoggerConfig logConfig;
@@ -64,42 +71,83 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
-    int threads = config["app"]["threads"].value_or(std::thread::hardware_concurrency());
-    IRCtoDBConnector connector(threads, LoggerFactory::create(readLoggerConfig(config, "app")));
+    HTTPControlConfig httpCfg;
+    httpCfg.host = config[HTTP_CONTROL]["host"].value_or("localhost");
+    httpCfg.port = config[HTTP_CONTROL]["port"].value_or(8080);
+    httpCfg.user = config[HTTP_CONTROL]["user"].value_or("admin");
+    httpCfg.pass = config[HTTP_CONTROL]["password"].value_or("admin");
+    httpCfg.secure = config[HTTP_CONTROL]["secure"].value_or(false);
+    httpCfg.verify = config[HTTP_CONTROL]["verify"].value_or(true);
+    httpCfg.threads = config[HTTP_CONTROL]["threads"].value_or(std::thread::hardware_concurrency());
+    auto httpLogger = LoggerFactory::create(readLoggerConfig(config, HTTP_CONTROL));
+    HTTPServer httpControlServer(std::move(httpCfg), httpLogger);
 
-    CHConnectionConfig chCfg;
-    chCfg.host = config["clickhouse"]["host"].value_or("localhost");
-    chCfg.port = config["clickhouse"]["port"].value_or(5432);
-    chCfg.dbname = config["clickhouse"]["dbname"].value_or("postgres");
-    chCfg.user = config["clickhouse"]["user"].value_or("postgres");
-    chCfg.pass = config["clickhouse"]["password"].value_or("postgres");
-    chCfg.secure = config["clickhouse"]["secure"].value_or(false);
-    chCfg.verify = config["clickhouse"]["verify"].value_or(true);
-    int chConns = config["clickhouse"]["connections"].value_or(std::thread::hardware_concurrency());
-    auto chLogger = LoggerFactory::create(readLoggerConfig(config, "clickhouse"));
+
+    int threads = config[APP]["threads"].value_or(std::thread::hardware_concurrency());
+    auto appLogger = LoggerFactory::create(readLoggerConfig(config, APP));
+    IRCtoDBConnector connector(threads, appLogger);
+
+    /*iCHConnectionConfig chCfg;
+    chCfg.host = config[CLICKHOUSE]["host"].value_or("localhost");
+    chCfg.port = config[CLICKHOUSE]["port"].value_or(5432);
+    chCfg.dbname = config[CLICKHOUSE]["dbname"].value_or("postgres");
+    chCfg.user = config[CLICKHOUSE]["user"].value_or("postgres");
+    chCfg.pass = config[CLICKHOUSE]["password"].value_or("postgres");
+    chCfg.secure = config[CLICKHOUSE]["secure"].value_or(false);
+    chCfg.verify = config[CLICKHOUSE]["verify"].value_or(true);
+    chCfg.sendRetries = config[CLICKHOUSE]["send_retries"].value_or(5);
+    int chConns = config[CLICKHOUSE]["connections"].value_or(std::thread::hardware_concurrency());
+    auto chLogger = LoggerFactory::create(readLoggerConfig(config, CLICKHOUSE));
+
     connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
+    if (connector.getCH()->getPoolSize() == 0) {
+        appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
+        return 1;
+    }
+
 
     PGConnectionConfig pgCfg;
-    pgCfg.host = config["pg"]["host"].value_or("localhost");
-    pgCfg.port = config["pg"]["port"].value_or(5432);
-    pgCfg.dbname = config["pg"]["dbname"].value_or("postgres");
-    pgCfg.user = config["pg"]["user"].value_or("postgres");
-    pgCfg.pass = config["pg"]["password"].value_or("postgres");
-    int pgConns = config["pg"]["connections"].value_or(std::thread::hardware_concurrency());
-    auto pgLogger = LoggerFactory::create(readLoggerConfig(config, "pg"));
+    pgCfg.host = config[POSTGRESQL]["host"].value_or("localhost");
+    pgCfg.port = config[POSTGRESQL]["port"].value_or(5432);
+    pgCfg.dbname = config[POSTGRESQL]["dbname"].value_or("postgres");
+    pgCfg.user = config[POSTGRESQL]["user"].value_or("postgres");
+    pgCfg.pass = config[POSTGRESQL]["password"].value_or("postgres");
+    int pgConns = config[POSTGRESQL]["connections"].value_or(std::thread::hardware_concurrency());
+    auto pgLogger = LoggerFactory::create(readLoggerConfig(config, POSTGRESQL));
+
     connector.initPGConnectionPool(std::move(pgCfg), pgConns, pgLogger);
+    if (connector.getPG()->getPoolSize() == 0) {
+        appLogger->logCritical("Failed to initialize PGConnectionPool. Exit");
+        return 1;
+    }
 
     connector.updateChannelsList(connector.loadChannels());
 
+
     IRCConnectConfig ircConfig;
-    ircConfig.host = config["irc"]["host"].value_or("irc.chat.twitch.tv");
-    ircConfig.port = config["irc"]["port"].value_or(6667);
+    ircConfig.host = config[IRC]["host"].value_or("irc.chat.twitch.tv");
+    ircConfig.port = config[IRC]["port"].value_or(6667);
 
-    auto ircLogger = LoggerFactory::create(readLoggerConfig(config, "irc"));
-    connector.initIRCWorkers(ircConfig, connector.loadAccounts(), ircLogger);
+    auto ircLogger = LoggerFactory::create(readLoggerConfig(config, IRC));
+    connector.initIRCWorkers(ircConfig, connector.loadAccounts(), ircLogger);*/
 
-    // TODO reconnects for PG and CH, and for IRC
-    // TODO add HTTP interface, may be based on boost
+    httpControlServer.addControlUnit(HTTP_CONTROL, &httpControlServer);
+    //httpControlServer.addControlUnit(APP, &connector);
+    //httpControlServer.addControlUnit(CLICKHOUSE, connector.getCH().get());
+    //httpControlServer.addControlUnit(POSTGRESQL, connector.getPG().get());
+
+    if (!httpControlServer.start(nullptr)) {
+        appLogger->logCritical("Failed to start HTTP Control Server. Exit");
+        return 1;
+    }
+
+    // TODO add google language detection, add CH dictionary
+    // https://github.com/CLD2Owners/cld2
+    // https://github.com/scivey/langdetectpp
+
+    // TODO change CH name and display sizes
+    // user max=25
+
     // TODO provide http interfaces
     //      /shutdown
     //      /reload
@@ -109,9 +157,11 @@ int main(int argc, char *argv[]) {
     //      /adduser?user=""&nick=""&password=""
     //      /join?user=""&channel=""
     //      /leave?user=""&channel=""
+    // TODO support http gracefull thread shutdown
     // TODO add statistics
     // TODO rewrite message hooks
     // TODO add lua runner or python runner
 
     IRCtoDBConnector::loop();
+    httpControlServer.stop();
 }

@@ -8,9 +8,10 @@
 #include "PGConnection.h"
 
 #include "../DBConnectionPool.h"
+#include "../../http/server/HTTPServerUnit.h"
 
 class Logger;
-class PGConnectionPool : public DBConnectionPool
+class PGConnectionPool : public DBConnectionPool, public HTTPServerUnit
 {
   public:
     using conn_type = PGConnection;
@@ -19,6 +20,9 @@ class PGConnectionPool : public DBConnectionPool
     ~PGConnectionPool() override = default;
 
     std::shared_ptr<DBConnection> createConnection() override;
+
+    // implement HTTPControlUnit
+    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &body, std::string &error) override;
   private:
     PGConnectionConfig config;
 };

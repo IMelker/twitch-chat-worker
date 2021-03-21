@@ -16,12 +16,18 @@ DBConnectionPool::~DBConnectionPool() = default;
 void DBConnectionPool::init() {
     std::lock_guard<std::mutex> lg(mutex);
     for (unsigned int i = 0; i < count; ++i) {
-        pool.emplace(createConnection());
+        auto conn = createConnection();
+        if (conn)
+            pool.emplace(std::move(conn));
     }
+    active = !pool.empty();
 }
 
 std::shared_ptr<DBConnection> DBConnectionPool::lockConnection() {
     std::unique_lock<std::mutex> ul(mutex);
+    if (!active)
+        return std::shared_ptr<DBConnection>{};
+
     while (pool.empty()) {
         condition.wait(ul);
     }

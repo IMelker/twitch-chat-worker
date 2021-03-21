@@ -13,5 +13,14 @@ PGConnectionPool::PGConnectionPool(PGConnectionConfig config, unsigned int count
 }
 
 std::shared_ptr<DBConnection> PGConnectionPool::createConnection() {
-    return std::make_shared<PGConnection>(this->config, this->logger);
+    auto conn = std::make_shared<PGConnection>(this->config, this->logger);
+
+    if (!conn->connected())
+        conn.reset();
+
+    return conn;
+}
+
+std::tuple<int, std::string> PGConnectionPool::processHttpRequest(std::string_view path, const std::string &body, std::string &error) {
+    return {200, body};
 }

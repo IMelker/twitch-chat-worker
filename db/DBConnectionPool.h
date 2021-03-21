@@ -25,6 +25,7 @@ class DBConnectionPool
     std::shared_ptr<DBConnection> lockConnection();
     void unlockConnection(std::shared_ptr<DBConnection> conn);
 
+    [[nodiscard]] size_t getPoolSize() const { return pool.size(); }
     [[nodiscard]] const std::shared_ptr<Logger>& getLogger() const { return logger; };
 
   protected:
@@ -33,6 +34,7 @@ class DBConnectionPool
     std::shared_ptr<Logger> logger;
 
   private:
+    bool active = false;
     const unsigned int count = 10;
 
     std::mutex mutex;

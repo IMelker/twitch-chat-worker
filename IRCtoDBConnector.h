@@ -10,6 +10,7 @@
 
 #include "common/ThreadPool.h"
 
+#include "http/server/HTTPServer.h"
 #include "ircclient/IRCWorker.h"
 #include "db/pg/PGConnectionPool.h"
 #include "db/ch/CHConnectionPool.h"
@@ -17,7 +18,7 @@
 #include "Processor.h"
 
 class Logger;
-class IRCtoDBConnector : public IRCWorkerListener
+class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
 {
   public:
     explicit IRCtoDBConnector(unsigned int threads, std::shared_ptr<Logger> logger);
@@ -26,6 +27,9 @@ class IRCtoDBConnector : public IRCWorkerListener
     void initCHConnectionPool(CHConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
     void initPGConnectionPool(PGConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
     void initIRCWorkers(const IRCConnectConfig& config, std::vector<IRCClientConfig> accounts, std::shared_ptr<Logger> ircLogger);
+
+    [[nodiscard]] const std::shared_ptr<PGConnectionPool> & getPG() const;
+    [[nodiscard]] const std::shared_ptr<CHConnectionPool> & getCH() const;;
 
     static void loop();
 
@@ -41,6 +45,9 @@ class IRCtoDBConnector : public IRCWorkerListener
     void onDisconnected(IRCWorker *worker) override;
     void onMessage(IRCMessage message, IRCWorker *worker) override;
     void onLogin(IRCWorker *worker) override;
+
+    // implement HTTPControlUnit
+    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &body, std::string &error) override;
   private:
     std::shared_ptr<Logger> logger;
 

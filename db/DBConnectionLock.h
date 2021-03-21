@@ -18,7 +18,8 @@ class DBConnectionLock
         : pool(pool), conn(std::static_pointer_cast<Connection>(pool->lockConnection())) {
     };
     ~DBConnectionLock() {
-        pool->unlockConnection(conn);
+        if (conn)
+            pool->unlockConnection(conn);
     };
 
     Connection *operator->() const { return conn.get(); }

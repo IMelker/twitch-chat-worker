@@ -2,8 +2,6 @@
 // Created by imelker on 08.03.2021.
 //
 
-#include <cstring>
-#include <libpq-fe.h>
 #include <fmt/format.h>
 
 #include "common/Utils.h"
@@ -37,28 +35,11 @@ void MessageProcessor::transformMessage(const IRCMessage &message, MessageData &
     result.valid = !result.text.empty();
 }
 
-//static const std::string kInsertUserFmt = "INSERT INTO \"user\" (id, name) VALUES (DEFAULT, '{}') ON CONFLICT DO NOTHING;";
-//static const std::string kInsertValueFmt = "(DEFAULT,'{}',(SELECT TO_TIMESTAMP({}/1000.0)),"
-//                                           "(SELECT id FROM channel WHERE name = '{}'),"
-//                                           "(SELECT id FROM \"user\" WHERE name = '{}')){}";
-
-/*inline void sqlRequest(const std::string& request, const std::shared_ptr<PGConnectionPool> &pg) {
-    auto &logger = pg->getLogger();
-    logger->logTrace("PGConnection request: \"{}\"", request);
-    {
-        DBConnectionLock pgl(pg);
-        PQsendQuery(pgl->raw(), request.c_str());
-        while (auto resp = PQgetResult(pgl->raw())) {
-            if (PQresultStatus(resp) == PGRES_FATAL_ERROR)
-                logger->logError("PGConnection {}", PQresultErrorMessage(resp));
-            PQclear(resp);
-        }
-    }
-}*/
-
 inline void insertMessages(const std::vector<MessageData>& messages, const std::shared_ptr<CHConnectionPool> &ch) {
-    using namespace clickhouse;
+    if (messages.empty())
+        return;
 
+    using namespace clickhouse;
     auto channels = std::make_shared<ColumnFixedString>(256);
     auto user = std::make_shared<ColumnFixedString>(256);
     auto text = std::make_shared<ColumnString>();
@@ -94,7 +75,7 @@ DataProcessor::DataProcessor() {
 DataProcessor::~DataProcessor() = default;
 
 
-void DataProcessor::processMessage(MessageData &&msg, const std::shared_ptr<CHConnectionPool> &ch) {
+void DataProcessor::processMessage(MessageData &&msg, std::shared_ptr<CHConnectionPool> ch) {
     thread_local std::vector<MessageData> tempMessages;
     if (std::lock_guard lg(mutex); batch.size() < MESSAGE_BATCH_SIZE) {
         batch.push_back(std::move(msg));
@@ -108,7 +89,7 @@ void DataProcessor::processMessage(MessageData &&msg, const std::shared_ptr<CHCo
     tempMessages.clear();
 }
 
-void DataProcessor::flushMessages(const std::shared_ptr<CHConnectionPool> &ch) {
+void DataProcessor::flushMessages(std::shared_ptr<CHConnectionPool> ch) {
     std::vector<MessageData> tempMessages;
     {
         std::lock_guard lg(mutex);

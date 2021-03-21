@@ -37,6 +37,7 @@ include_directories(third-party/clickhouse)
 message("- [pg]")
 find_package(PostgreSQL REQUIRED)
 include_directories(${PostgreSQL_INCLUDE_DIRS})
+add_subdirectory(http)
 
 configure_file(${CMAKE_SOURCE_DIR}/config/app.h.in ${CMAKE_BINARY_DIR}/app.h @ONLY)
 configure_file(${CMAKE_SOURCE_DIR}/config/config.toml.in ${CMAKE_BINARY_DIR}/config.toml @ONLY)
@@ -69,6 +70,7 @@ add_executable(chatsniffer
         )
 
 target_link_libraries(chatsniffer
+        httpserver
         pthread
         stdc++fs
         nlohmann_json

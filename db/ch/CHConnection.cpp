@@ -13,6 +13,8 @@ CHConnection::CHConnection(const CHConnectionConfig &config, std::shared_ptr<Log
         .SetUser(config.user)
         .SetPassword(config.pass)
         .SetDefaultDatabase(config.dbname)
+        .SetSendRetries(config.sendRetries)
+        .SetPingBeforeQuery(true)
         .TcpKeepAlive(true);
 
     try {

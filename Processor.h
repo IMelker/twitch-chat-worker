@@ -36,8 +36,8 @@ class DataProcessor
     DataProcessor();
     ~DataProcessor();
 
-    void processMessage(MessageData &&msg, const std::shared_ptr<CHConnectionPool> &pg);
-    void flushMessages(const std::shared_ptr<CHConnectionPool> &pg);
+    void processMessage(MessageData &&msg, std::shared_ptr<CHConnectionPool> ch);
+    void flushMessages(std::shared_ptr<CHConnectionPool> ch);
   private:
     std::mutex mutex;
     std::vector<MessageData> batch;

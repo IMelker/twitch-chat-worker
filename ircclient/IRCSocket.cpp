@@ -5,11 +5,16 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <poll.h>
 #include <unistd.h>
 
 #include "IRCSocket.h"
 
-#define SOCKET_ERROR -1
+#define SOCKET_ERROR (-1)
+#define POLL_ERROR (-1)
+#define POLL_TIMEOUT 0
+#define POLL_DELAY 1000
+
 
 IRCSocket::IRCSocket() {
     socketInit();
@@ -75,11 +80,22 @@ bool IRCSocket::send(char const *data, size_t len) const {
 }
 
 int IRCSocket::receive(char *buf, int maxSize) {
-    auto bytes = recv(this->sock, buf, maxSize - 1, 0);
-    if (bytes > 0) {
-        return bytes;
+    struct pollfd fd{};
+    fd.fd = this->sock;
+    fd.events = POLLIN;
+
+    int ret = poll(&fd, 1, POLL_DELAY);
+    switch (ret) {
+        case POLL_ERROR:
+            if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
+                disconnect();
+            return ret;
+        case POLL_TIMEOUT:
+            return ret;
+        default:
+            auto bytes = recv(this->sock, buf, maxSize - 1, 0);
+            if (bytes < 0 && (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
+                disconnect();
+            return bytes;
     }
-    else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
-        disconnect();
-    return bytes;
 }

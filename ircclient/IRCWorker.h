@@ -60,8 +60,6 @@ class IRCWorker
 
     void messageHook(IRCMessage message);
   private:
-    void resetState();
-
     std::shared_ptr<Logger> logger;
     IRCWorkerListener *listener;
 

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 
 #include "common/SysSignal.h"
 #include "common/Logger.h"
@@ -23,12 +24,17 @@ std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionP
     std::vector<IRCClientConfig> accounts;
     {
         DBConnectionLock dbl(pgBackend);
+        if (!dbl->ping())
+            return accounts;
+
         PQsendQuery(dbl->raw(), request.c_str());
         while (auto resp = PQgetResult(dbl->raw())) {
-            if (PQresultStatus(resp) == PGRES_TUPLES_OK) {
+            auto status = PQresultStatus(resp);
+            if (status == PGRES_TUPLES_OK) {
                 int size = PQntuples(resp);
-                accounts.reserve(size);
+                logger->logTrace("PGConnection response: {} lines {}", PQresStatus(status), size);
 
+                accounts.reserve(size);
                 for (int i = 0; i < size; ++i) {
                     IRCClientConfig config;
                     config.nick = PQgetvalue(resp, i, 0);
@@ -43,7 +49,7 @@ std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionP
                 }
             }
 
-            if (PQresultStatus(resp) == PGRES_FATAL_ERROR) {
+            if (status == PGRES_FATAL_ERROR) {
                 logger->logError("DBConnection Error: {}\n", PQresultErrorMessage(resp));
             }
             PQclear(resp);
@@ -62,19 +68,24 @@ std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>
     std::vector<std::string> channelsList;
     {
         DBConnectionLock dbl(pgBackend);
+        if (!dbl->ping())
+            return channelsList;
+
         PQsendQuery(dbl->raw(), request.c_str());
         while (auto resp = PQgetResult(dbl->raw())) {
-            if (PQresultStatus(resp) == PGRES_TUPLES_OK) {
+            auto status = PQresultStatus(resp);
+            if (status == PGRES_TUPLES_OK) {
                 int size = PQntuples(resp);
-                channelsList.reserve(size);
+                logger->logTrace("PGConnection response: {} lines {}", PQresStatus(status), size);
 
+                channelsList.reserve(size);
                 for (int i = 0; i < size; ++i) {
                     channelsList.emplace_back(PQgetvalue(resp, i, 0));
                 }
             }
 
             if (PQresultStatus(resp) == PGRES_FATAL_ERROR) {
-                logger->logError("DBConnection Error: {}\n", PQresultErrorMessage(resp));
+                logger->logError("PGConnection Error: {}\n", PQresultErrorMessage(resp));
             }
             PQclear(resp);
         }
@@ -116,6 +127,15 @@ void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, std::vecto
     }
 }
 
+const std::shared_ptr<PGConnectionPool> & IRCtoDBConnector::getPG() const {
+    return pg;
+}
+
+const std::shared_ptr<CHConnectionPool> & IRCtoDBConnector::getCH() const {
+    return ch;
+}
+
+
 std::vector<IRCClientConfig> IRCtoDBConnector::loadAccounts() {
     std::vector<IRCClientConfig> accounts;
 
@@ -138,7 +158,7 @@ std::vector<std::string> IRCtoDBConnector::loadChannels() {
 }
 
 void IRCtoDBConnector::updateChannelsList(std::vector<std::string> &&channels) {
-    this->logger->logInfo("IRCtoDBConnector {} channels updated a watch list", channels.size());
+    this->logger->logInfo("IRCtoDBConnector watch list updated with {} channels", channels.size());
 
     std::lock_guard lg(channelsMutex);
     this->watchChannels = std::move(channels);
@@ -152,7 +172,7 @@ void IRCtoDBConnector::onDisconnected(IRCWorker *worker) {
     logger->logTrace("IRCtoDBConnector IRCWorker[{}] disconnected", fmt::ptr(worker));
 }
 
-void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *worker) {
+void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *) {
     std::chrono::time_point<std::chrono::system_clock> now = std::chrono::system_clock::now();
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
@@ -193,3 +213,6 @@ void IRCtoDBConnector::loop() {
     }
 }
 
+std::tuple<int, std::string> IRCtoDBConnector::processHttpRequest(std::string_view path, const std::string &body, std::string &error) {
+    return {200, body};
+}
