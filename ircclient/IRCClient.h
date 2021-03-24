@@ -8,6 +8,7 @@
 #include <list>
 #include <map>
 #include <fstream>
+#include <mutex>
 
 #include "absl/strings/str_split.h"
 
@@ -65,7 +66,7 @@ public:
     ~IRCClient() = default;
 
     bool connect(const char *host, int port);
-    bool connected() { return this->ircsocket.connected(); };
+    bool connected() { return this->ircSocket.connected(); };
     void disconnect();
 
     bool sendIRC(const std::string& data);
@@ -92,7 +93,9 @@ private:
 
     std::string nick;
     std::string user;
-    IRCSocket ircsocket;
+
+    std::recursive_mutex mutex;
+    IRCSocket ircSocket;
 
     std::multimap<std::string, IRCCommandHook> hooks;
 };

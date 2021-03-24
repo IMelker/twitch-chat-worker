@@ -10,21 +10,25 @@
 #define MAXDATASIZE 4096
 
 bool IRCClient::connect(const char *host, int port) {
-    return this->ircsocket.connect(host, port);
+    std::lock_guard lg(mutex);
+    return this->ircSocket.connect(host, port);
 }
 
 void IRCClient::disconnect() {
-    this->ircsocket.disconnect();
+    std::lock_guard lg(mutex);
+    this->ircSocket.disconnect();
 }
 
 bool IRCClient::sendIRC(const std::string& data) {
-    return this->ircsocket.send(data.c_str(), data.size());
+    std::lock_guard lg(mutex);
+    return this->ircSocket.send(data.c_str(), data.size());
 }
 
 bool IRCClient::login(const std::string& nick, const std::string& user, const std::string& password) {
     this->nick = nick;
     this->user = user;
 
+    std::lock_guard lg(mutex);
     if (sendIRC("HELLO\n")) {
         if (!password.empty() && !sendIRC("PASS " + password + "\n"))
             return false;
@@ -38,7 +42,7 @@ bool IRCClient::login(const std::string& nick, const std::string& user, const st
 
 void IRCClient::receive() {
     char buf[MAXDATASIZE];
-    int size = this->ircsocket.receive(buf, MAXDATASIZE);
+    int size = this->ircSocket.receive(buf, MAXDATASIZE);
     if (size <= 0)
         return;
 

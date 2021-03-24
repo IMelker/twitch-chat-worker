@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
     auto appLogger = LoggerFactory::create(readLoggerConfig(config, APP));
     IRCtoDBConnector connector(threads, appLogger);
 
-    /*iCHConnectionConfig chCfg;
+    CHConnectionConfig chCfg;
     chCfg.host = config[CLICKHOUSE]["host"].value_or("localhost");
     chCfg.port = config[CLICKHOUSE]["port"].value_or(5432);
     chCfg.dbname = config[CLICKHOUSE]["dbname"].value_or("postgres");
@@ -99,11 +99,11 @@ int main(int argc, char *argv[]) {
     int chConns = config[CLICKHOUSE]["connections"].value_or(std::thread::hardware_concurrency());
     auto chLogger = LoggerFactory::create(readLoggerConfig(config, CLICKHOUSE));
 
-    connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
+    /*connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
     if (connector.getCH()->getPoolSize() == 0) {
         appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
         return 1;
-    }
+    }*/
 
 
     PGConnectionConfig pgCfg;
@@ -123,23 +123,25 @@ int main(int argc, char *argv[]) {
 
     connector.updateChannelsList(connector.loadChannels());
 
-
     IRCConnectConfig ircConfig;
     ircConfig.host = config[IRC]["host"].value_or("irc.chat.twitch.tv");
     ircConfig.port = config[IRC]["port"].value_or(6667);
 
     auto ircLogger = LoggerFactory::create(readLoggerConfig(config, IRC));
-    connector.initIRCWorkers(ircConfig, connector.loadAccounts(), ircLogger);*/
+    connector.initIRCWorkers(ircConfig, connector.loadAccounts(), ircLogger);
 
-    httpControlServer.addControlUnit(HTTP_CONTROL, &httpControlServer);
-    //httpControlServer.addControlUnit(APP, &connector);
-    //httpControlServer.addControlUnit(CLICKHOUSE, connector.getCH().get());
-    //httpControlServer.addControlUnit(POSTGRESQL, connector.getPG().get());
+    httpControlServer.addControlUnit(APP, &connector);
+    httpControlServer.addControlUnit(CLICKHOUSE, connector.getCH().get());
+    httpControlServer.addControlUnit(POSTGRESQL, connector.getPG().get());
 
-    if (!httpControlServer.start(nullptr)) {
+    if (!httpControlServer.start(connector.getPool())) {
         appLogger->logCritical("Failed to start HTTP Control Server. Exit");
         return 1;
     }
+
+    // TODO sepparate IRC worker read and write thread
+    // read thread moves data to it's hooks(or publish/subscriber)
+
 
     // TODO add google language detection, add CH dictionary
     // https://github.com/CLD2Owners/cld2
@@ -157,11 +159,11 @@ int main(int argc, char *argv[]) {
     //      /adduser?user=""&nick=""&password=""
     //      /join?user=""&channel=""
     //      /leave?user=""&channel=""
-    // TODO support http gracefull thread shutdown
     // TODO add statistics
     // TODO rewrite message hooks
     // TODO add lua runner or python runner
 
     IRCtoDBConnector::loop();
-    httpControlServer.stop();
+
+    httpControlServer.clearUnits();
 }

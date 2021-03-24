@@ -29,23 +29,20 @@ struct HTTPControlConfig {
     int threads = 1;
 };
 
-class HTTPServer : public HTTPRequestHandler, public HTTPServerUnit
+class HTTPServer : public HTTPRequestHandler
 {
   public:
     HTTPServer(HTTPControlConfig config, std::shared_ptr<Logger> logger);
     ~HTTPServer();
 
     bool start(ThreadPool *pool);
-    void stop();
+    void clearUnits();
 
     void addControlUnit(const std::string& path, HTTPServerUnit *unit);
     void deleteControlUnit(const std::string& path);
 
     // implement HTTPRequestHandler
     void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) override;
-
-    // implement HTTPControlUnit
-    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &body, std::string &error) override;
   private:
     HTTPControlConfig config;
     std::shared_ptr<Logger> logger;

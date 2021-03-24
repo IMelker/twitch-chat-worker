@@ -67,6 +67,7 @@ add_executable(chatsniffer
         common/ThreadPool.h common/ThreadPool.cpp
         common/Logger.h common/Logger.cpp common/LoggerFactory.h
         common/Utils.h common/Utils.cpp
+        common/Clock.h
         )
 
 target_link_libraries(chatsniffer

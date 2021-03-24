@@ -1,6 +1,6 @@
 [app]
 threads = 4
-log_type = "rotate"
+log_type = "console"
 log_target = "logs/app.log"
 log_level = "trace"
 
@@ -12,14 +12,14 @@ secure = true
 verify = true
 threads = 1
 password = "qwerty"
-log_type = "rotate"
+log_type = "console"
 log_target = "logs/http.log"
 log_level = "trace"
 
 [irc]
 host = "irc.chat.twitch.tv"
 port = 6667
-log_type = "rotate"
+log_type = "console"
 log_target = "logs/irc.log"
 log_level = "info"
 
@@ -30,7 +30,7 @@ dbname = "twitch_chat"
 user = "service"
 password = "Hfhysqcet12"
 connections = 1
-log_type = "rotate"
+log_type = "console"
 log_target = "logs/ch.log"
 log_level = "trace"
 
@@ -41,6 +41,6 @@ dbname = "twitch_base"
 user = "twitch_chat"
 password = "Hfhysqcet12"
 connections = 1
-log_type = "rotate"
+log_type = "console"
 log_target = "logs/pg.log"
 log_level = "trace"

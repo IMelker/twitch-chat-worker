@@ -3,11 +3,11 @@
 //
 
 #include <memory>
-#include <utility>
 
 #include <fmt/format.h>
 
 #include "../common/Logger.h"
+#include "../common/Clock.h"
 #include "IRCWorker.h"
 
 #define AUTH_ATTEMPTS_LIMIT 20
@@ -20,6 +20,24 @@ IRCWorker::IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCW
 IRCWorker::~IRCWorker() {
     if (thread.joinable())
         thread.join();
+}
+
+
+const IRCConnectConfig &IRCWorker::getConnectConfig() const {
+    return conConfig;
+}
+
+const IRCClientConfig &IRCWorker::getClientConfig() const {
+    return ircConfig;
+}
+
+std::set<std::string> IRCWorker::getJoinedChannels() const {
+    std::lock_guard lg(channelsMutex);
+    return joinedChannels;
+}
+
+const decltype(IRCWorker::stats)& IRCWorker::getStats() const {
+    return stats;
 }
 
 inline bool connect(const IRCConnectConfig &cfg, IRCClient *client, Logger *logger) {
@@ -61,6 +79,10 @@ void IRCWorker::run() {
         if (!connect(conConfig, client.get(), logger.get()))
             break;
 
+        auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
+        stats.connects.timestamp.store(timestamp, std::memory_order_relaxed);
+        stats.connects.count.fetch_add(1, std::memory_order_relaxed);
+
         logger->logInfo("IRCWorker[{}] connected to {}:{}", fmt::ptr(this), conConfig.host, conConfig.port);
         listener->onConnected(this);
 
@@ -69,10 +91,18 @@ void IRCWorker::run() {
 
         logger->logInfo("IRCWorker[{}] logged in by {}:{}", fmt::ptr(this), ircConfig.user, ircConfig.nick);
 
-        for(auto &channel: joinedChannels) {
-            logger->logTrace("IRCWorker[{}] {} joining to {}", fmt::ptr(this), ircConfig.nick, channel);
-            client->sendIRC(fmt::format("JOIN #{}\n", channel));
+        // rejoin to channels on reconnect
+        int count = 0;
+        {
+            std::lock_guard lg(channelsMutex);
+            for(auto &channel: joinedChannels) {
+                if (sendIRC(fmt::format("JOIN #{}\n", channel))) {
+                    logger->logTrace("IRCWorker[{}] {} joining to {}/{}", fmt::ptr(this), ircConfig.nick, channel, count++);
+                }
+            }
         }
+        stats.channels.timestamp.store(count ? timestamp : 0, std::memory_order_relaxed);
+        stats.channels.count.store(count, std::memory_order_relaxed);
 
         listener->onLogin(this);
 
@@ -93,43 +123,52 @@ void IRCWorker::run() {
 
 
 bool IRCWorker::joinChannel(const std::string &channel) {
-    if (joinedChannels.count(channel)) {
-        logger->logInfo(R"(IRCWorker[{}] "{}" already joined to channel({}))", fmt::ptr(this), ircConfig.nick, channel);
+    {
+        std::lock_guard lg(channelsMutex);
+        if (joinedChannels.count(channel)) {
+            logger->logInfo(R"(IRCWorker[{}] "{}" already joined to channel({}))", fmt::ptr(this), ircConfig.nick, channel);
+            return true;
+        }
+
+        if (joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit)) {
+            logger->logError(R"(IRCWorker[{}] "{}" failed to join to channel({}). Limit reached)", fmt::ptr(this), ircConfig.nick, channel);
+            return false;
+        }
+
+        joinedChannels.emplace(channel);
+    }
+
+    if (sendIRC(fmt::format("JOIN #{}\n", channel))) {
+        logger->logInfo("IRCWorker[{}] {} joining to channel({})", fmt::ptr(this), ircConfig.nick, channel);
+
+        auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
+        stats.channels.timestamp.store(timestamp, std::memory_order_relaxed);
+        stats.channels.count.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
-
-    if (joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit)) {
-        logger->logError(R"(IRCWorker[{}] "{}" failed to join to channel({}). Limit reached)", fmt::ptr(this), ircConfig.nick, channel);
-        return false;
-    }
-
-    joinedChannels.emplace(channel);
-
-    if (client && client->connected()) {
-        logger->logInfo("IRCWorker[{}] {} joining to {}", fmt::ptr(this), ircConfig.nick, channel);
-        client->sendIRC(fmt::format("JOIN #{}\n", channel));
-    }
-    return true;
+    return false;
 }
 
 void IRCWorker::leaveChannel(const std::string &channel) {
-    if (joinedChannels.count(channel) == 0) {
-        logger->logInfo(R"(IRCWorker[{}] "{}" already left from channel({}))", fmt::ptr(this), ircConfig.nick, channel);
-        return;
+    {
+        std::lock_guard lg(channelsMutex);
+        if (joinedChannels.count(channel) == 0) {
+            logger->logInfo(R"(IRCWorker[{}] "{}" already left from channel({}))", fmt::ptr(this), ircConfig.nick, channel);
+            return;
+        }
+
+        joinedChannels.erase(channel);
     }
 
-    joinedChannels.erase(channel);
-
-    if (client && client->connected()) {
-        logger->logTrace("IRCWorker[{}] {} leaving {}", fmt::ptr(this), ircConfig.nick, channel);
-        client->sendIRC(fmt::format("PART #{}\n", channel));
+    if (sendIRC(fmt::format("PART #{}\n", channel))) {
+        logger->logInfo("IRCWorker[{}] {} leaving from channel({})", fmt::ptr(this), ircConfig.nick, channel);
     }
 }
 
 bool IRCWorker::sendMessage(const std::string &channel, const std::string &text) {
-    if (client && client->connected()) {
+    if (sendIRC(fmt::format("PRIVMSG #{} {}\n", channel, text))) {
         logger->logTrace(R"(IRCWorker[{}] "{} send to "{}" message "{}")", fmt::ptr(this), ircConfig.nick, channel, text);
-        return client->sendIRC(fmt::format("PRIVMSG #{} {}\n", channel, text));
+        return true;
     }
     return false;
 }
@@ -144,12 +183,22 @@ bool IRCWorker::sendIRC(const std::string& message) {
     // For Whispers, which are private chat message between two users:
     // 3 per second, up to 100 per minute(40 accounts per day)
 
-    if (client && client->connected())
-        client->sendIRC(message);
+    if (client && client->connected() && client->sendIRC(message)) {
+        auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
+        stats.messages.out.timestamp.store(timestamp, std::memory_order_relaxed);
+        stats.messages.out.count.fetch_add(1, std::memory_order_relaxed);
+        return true;
+    }
+    return false;
 }
 
 void IRCWorker::messageHook(IRCMessage message) {
+    auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
+
     logger->logTrace("IRCWorker[{}] {}({}): {}", fmt::ptr(this), message.prefix.nickname,
                      message.parameters.at(0), message.parameters.back());
-    listener->onMessage(std::move(message), this);
+    listener->onMessage(this, std::move(message), timestamp);
+
+    stats.messages.in.timestamp.store(timestamp, std::memory_order_relaxed);
+    stats.messages.in.count.fetch_add(1, std::memory_order_relaxed);
 }

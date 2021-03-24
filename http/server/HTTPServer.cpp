@@ -2,21 +2,28 @@
 // Created by l2pic on 18.03.2021.
 //
 
+#include "absl/strings/str_split.h"
+
 #include "HTTPServerUnit.h"
 #include "HTTPServer.h"
 #include "HTTPListener.h"
 #include "HTTPResponseFactory.h"
 #include "../../common/ThreadPool.h"
+#include "../../common/SysSignal.h"
 
 HTTPServer::HTTPServer(HTTPControlConfig config, std::shared_ptr<Logger> logger)
  : config(std::move(config)), logger(std::move(logger)), ioc(config.threads), executors(nullptr) {
 }
 
 HTTPServer::~HTTPServer() {
+    ioc.stop();
+
     for (auto &runner: ioRunners) {
         if (runner.joinable())
             runner.join();
     }
+
+    executors = nullptr;
 };
 
 bool HTTPServer::start(ThreadPool *pool) {
@@ -38,6 +45,7 @@ bool HTTPServer::start(ThreadPool *pool) {
     for (int i = 0; i < config.threads; ++i) {
         ioRunners.emplace_back([&ioc = this->ioc] { ioc.run(); });
     }
+    return true;
 }
 
 inline std::string_view toSV(const beast::string_view& view) {
@@ -45,16 +53,27 @@ inline std::string_view toSV(const beast::string_view& view) {
 }
 
 void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
+    std::vector<std::string_view> path = absl::StrSplit(toSV(req.target()), '/', absl::SkipWhitespace());
+    if (path.size() < 2) {
+        send(HTTPResponseFactory::BadRequest(req, "Invalid path"));
+        return;
+    }
+
     std::lock_guard lg(unitsMutex); // TODO not covering lambda, so fix data race in future
-    auto it = units.find(req.target());
+    auto it = units.find(path.front());
     if (it == units.end()) {
         send(HTTPResponseFactory::NotFound(req, req.target()));
         return;
     }
 
-    executors->enqueue([req = std::move(req), send = std::move(send), handler = it->second]() {
+    if (!executors) {
+        send(HTTPResponseFactory::ServerError(req, "There is no executor for request"));
+        return;
+    }
+
+    executors->enqueue([req = std::move(req), send = std::move(send), &target = path[1], handler = it->second]() {
         std::string err;
-        auto [status, body] = handler->processHttpRequest(toSV(req.target()), req.body(), err);
+        auto [status, body] = handler->processHttpRequest(target, req.body(), err);
         if (!err.empty()) {
             send(HTTPResponseFactory::ServerError(req, err));
             return;
@@ -81,11 +100,7 @@ void HTTPServer::deleteControlUnit(const std::string &path) {
     units.erase(path);
 }
 
-std::tuple<int, std::string> HTTPServer::processHttpRequest(std::string_view path, const std::string &body, std::string &error) {
-    return {200, body};
-}
-
-void HTTPServer::stop() {
+void HTTPServer::clearUnits() {
     std::lock_guard lg(unitsMutex);
     this->units.clear();
 }

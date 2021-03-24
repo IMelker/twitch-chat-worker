@@ -8,6 +8,8 @@
 #include <string>
 #include <tuple>
 
+#define EMPTY_HTTP_RESPONSE std::tuple<int, std::string>{0, ""}
+
 struct HTTPServerUnit {
     virtual std::tuple<int, std::string> processHttpRequest(std::string_view path,
                                                             const std::string& body,

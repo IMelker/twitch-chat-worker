@@ -5,9 +5,10 @@
 #ifndef CHATSNIFFER_IRCCLIENT_IRCWORKER_H_
 #define CHATSNIFFER_IRCCLIENT_IRCWORKER_H_
 
-#include <thread>
-#include <mutex>
 #include <utility>
+#include <thread>
+#include <atomic>
+#include <mutex>
 #include <vector>
 
 #include "../common/SysSignal.h"
@@ -18,7 +19,7 @@ class IRCWorker;
 struct IRCWorkerListener {
     virtual void onConnected(IRCWorker *worker) = 0;
     virtual void onDisconnected(IRCWorker *worker) = 0;
-    virtual void onMessage(IRCMessage message, IRCWorker *worker) = 0;
+    virtual void onMessage(IRCWorker *worker, IRCMessage message, long long now) = 0;
     virtual void onLogin(IRCWorker *worker) = 0;
 };
 
@@ -41,8 +42,28 @@ struct IRCClientConfig {
 class Logger;
 class IRCWorker
 {
+    struct {
+        struct {
+            std::atomic<long long> timestamp{};
+            std::atomic<unsigned int> count{};
+        } connects;
+        struct {
+            std::atomic<long long> timestamp{};
+            std::atomic<unsigned int> count{};
+        } channels;
+        struct {
+            struct {
+                std::atomic<long long> timestamp{};
+                std::atomic<unsigned int> count{};
+            } in;
+            struct {
+                std::atomic<long long> timestamp{};
+                std::atomic<unsigned int> count{};
+            } out;
+        } messages;
+    } stats;
   public:
-    explicit IRCWorker(IRCConnectConfig  conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger);
+    explicit IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger);
     ~IRCWorker();
 
     IRCWorker(IRCWorker&) = delete;
@@ -50,7 +71,10 @@ class IRCWorker
     IRCWorker& operator=(IRCWorker&) = delete;
     IRCWorker& operator=(IRCWorker&&) = default;
 
-    void run();
+    [[nodiscard]] const IRCConnectConfig& getConnectConfig() const;
+    [[nodiscard]] const IRCClientConfig& getClientConfig() const;
+    [[nodiscard]] std::set<std::string> getJoinedChannels() const;
+    [[nodiscard]] const decltype(stats)& getStats() const;
 
     bool joinChannel(const std::string& channel);
     void leaveChannel(const std::string& channel);
@@ -60,13 +84,17 @@ class IRCWorker
 
     void messageHook(IRCMessage message);
   private:
-    std::shared_ptr<Logger> logger;
-    IRCWorkerListener *listener;
+    void run();
 
-    IRCConnectConfig conConfig;
-    IRCClientConfig ircConfig;
+    const std::shared_ptr<Logger> logger;
+    IRCWorkerListener * const listener;
+
+    const IRCConnectConfig conConfig;
+    const IRCClientConfig ircConfig;
 
     std::unique_ptr<IRCClient> client;
+
+    mutable std::mutex channelsMutex;
     std::set<std::string> joinedChannels;
 
     std::thread thread;

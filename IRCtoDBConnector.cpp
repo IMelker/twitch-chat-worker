@@ -6,11 +6,15 @@
 #include <chrono>
 #include <ctime>
 
+#include "nlohmann/json.hpp"
+
 #include "common/SysSignal.h"
 #include "common/Logger.h"
 
 #include "db/DBConnectionLock.h"
 #include "IRCtoDBConnector.h"
+
+using json = nlohmann::json;
 
 std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
     auto &logger = pgBackend->getLogger();
@@ -123,7 +127,8 @@ void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, std::vecto
     this->logger->logInfo("IRCtoDBConnector {} users loaded", accounts.size());
 
     for (auto &account : accounts) {
-        workers.push_back(std::make_shared<IRCWorker>(config, std::move(account), this, ircLogger));
+        std::string nick = account.nick;
+        workers.emplace(std::move(nick), std::make_shared<IRCWorker>(config, std::move(account), this, ircLogger));
     }
 }
 
@@ -135,6 +140,9 @@ const std::shared_ptr<CHConnectionPool> & IRCtoDBConnector::getCH() const {
     return ch;
 }
 
+ThreadPool *IRCtoDBConnector::getPool() {
+    return &pool;
+}
 
 std::vector<IRCClientConfig> IRCtoDBConnector::loadAccounts() {
     std::vector<IRCClientConfig> accounts;
@@ -160,7 +168,7 @@ std::vector<std::string> IRCtoDBConnector::loadChannels() {
 void IRCtoDBConnector::updateChannelsList(std::vector<std::string> &&channels) {
     this->logger->logInfo("IRCtoDBConnector watch list updated with {} channels", channels.size());
 
-    std::lock_guard lg(channelsMutex);
+    std::lock_guard lg(watchMutex);
     this->watchChannels = std::move(channels);
 }
 
@@ -172,17 +180,14 @@ void IRCtoDBConnector::onDisconnected(IRCWorker *worker) {
     logger->logTrace("IRCtoDBConnector IRCWorker[{}] disconnected", fmt::ptr(worker));
 }
 
-void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *) {
-    std::chrono::time_point<std::chrono::system_clock> now = std::chrono::system_clock::now();
-    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-    pool.enqueue([message = std::move(message), timestamp, this]() {
+void IRCtoDBConnector::onMessage(IRCWorker *worker, IRCMessage message, long long now) {
+    pool.enqueue([message = std::move(message), now, worker, this]() {
         MessageData transformed;
-        transformed.timestamp = timestamp;
+        transformed.timestamp = now;
         msgProcessor.transformMessage(message, transformed);
 
-        logger->logTrace(R"(IRCtoDBConnector process {{channel: "{}",from: "{}", text: "{}", valid: {}}})",
-                               transformed.channel, transformed.user, transformed.text, transformed.valid);
+        logger->logTrace(R"(IRCtoDBConnector process {{worker: {}, channel: "{}", from: "{}", text: "{}", valid: {}}})",
+                         fmt::ptr(worker), transformed.channel, transformed.user, transformed.text, transformed.valid);
 
         // process request to database
         if (transformed.valid) {
@@ -198,7 +203,7 @@ void IRCtoDBConnector::onMessage(IRCMessage message, IRCWorker *) {
 void IRCtoDBConnector::onLogin(IRCWorker *worker) {
     logger->logTrace("IRCtoDBConnector IRCWorker[{}] logged in", fmt::ptr(worker));
 
-    std::lock_guard lg(channelsMutex);
+    std::lock_guard lg(watchMutex);
     size_t pos = 0;
     for (pos = 0; pos < watchChannels.size(); ++pos) {
         if (!worker->joinChannel(watchChannels[pos]))
@@ -213,6 +218,173 @@ void IRCtoDBConnector::loop() {
     }
 }
 
-std::tuple<int, std::string> IRCtoDBConnector::processHttpRequest(std::string_view path, const std::string &body, std::string &error) {
-    return {200, body};
+std::tuple<int, std::string> IRCtoDBConnector::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {
+    if (path == "shutdown") {
+        SysSignal::setServiceTerminated(true);
+        return {200, ""};
+    }
+
+    if (path == "join") {
+        json req = json::parse(request, nullptr, false, true);
+        if (req.is_discarded()) {
+            error = "Failed to parse JSON";
+            return EMPTY_HTTP_RESPONSE;
+        }
+
+        const auto& account = req["account"];
+        if (!account.is_string()) {
+            error = "Account not found";
+            return EMPTY_HTTP_RESPONSE;
+        }
+        auto it = workers.find(account.get<std::string_view>());
+        if (it == workers.end()) {
+            error = "Account not found";
+            return EMPTY_HTTP_RESPONSE;
+        }
+
+        json body = json::object();
+        const auto &channels = req["channels"];
+        switch (channels.type()) {
+            case json::value_t::array:
+                for (const auto &channel: channels) {
+                    if (!channel.is_string())
+                        continue;
+                    const auto &chan = channel.get<std::string>();
+                    body[chan] = it->second->joinChannel(chan);
+                }
+                break;
+            case json::value_t::string: {
+                const auto &chan = channels.get<std::string>();
+                body[chan] = it->second->joinChannel(chan);
+                break;
+            }
+            default:
+                break;
+        }
+
+        return {200, body.dump()};
+    }
+
+    if (path == "leave") {
+        json req = json::parse(request, nullptr, false, true);
+        if (req.is_discarded()) {
+            error = "Failed to parse JSON";
+            return EMPTY_HTTP_RESPONSE;
+        }
+
+        const auto& account = req["account"];
+        if (!account.is_string()) {
+            error = "Account not found";
+            return EMPTY_HTTP_RESPONSE;
+        }
+        auto it = workers.find(account.get<std::string_view>());
+        if (it == workers.end()) {
+            error = "Account not found";
+            return EMPTY_HTTP_RESPONSE;
+        }
+
+        const auto &channels = req["channels"];
+        switch (channels.type()) {
+            case json::value_t::array:
+                for (const auto &channel: channels) {
+                    if (!channel.is_string())
+                        continue;
+                    const auto &chan = channel.get<std::string>();
+                    it->second->leaveChannel(chan);
+                }
+                break;
+            case json::value_t::string: {
+                const auto &chan = channels.get<std::string>();
+                it->second->leaveChannel(chan);
+                break;
+            }
+            default:
+                break;
+        }
+
+        return {200, ""};
+    }
+
+    if (path == "accounts") {
+        auto fillAccount = [] (json& account, const auto& stats) {
+            account["connects"] = {{"updated", stats.connects.timestamp.load(std::memory_order_relaxed)},
+                                   {"count", stats.connects.count.load(std::memory_order_relaxed)}};
+            account["channels"] = {{"updated", stats.channels.timestamp.load(std::memory_order_relaxed)},
+                                   {"count", stats.channels.count.load(std::memory_order_relaxed)}};
+            account["messages"]["in"] = {{"updated", stats.messages.in.timestamp.load(std::memory_order_relaxed)},
+                                         {"count", stats.messages.in.count.load(std::memory_order_relaxed)}};
+            account["messages"]["out"] = {{"updated", stats.messages.out.timestamp.load(std::memory_order_relaxed)},
+                                          {"count", stats.messages.out.count.load(std::memory_order_relaxed)}};
+        };
+
+        json body = json::object();
+        if (request.empty()) {
+            for (auto &[nick, worker]: workers)
+                fillAccount(body[nick], worker->getStats());
+        } else {
+            json req = json::parse(request, nullptr, false, true);
+            if (req.is_discarded()) {
+                error = "Failed to parse JSON";
+                return EMPTY_HTTP_RESPONSE;
+            }
+
+            const auto& accounts = req["accounts"];
+            switch (accounts.type()) {
+                case json::value_t::array:
+                    for (const auto &account: accounts) {
+                        if (!account.is_string())
+                            continue;
+
+                        if (auto it = workers.find(account.get<std::string_view>()); it != workers.end())
+                            fillAccount(body[it->first], it->second->getStats());
+                    }
+                    break;
+                case json::value_t::string:
+                    if (auto it = workers.find(accounts.get<std::string_view>()); it != workers.end())
+                        fillAccount(body[it->first], it->second->getStats());
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return {200, body.dump()};
+    }
+
+    if (path == "channels") {
+        json body = json::object();
+        if (request.empty()) {
+            for (auto &[nick, worker]: workers)
+                body[nick] = json(worker->getJoinedChannels());
+        } else {
+            json req = json::parse(request, nullptr, false, true);
+            if (req.is_discarded()) {
+                error = "Failed to parse JSON";
+                return EMPTY_HTTP_RESPONSE;
+            }
+
+            const auto& accounts = req["accounts"];
+            switch (accounts.type()) {
+                case json::value_t::array:
+                    for (const auto &account: accounts) {
+                        if (!account.is_string())
+                            continue;
+
+                        if (auto it = workers.find(account.get<std::string_view>()); it != workers.end())
+                            body[it->first] = json(it->second->getJoinedChannels());
+                    }
+                    break;
+                case json::value_t::string:
+                    if (auto it = workers.find(accounts.get<std::string_view>());it != workers.end())
+                        body[it->first] = json(it->second->getJoinedChannels());
+                    break;
+                default:
+                    break;
+            }
+        }
+        return {200, body.dump()};
+    }
+
+    error = "Failed to match path";
+    return EMPTY_HTTP_RESPONSE;
 }

@@ -5,7 +5,7 @@
 #ifndef CHATSNIFFER__IRCTODBCONNECTOR_H_
 #define CHATSNIFFER__IRCTODBCONNECTOR_H_
 
-#include <vector>
+#include <map>
 #include <string>
 
 #include "common/ThreadPool.h"
@@ -28,6 +28,7 @@ class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
     void initPGConnectionPool(PGConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger);
     void initIRCWorkers(const IRCConnectConfig& config, std::vector<IRCClientConfig> accounts, std::shared_ptr<Logger> ircLogger);
 
+    [[nodiscard]] ThreadPool * getPool();
     [[nodiscard]] const std::shared_ptr<PGConnectionPool> & getPG() const;
     [[nodiscard]] const std::shared_ptr<CHConnectionPool> & getCH() const;;
 
@@ -43,7 +44,7 @@ class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
     // implement IRCWorkerListener
     void onConnected(IRCWorker *worker) override;
     void onDisconnected(IRCWorker *worker) override;
-    void onMessage(IRCMessage message, IRCWorker *worker) override;
+    void onMessage(IRCWorker *worker, IRCMessage message, long long now) override;
     void onLogin(IRCWorker *worker) override;
 
     // implement HTTPControlUnit
@@ -59,9 +60,9 @@ class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
 
     ThreadPool pool;
 
-    std::vector<std::shared_ptr<IRCWorker>> workers;
+    std::map<std::string, std::shared_ptr<IRCWorker>, std::less<>> workers;
 
-    std::mutex channelsMutex;
+    std::mutex watchMutex;
     std::vector<std::string> watchChannels;
 };
 

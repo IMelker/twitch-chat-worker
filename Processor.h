@@ -15,7 +15,7 @@ struct MessageData {
     std::string user;
     std::string channel;
     std::string text;
-    long timestamp = 0;
+    long long timestamp = 0;
     bool valid = false;
 };
 

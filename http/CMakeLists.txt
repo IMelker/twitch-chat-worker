@@ -15,5 +15,5 @@ if (Boost_FOUND)
             server/HTTPListener.cpp server/HTTPListener.h
             server/HTTPSession.cpp server/HTTPSession.h
             server/HTTPServerUnit.h)
-    target_link_libraries(httpserver ${Boost_LIBRARIES})
+    target_link_libraries(httpserver absl::strings ${Boost_LIBRARIES})
 endif()
