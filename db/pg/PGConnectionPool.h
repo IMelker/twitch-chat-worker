@@ -22,7 +22,10 @@ class PGConnectionPool : public DBConnectionPool, public HTTPServerUnit
     std::shared_ptr<DBConnection> createConnection() override;
 
     // implement HTTPControlUnit
-    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &body, std::string &error) override;
+    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request, std::string &error) override;
+
+    // request handlers
+    std::string handleStats(const std::string &request, std::string &error);
   private:
     PGConnectionConfig config;
 };

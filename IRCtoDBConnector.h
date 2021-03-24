@@ -49,6 +49,17 @@ class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
 
     // implement HTTPControlUnit
     std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &body, std::string &error) override;
+
+    // request handlers
+    std::string handleShutdown(const std::string &request, std::string &error);
+    std::string handleVersion(const std::string &request, std::string &error);
+    std::string handleAccounts(const std::string &request, std::string &error);
+    std::string handleChannels(const std::string &request, std::string &error);
+    std::string handleJoin(const std::string &request, std::string &error);
+    std::string handleLeave(const std::string &request, std::string &error);
+    std::string handleMessage(const std::string &request, std::string &error);
+    std::string handleCustom(const std::string &request, std::string &error);
+
   private:
     std::shared_ptr<Logger> logger;
 

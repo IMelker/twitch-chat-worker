@@ -1,6 +1,7 @@
 //
 // Created by l2pic on 06.03.2021.
 //
+#include "app.h"
 
 #include <algorithm>
 #include <chrono>
@@ -219,172 +220,321 @@ void IRCtoDBConnector::loop() {
 }
 
 std::tuple<int, std::string> IRCtoDBConnector::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {
-    if (path == "shutdown") {
-        SysSignal::setServiceTerminated(true);
-        return {200, ""};
-    }
-
-    if (path == "join") {
-        json req = json::parse(request, nullptr, false, true);
-        if (req.is_discarded()) {
-            error = "Failed to parse JSON";
-            return EMPTY_HTTP_RESPONSE;
-        }
-
-        const auto& account = req["account"];
-        if (!account.is_string()) {
-            error = "Account not found";
-            return EMPTY_HTTP_RESPONSE;
-        }
-        auto it = workers.find(account.get<std::string_view>());
-        if (it == workers.end()) {
-            error = "Account not found";
-            return EMPTY_HTTP_RESPONSE;
-        }
-
-        json body = json::object();
-        const auto &channels = req["channels"];
-        switch (channels.type()) {
-            case json::value_t::array:
-                for (const auto &channel: channels) {
-                    if (!channel.is_string())
-                        continue;
-                    const auto &chan = channel.get<std::string>();
-                    body[chan] = it->second->joinChannel(chan);
-                }
-                break;
-            case json::value_t::string: {
-                const auto &chan = channels.get<std::string>();
-                body[chan] = it->second->joinChannel(chan);
-                break;
-            }
-            default:
-                break;
-        }
-
-        return {200, body.dump()};
-    }
-
-    if (path == "leave") {
-        json req = json::parse(request, nullptr, false, true);
-        if (req.is_discarded()) {
-            error = "Failed to parse JSON";
-            return EMPTY_HTTP_RESPONSE;
-        }
-
-        const auto& account = req["account"];
-        if (!account.is_string()) {
-            error = "Account not found";
-            return EMPTY_HTTP_RESPONSE;
-        }
-        auto it = workers.find(account.get<std::string_view>());
-        if (it == workers.end()) {
-            error = "Account not found";
-            return EMPTY_HTTP_RESPONSE;
-        }
-
-        const auto &channels = req["channels"];
-        switch (channels.type()) {
-            case json::value_t::array:
-                for (const auto &channel: channels) {
-                    if (!channel.is_string())
-                        continue;
-                    const auto &chan = channel.get<std::string>();
-                    it->second->leaveChannel(chan);
-                }
-                break;
-            case json::value_t::string: {
-                const auto &chan = channels.get<std::string>();
-                it->second->leaveChannel(chan);
-                break;
-            }
-            default:
-                break;
-        }
-
-        return {200, ""};
-    }
-
-    if (path == "accounts") {
-        auto fillAccount = [] (json& account, const auto& stats) {
-            account["connects"] = {{"updated", stats.connects.timestamp.load(std::memory_order_relaxed)},
-                                   {"count", stats.connects.count.load(std::memory_order_relaxed)}};
-            account["channels"] = {{"updated", stats.channels.timestamp.load(std::memory_order_relaxed)},
-                                   {"count", stats.channels.count.load(std::memory_order_relaxed)}};
-            account["messages"]["in"] = {{"updated", stats.messages.in.timestamp.load(std::memory_order_relaxed)},
-                                         {"count", stats.messages.in.count.load(std::memory_order_relaxed)}};
-            account["messages"]["out"] = {{"updated", stats.messages.out.timestamp.load(std::memory_order_relaxed)},
-                                          {"count", stats.messages.out.count.load(std::memory_order_relaxed)}};
-        };
-
-        json body = json::object();
-        if (request.empty()) {
-            for (auto &[nick, worker]: workers)
-                fillAccount(body[nick], worker->getStats());
-        } else {
-            json req = json::parse(request, nullptr, false, true);
-            if (req.is_discarded()) {
-                error = "Failed to parse JSON";
-                return EMPTY_HTTP_RESPONSE;
-            }
-
-            const auto& accounts = req["accounts"];
-            switch (accounts.type()) {
-                case json::value_t::array:
-                    for (const auto &account: accounts) {
-                        if (!account.is_string())
-                            continue;
-
-                        if (auto it = workers.find(account.get<std::string_view>()); it != workers.end())
-                            fillAccount(body[it->first], it->second->getStats());
-                    }
-                    break;
-                case json::value_t::string:
-                    if (auto it = workers.find(accounts.get<std::string_view>()); it != workers.end())
-                        fillAccount(body[it->first], it->second->getStats());
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        return {200, body.dump()};
-    }
-
-    if (path == "channels") {
-        json body = json::object();
-        if (request.empty()) {
-            for (auto &[nick, worker]: workers)
-                body[nick] = json(worker->getJoinedChannels());
-        } else {
-            json req = json::parse(request, nullptr, false, true);
-            if (req.is_discarded()) {
-                error = "Failed to parse JSON";
-                return EMPTY_HTTP_RESPONSE;
-            }
-
-            const auto& accounts = req["accounts"];
-            switch (accounts.type()) {
-                case json::value_t::array:
-                    for (const auto &account: accounts) {
-                        if (!account.is_string())
-                            continue;
-
-                        if (auto it = workers.find(account.get<std::string_view>()); it != workers.end())
-                            body[it->first] = json(it->second->getJoinedChannels());
-                    }
-                    break;
-                case json::value_t::string:
-                    if (auto it = workers.find(accounts.get<std::string_view>());it != workers.end())
-                        body[it->first] = json(it->second->getJoinedChannels());
-                    break;
-                default:
-                    break;
-            }
-        }
-        return {200, body.dump()};
-    }
+    if (path == "message")
+        return {200, handleMessage(request, error)};
+    if (path == "custom")
+        return {200, handleCustom(request, error)};
+    if (path == "join")
+        return {200, handleJoin(request, error)};
+    if (path == "accounts")
+        return {200, handleAccounts(request, error)};
+    if (path == "channels")
+        return {200, handleChannels(request, error)};
+    if (path == "leave")
+        return {200, handleLeave(request, error)};
+    if (path == "version")
+        return {200, handleVersion(request, error)};
+    if (path == "shutdown")
+        return {200, handleShutdown(request, error)};
 
     error = "Failed to match path";
     return EMPTY_HTTP_RESPONSE;
+}
+
+
+std::string IRCtoDBConnector::handleShutdown(const std::string &, std::string &) {
+    SysSignal::setServiceTerminated(true);
+    return "Terminated";
+}
+
+std::string IRCtoDBConnector::handleJoin(const std::string &request, std::string &error) {
+    json req = json::parse(request, nullptr, false, true);
+    if (req.is_discarded()) {
+        error = "Failed to parse JSON";
+        return "";
+    }
+
+    const auto& account = req["account"];
+    if (!account.is_string()) {
+        error = "Account not found";
+        return "";
+    }
+    auto it = workers.find(account.get<std::string_view>());
+    if (it == workers.end()) {
+        error = "Account not found";
+        return "";
+    }
+
+    json body = json::object();
+    const auto &channels = req["channels"];
+    switch (channels.type()) {
+        case json::value_t::array:
+            for (const auto &channel: channels) {
+                if (!channel.is_string())
+                    continue;
+                const auto &chan = channel.get<std::string>();
+                body[chan] = it->second->joinChannel(chan);
+            }
+            break;
+        case json::value_t::string: {
+            const auto &chan = channels.get<std::string>();
+            body[chan] = it->second->joinChannel(chan);
+            break;
+        }
+        default:
+            break;
+    }
+    return body.dump();
+}
+
+std::string IRCtoDBConnector::handleAccounts(const std::string &request, std::string &error) {
+    auto fillAccount = [] (json& account, const auto& stats) {
+        account["connects"] = {{"updated", stats.connects.timestamp.load(std::memory_order_relaxed)},
+                               {"count", stats.connects.count.load(std::memory_order_relaxed)}};
+        account["channels"] = {{"updated", stats.channels.timestamp.load(std::memory_order_relaxed)},
+                               {"count", stats.channels.count.load(std::memory_order_relaxed)}};
+        account["messages"]["in"] = {{"updated", stats.messages.in.timestamp.load(std::memory_order_relaxed)},
+                                     {"count", stats.messages.in.count.load(std::memory_order_relaxed)}};
+        account["messages"]["out"] = {{"updated", stats.messages.out.timestamp.load(std::memory_order_relaxed)},
+                                      {"count", stats.messages.out.count.load(std::memory_order_relaxed)}};
+    };
+
+    json body = json::object();
+    if (request.empty()) {
+        for (auto &[nick, worker]: workers)
+            fillAccount(body[nick], worker->getStats());
+    } else {
+        json req = json::parse(request, nullptr, false, true);
+        if (req.is_discarded()) {
+            error = "Failed to parse JSON";
+            return "";
+        }
+
+        const auto& accounts = req["accounts"];
+        switch (accounts.type()) {
+            case json::value_t::array:
+                for (const auto &account: accounts) {
+                    if (!account.is_string())
+                        continue;
+
+                    auto it = workers.find(account.get<std::string_view>());
+                    if (it != workers.end())
+                        fillAccount(body[it->first], it->second->getStats());
+                }
+                break;
+            case json::value_t::string: {
+                auto it = workers.find(accounts.get<std::string_view>());
+                if (it != workers.end())
+                    fillAccount(body[it->first], it->second->getStats());
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return body.dump();
+}
+
+std::string IRCtoDBConnector::handleChannels(const std::string &request, std::string &error) {
+    json body = json::object();
+    if (request.empty()) {
+        for (auto &[nick, worker]: workers)
+            body[nick] = json(worker->getJoinedChannels());
+    } else {
+        json req = json::parse(request, nullptr, false, true);
+        if (req.is_discarded()) {
+            error = "Failed to parse JSON";
+            return "";
+        }
+
+        const auto& accounts = req["accounts"];
+        switch (accounts.type()) {
+            case json::value_t::array:
+                for (const auto &account: accounts) {
+                    if (!account.is_string())
+                        continue;
+
+                    auto it = workers.find(account.get<std::string_view>());
+                    if (it != workers.end())
+                        body[it->first] = json(it->second->getJoinedChannels());
+                }
+                break;
+            case json::value_t::string:{
+                auto it = workers.find(accounts.get<std::string_view>());
+                if (it != workers.end())
+                    body[it->first] = json(it->second->getJoinedChannels());
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return body.dump();
+}
+
+std::string IRCtoDBConnector::handleLeave(const std::string &request, std::string &error) {
+    json req = json::parse(request, nullptr, false, true);
+    if (req.is_discarded()) {
+        error = "Failed to parse JSON";
+        return "";
+    }
+
+    const auto& account = req["account"];
+    if (!account.is_string()) {
+        error = "Account not found";
+        return "";
+    }
+    auto it = workers.find(account.get<std::string_view>());
+    if (it == workers.end()) {
+        error = "Account not found";
+        return "";
+    }
+
+    const auto &channels = req["channels"];
+    switch (channels.type()) {
+        case json::value_t::array:
+            for (const auto &channel: channels) {
+                if (!channel.is_string())
+                    continue;
+                const auto &chan = channel.get<std::string>();
+                it->second->leaveChannel(chan);
+            }
+            break;
+        case json::value_t::string: {
+            const auto &chan = channels.get<std::string>();
+            it->second->leaveChannel(chan);
+            break;
+        }
+        default:
+            break;
+    }
+    return "";
+}
+
+std::string IRCtoDBConnector::handleMessage(const std::string &request, std::string &error) {
+    json req = json::parse(request, nullptr, false, true);
+    if (req.is_discarded()) {
+        error = "Failed to parse JSON";
+        return "";
+    }
+
+    const auto& text = req["text"];
+    if (!text.is_string()) {
+        error = "Invalid text type";
+        return "";
+    }
+
+    json body = json::object();
+    auto sendTextToChannels = [&req] (IRCWorker *worker, const std::string& text) {
+        json res = json::object();
+        const auto &channels = req["channels"];
+        switch (channels.type()) {
+            case json::value_t::array:
+                for (const auto &channel: channels) {
+                    if (!channel.is_string())
+                        continue;
+                    const auto &chan = channel.get<std::string>();
+                    res[chan] = worker->sendMessage(chan, text);
+                }
+                break;
+            case json::value_t::string: {
+                const auto &chan = channels.get<std::string>();
+                res[chan] = worker->sendMessage(chan, text);
+                break;
+            }
+            default:
+                break;
+        }
+        return res;
+    };
+
+
+    const auto &accounts = req["accounts"];
+    switch (accounts.type()) {
+        case json::value_t::array:
+            for (const auto &account: accounts) {
+                if (!account.is_string())
+                    continue;
+
+                const auto& acc = account.get<std::string>();
+                auto it = workers.find(acc);
+                if (it == workers.end()) {
+                    body[acc] = false;
+                    continue;
+                }
+
+                body[acc] = sendTextToChannels(it->second.get(), text);
+            }
+            break;
+        case json::value_t::string: {
+            const auto& acc = accounts.get<std::string>();
+            auto it = workers.find(acc);
+            if (it == workers.end()) {
+                body[acc] = false;
+                break;
+            }
+
+            body[acc] = sendTextToChannels(it->second.get(), text);
+            break;
+        }
+        default:
+            break;
+    }
+
+    return body.dump();
+}
+
+std::string IRCtoDBConnector::handleCustom(const std::string &request, std::string &error) {
+    json req = json::parse(request, nullptr, false, true);
+    if (req.is_discarded()) {
+        error = "Failed to parse JSON";
+        return "";
+    }
+
+    const auto& command = req["command"];
+    if (!command.is_string()) {
+        error = "Invalid command type";
+        return "";
+    }
+
+    json body = json::object();
+    const auto &accounts = req["accounts"];
+    switch (accounts.type()) {
+        case json::value_t::array:
+            for (const auto &account: accounts) {
+                if (!account.is_string())
+                    continue;
+
+                const auto& acc = account.get<std::string>();
+                auto it = workers.find(acc);
+                if (it == workers.end()) {
+                    body[acc] = false;
+                    continue;
+                }
+
+                body[acc] = it->second->sendIRC(command);
+            }
+            break;
+        case json::value_t::string: {
+            const auto& acc = accounts.get<std::string>();
+            auto it = workers.find(acc);
+            if (it == workers.end()) {
+                body[acc] = false;
+                break;
+            }
+
+            body[acc] = it->second->sendIRC(command);
+            break;
+        }
+        default:
+            break;
+    }
+
+    return body.dump();
+}
+
+std::string IRCtoDBConnector::handleVersion(const std::string &, std::string &) {
+    json body = json::object();
+    body["version"] = APP_NAME " " APP_VERSION " " APP_GIT_DATE " (" APP_GIT_HASH ")";
+    return body.dump();
 }

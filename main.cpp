@@ -25,6 +25,10 @@
 #define CLICKHOUSE "ch"
 #define IRC "irc"
 
+#define UNIT_OK 0
+#define UNIT_RESTART 1
+#define UNIT_STOP -1
+
 inline LoggerConfig readLoggerConfig(Config& config, const std::string& category) {
     LoggerConfig logConfig;
     logConfig.name = category;
@@ -62,10 +66,10 @@ int main(int argc, char *argv[]) {
                 waitpid(r, &status, 0);
                 printf("Exit code is %d\n", status);
             }
-            return 0;
+            return UNIT_OK;
         } else {
             puts("Can't start as a daemon\n");
-            return 1;
+            return UNIT_STOP;
         }
     }
 
@@ -99,11 +103,11 @@ int main(int argc, char *argv[]) {
     int chConns = config[CLICKHOUSE]["connections"].value_or(std::thread::hardware_concurrency());
     auto chLogger = LoggerFactory::create(readLoggerConfig(config, CLICKHOUSE));
 
-    /*connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
-    if (connector.getCH()->getPoolSize() == 0) {
-        appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
-        return 1;
-    }*/
+    //connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
+    //if (connector.getCH()->getPoolSize() == 0) {
+    //    appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
+    //    return UNIT_RESTART;
+    //}
 
 
     PGConnectionConfig pgCfg;
@@ -118,7 +122,7 @@ int main(int argc, char *argv[]) {
     connector.initPGConnectionPool(std::move(pgCfg), pgConns, pgLogger);
     if (connector.getPG()->getPoolSize() == 0) {
         appLogger->logCritical("Failed to initialize PGConnectionPool. Exit");
-        return 1;
+        return UNIT_RESTART;
     }
 
     connector.updateChannelsList(connector.loadChannels());
@@ -136,12 +140,11 @@ int main(int argc, char *argv[]) {
 
     if (!httpControlServer.start(connector.getPool())) {
         appLogger->logCritical("Failed to start HTTP Control Server. Exit");
-        return 1;
+        return UNIT_RESTART;
     }
 
-    // TODO sepparate IRC worker read and write thread
-    // read thread moves data to it's hooks(or publish/subscriber)
 
+    // TODO добавить HTTPS в server
 
     // TODO add google language detection, add CH dictionary
     // https://github.com/CLD2Owners/cld2
@@ -151,19 +154,14 @@ int main(int argc, char *argv[]) {
     // user max=25
 
     // TODO provide http interfaces
-    //      /shutdown
     //      /reload
     //      /stats
-    //      /userlist
-    //      /info?user=""
-    //      /adduser?user=""&nick=""&password=""
-    //      /join?user=""&channel=""
-    //      /leave?user=""&channel=""
     // TODO add statistics
     // TODO rewrite message hooks
     // TODO add lua runner or python runner
 
     IRCtoDBConnector::loop();
-
     httpControlServer.clearUnits();
+
+    return UNIT_OK;
 }
