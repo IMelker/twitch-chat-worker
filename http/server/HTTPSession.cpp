@@ -102,9 +102,8 @@ void handleRequest(http::request<http::string_body> &&req, Send &&send) {
     return send(std::move(res));
 }
 
-HTTPSession::HTTPSession(tcp::socket &&socket, HTTPRequestHandler *handler)
-    : tcpStream(std::move(socket)), handler(handler) {
-    printf("%s\n", __PRETTY_FUNCTION__);
+HTTPSession::HTTPSession(tcp::socket &&socket, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger)
+    : logger(std::move(logger)), tcpStream(std::move(socket)), handler(handler) {
 }
 
 HTTPSession::~HTTPSession() = default;
@@ -119,7 +118,6 @@ void HTTPSession::run() {
 }
 
 void HTTPSession::read() {
-    printf("%s\n", __PRETTY_FUNCTION__);
     // Make the request empty before reading,
     // otherwise the operation behavior is undefined.
     request = {};
@@ -140,23 +138,21 @@ void HTTPSession::onRead(beast::error_code ec, std::size_t bytes) {
         return close();
 
     if (ec) {
-        fprintf(stderr, "read: %s\n", ec.message().c_str());
+        logger->logError("HTTPSession {}", ec.message());
         return;
     }
 
-    // Move execution to other thread
-    handler->handleRequest(std::move(request), SendLambda{shared_from_this()});
+    logger->logTrace("HTTPSession Incoming request:\n{}", request);
 
-    // Send the response
-    //handleRequest(std::move(request), SendLambda{shared_from_this()});
+    // Move execution to other thread
+    handler->handleRequest(std::move(request), SendLambda{shared_from_this(), logger});
 }
 
 void HTTPSession::onWrite(bool close, beast::error_code ec, std::size_t bytes) {
-    printf("%s\n", __PRETTY_FUNCTION__);
     boost::ignore_unused(bytes);
 
     if (ec) {
-        fprintf(stderr, "write: %s\n", ec.message().c_str());
+        logger->logError("HTTPSession {}", ec.message());
         return;
     }
 
@@ -177,6 +173,6 @@ void HTTPSession::close() {
     beast::error_code ec;
     tcpStream.socket().shutdown(tcp::socket::shutdown_send, ec);
     if (ec) {
-        fprintf(stderr, "close: %s\n", ec.message().c_str());
+        logger->logWarn("HTTPSession Failed to handle close correctly: {}", ec.message());
     }
 }

@@ -14,6 +14,8 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 
+#include "../../common/Logger.h"
+
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
@@ -27,8 +29,8 @@ class HTTPSession : public std::enable_shared_from_this<HTTPSession>
     // The function object is used to send an HTTP message.
     struct SendLambda
     {
-        explicit SendLambda(std::shared_ptr<HTTPSession> holder)
-          : holder(std::move(holder)) {}
+        explicit SendLambda(std::shared_ptr<HTTPSession> holder, std::shared_ptr<Logger> logger)
+          : holder(std::move(holder)), logger(std::move(logger)) {}
 
         template<bool isRequest, class Body, class Fields>
         void operator()(http::message<isRequest, Body, Fields>&& msg) const {
@@ -41,16 +43,19 @@ class HTTPSession : public std::enable_shared_from_this<HTTPSession>
             // pointer in the class to keep it alive.
             holder->response = sp;
 
+            logger->logTrace("HTTPServer Outgoing response:\n{}", *sp);
+
             // Write the response
             http::async_write(holder->tcpStream, *sp,
                               beast::bind_front_handler(&HTTPSession::onWrite, holder, sp->need_eof()));
         }
 
         std::shared_ptr<HTTPSession> holder;
+        std::shared_ptr<Logger> logger;
     };
   public:
     // Take ownership of the stream
-    explicit HTTPSession(tcp::socket &&socket, HTTPRequestHandler *handler);
+    explicit HTTPSession(tcp::socket &&socket, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger);
     ~HTTPSession();
 
     // Start the asynchronous operation
@@ -64,6 +69,8 @@ class HTTPSession : public std::enable_shared_from_this<HTTPSession>
 
     void close();
   private:
+    std::shared_ptr<Logger> logger;
+
     beast::tcp_stream tcpStream;
     beast::flat_buffer inputBuffer;
 

@@ -9,6 +9,7 @@
 
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/tcp_sink.h"
+#include "spdlog/fmt/ostr.h"
 
 enum class LoggerLevel : int
 {

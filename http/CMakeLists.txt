@@ -7,6 +7,8 @@ set(Boost_USE_STATIC_RUNTIME    OFF)
 
 find_package(Boost REQUIRED COMPONENTS coroutine system thread)
 
+set(BOOST_BEAST_USE_STD_STRING_VIEW ON)
+
 if (Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
 
@@ -15,5 +17,10 @@ if (Boost_FOUND)
             server/HTTPListener.cpp server/HTTPListener.h
             server/HTTPSession.cpp server/HTTPSession.h
             server/HTTPServerUnit.h)
+
+    if (BOOST_BEAST_USE_STD_STRING_VIEW)
+        target_compile_definitions(httpserver PRIVATE BOOST_BEAST_USE_STD_STRING_VIEW)
+    endif()
+
     target_link_libraries(httpserver absl::strings ${Boost_LIBRARIES})
 endif()

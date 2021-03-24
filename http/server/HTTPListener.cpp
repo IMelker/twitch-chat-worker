@@ -6,35 +6,35 @@
 
 #include "HTTPSession.h"
 
-HTTPListener::HTTPListener(net::io_context &ioc, tcp::endpoint endpoint, HTTPRequestHandler *handler)
-    : ioc(ioc), endpoint(endpoint), acceptor(net::make_strand(ioc)), handler(handler) {
+HTTPListener::HTTPListener(net::io_context &ioc, tcp::endpoint endpoint, std::shared_ptr<Logger> logger, HTTPRequestHandler *handler)
+    : logger(std::move(logger)), ioc(ioc), endpoint(endpoint), acceptor(net::make_strand(ioc)), handler(handler) {
     beast::error_code ec;
 
     // Open the acceptor
     acceptor.open(endpoint.protocol(), ec);
     if (ec) {
-        fprintf(stderr, "open: %s\n", ec.message().c_str());
+        logger->logError("HTTPListener Failed open: {}", ec.message());
         return;
     }
 
     // Allow address reuse
     acceptor.set_option(net::socket_base::reuse_address(true), ec);
     if (ec) {
-        fprintf(stderr, "set_option: %s\n", ec.message().c_str());
+        logger->logError("HTTPListener Failed set option: {}", ec.message());
         return;
     }
 
     // Bind to the server address
     acceptor.bind(endpoint, ec);
     if (ec) {
-        fprintf(stderr, "bind: %s\n", ec.message().c_str());
+        logger->logError("HTTPListener Failed to bind: {}", ec.message());
         return;
     }
 
     // Start listening for connections
     acceptor.listen(net::socket_base::max_listen_connections, ec);
     if (ec) {
-        fprintf(stderr, "listen: %s\n", ec.message().c_str());
+        logger->logError("HTTPListener Failed to listen: {}", ec.message());
         return;
     }
 }
@@ -51,12 +51,10 @@ void HTTPListener::accept() {
 }
 
 void HTTPListener::onAccept(beast::error_code ec, tcp::socket socket) {
-    printf("%s\n", __PRETTY_FUNCTION__);
-
     if (!ec) { // Create the session and run it
-        std::make_shared<HTTPSession>(std::move(socket), handler)->run();
+        std::make_shared<HTTPSession>(std::move(socket), handler, logger)->run();
     } else {
-        fprintf(stderr, "accept: %s\n", ec.message().c_str());
+        logger->logError("HTTPListener {}", ec.message());
     }
 
     accept(); // Accept another connection

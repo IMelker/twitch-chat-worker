@@ -8,11 +8,12 @@
 #include "HTTPServer.h"
 #include "HTTPListener.h"
 #include "HTTPResponseFactory.h"
+#include "../../common/Logger.h"
 #include "../../common/ThreadPool.h"
-#include "../../common/SysSignal.h"
 
 HTTPServer::HTTPServer(HTTPControlConfig config, std::shared_ptr<Logger> logger)
  : config(std::move(config)), logger(std::move(logger)), ioc(config.threads), executors(nullptr) {
+    this->logger->logInfo("HTTPServer created with {} threads", this->config.threads);
 }
 
 HTTPServer::~HTTPServer() {
@@ -22,7 +23,7 @@ HTTPServer::~HTTPServer() {
         if (runner.joinable())
             runner.join();
     }
-
+    logger->logTrace("HTTPServer end of server");
     executors = nullptr;
 };
 
@@ -30,14 +31,14 @@ bool HTTPServer::start(ThreadPool *pool) {
     this->executors = pool;
 
     boost::system::error_code ec;
-    auto address = net::ip::make_address(this->config.host, ec);
+    auto address = net::ip::make_address(config.host, ec);
     if (ec) {
-        fprintf(stderr, "make_address: %s\n", ec.message().c_str());
+        logger->logError("HTTPServer Failed to make ip address: {}", ec.message());
         return false;
     }
 
     // Create and launch a listening port
-    listener = std::make_shared<HTTPListener>(ioc, tcp::endpoint{address, this->config.port}, this);
+    listener = std::make_shared<HTTPListener>(ioc, tcp::endpoint{address, config.port}, logger, this);
     listener->startAcceptConnections();
 
     // Run the I/O service on the requested number of threads
@@ -45,15 +46,12 @@ bool HTTPServer::start(ThreadPool *pool) {
     for (int i = 0; i < config.threads; ++i) {
         ioRunners.emplace_back([&ioc = this->ioc] { ioc.run(); });
     }
+    logger->logInfo("HTTPServer Started listening on {}:{} on {} threads", config.host, config.port, config.threads);
     return true;
 }
 
-inline std::string_view toSV(const beast::string_view& view) {
-    return std::string_view{view.data(), view.size()};
-}
-
 void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
-    std::vector<std::string_view> path = absl::StrSplit(toSV(req.target()), '/', absl::SkipWhitespace());
+    std::vector<std::string_view> path = absl::StrSplit(req.target(), '/', absl::SkipWhitespace());
     if (path.size() < 2) {
         send(HTTPResponseFactory::BadRequest(req, "Invalid path"));
         return;
@@ -91,16 +89,19 @@ void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPSessi
 }
 
 void HTTPServer::addControlUnit(const std::string &path, HTTPServerUnit *unit) {
+    logger->logInfo("HTTPServer Add request handle unit to HTTP server: {}", path);
     std::lock_guard lg(unitsMutex);
     units.emplace(path, unit);
 }
 
 void HTTPServer::deleteControlUnit(const std::string &path) {
+    logger->logInfo("HTTPServer Remove request handle unit from HTTP server: {}", path);
     std::lock_guard lg(unitsMutex);
     units.erase(path);
 }
 
 void HTTPServer::clearUnits() {
+    logger->logInfo("HTTPServer Clear all request handle units from HTTP server. Request handling stopped");
     std::lock_guard lg(unitsMutex);
     this->units.clear();
 }

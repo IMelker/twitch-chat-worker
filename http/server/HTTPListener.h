@@ -14,19 +14,22 @@ namespace beast = boost::beast;
 namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
 
+class Logger;
 struct HTTPRequestHandler;
 
 // Accepts incoming connections and launches the sessions
 class HTTPListener : public std::enable_shared_from_this<HTTPListener>
 {
   public:
-    HTTPListener(net::io_context &ioc, tcp::endpoint endpoint, HTTPRequestHandler *handler);
+    HTTPListener(net::io_context &ioc, tcp::endpoint endpoint, std::shared_ptr<Logger> logger, HTTPRequestHandler *handler);
     ~HTTPListener();
 
     void startAcceptConnections();
   private:
     void accept();
     void onAccept(beast::error_code ec, tcp::socket socket);
+
+    std::shared_ptr<Logger> logger;
 
     net::io_context& ioc;
     tcp::endpoint endpoint;
