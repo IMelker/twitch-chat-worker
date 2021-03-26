@@ -44,20 +44,20 @@ class IRCWorker
 {
     struct {
         struct {
-            std::atomic<long long> timestamp{};
-            std::atomic<unsigned int> count{};
+            std::atomic<long long> updated{};
+            std::atomic<unsigned int> attempts{};
         } connects;
         struct {
-            std::atomic<long long> timestamp{};
+            std::atomic<long long> updated{};
             std::atomic<unsigned int> count{};
         } channels;
         struct {
             struct {
-                std::atomic<long long> timestamp{};
+                std::atomic<long long> updated{};
                 std::atomic<unsigned int> count{};
             } in;
             struct {
-                std::atomic<long long> timestamp{};
+                std::atomic<long long> updated{};
                 std::atomic<unsigned int> count{};
             } out;
         } messages;

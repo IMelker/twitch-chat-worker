@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <map>
 #include <thread>
+#include <langinfo.h>
 
 #include "common/SysSignal.h"
 #include "common/Options.h"
@@ -47,23 +48,34 @@ int main(int argc, char *argv[]) {
     options.addOption<std::string>("config", "c", "Config filepath", "config.toml");
     options.addOption<std::string>("pid-file-name", "p", "Filepath for process ID output", "/var/run/chatsniffer.pid");
     options.addOption<bool>("daemon", "d", "Daemon mode", "false");
+    options.addOption<bool>("version", "v", "App version", "false");
     options.addOption<bool>("trace-exit-code", "t", "Trace exit code for daemon mode", "false");
     options.parse(argc, argv);
+
+    if (options.getValue<bool>("version")) {
+        printf("Name: " APP_NAME "\n"
+               "Version: " APP_VERSION "\n"
+               "Git: " APP_GIT_HASH "\n"
+               "Build: " APP_GIT_DATE " gcc-" __VERSION__ "\n");
+        return UNIT_OK;
+    }
 
     // daemon mode
     auto daemon = options.getValue<bool>("daemon");
     auto traceExitCode = options.getValue<bool>("trace-exit-code");
     auto pidFilename = options.getValue<std::string>("pid-file-name");
     if (daemon) {
-        int r = fork();
-        if (r == 0) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            setsid();
+
             FILE *pidFile = fopen(pidFilename.c_str(), "w+");
             fprintf(pidFile, "%d", getpid());
             fclose(pidFile);
-        } else if (r > 0) {
+        } else if (pid > 0) {
             if (traceExitCode) {
                 int status;
-                waitpid(r, &status, 0);
+                waitpid(pid, &status, 0);
                 printf("Exit code is %d\n", status);
             }
             return UNIT_OK;
@@ -80,12 +92,11 @@ int main(int argc, char *argv[]) {
     httpCfg.port = config[HTTP_CONTROL]["port"].value_or(8080);
     httpCfg.user = config[HTTP_CONTROL]["user"].value_or("admin");
     httpCfg.pass = config[HTTP_CONTROL]["password"].value_or("admin");
-    httpCfg.secure = config[HTTP_CONTROL]["secure"].value_or(false);
-    httpCfg.verify = config[HTTP_CONTROL]["verify"].value_or(true);
+    httpCfg.secure = config[HTTP_CONTROL]["secure"].value_or(true);
+    httpCfg.verify = config[HTTP_CONTROL]["verify"].value_or(false);
     httpCfg.threads = config[HTTP_CONTROL]["threads"].value_or(std::thread::hardware_concurrency());
     auto httpLogger = LoggerFactory::create(readLoggerConfig(config, HTTP_CONTROL));
     HTTPServer httpControlServer(std::move(httpCfg), httpLogger);
-
 
     int threads = config[APP]["threads"].value_or(std::thread::hardware_concurrency());
     auto appLogger = LoggerFactory::create(readLoggerConfig(config, APP));
@@ -103,12 +114,11 @@ int main(int argc, char *argv[]) {
     int chConns = config[CLICKHOUSE]["connections"].value_or(std::thread::hardware_concurrency());
     auto chLogger = LoggerFactory::create(readLoggerConfig(config, CLICKHOUSE));
 
-    //connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
-    //if (connector.getCH()->getPoolSize() == 0) {
-    //    appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
-    //    return UNIT_RESTART;
-    //}
-
+    connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
+    if (connector.getCH()->getPoolSize() == 0) {
+        appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
+        return UNIT_RESTART;
+    }
 
     PGConnectionConfig pgCfg;
     pgCfg.host = config[POSTGRESQL]["host"].value_or("localhost");
@@ -143,20 +153,18 @@ int main(int argc, char *argv[]) {
         return UNIT_RESTART;
     }
 
-
-    // TODO добавить HTTPS в server
+    // TODO Make correct SSL certificates setup for HTTPServer
 
     // TODO add google language detection, add CH dictionary
-    // https://github.com/CLD2Owners/cld2
     // https://github.com/scivey/langdetectpp
 
     // TODO change CH name and display sizes
     // user max=25
 
+    // TODO make clickhouse SSL client
+
     // TODO provide http interfaces
-    //      /reload
-    //      /stats
-    // TODO add statistics
+    //      /reload (?)
     // TODO rewrite message hooks
     // TODO add lua runner or python runner
 

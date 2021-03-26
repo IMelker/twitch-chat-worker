@@ -4,7 +4,11 @@
 
 #include <thread>
 
+#include "nlohmann/json.hpp"
+
 #include "PGConnectionPool.h"
+
+using json = nlohmann::json;
 
 PGConnectionPool::PGConnectionPool(PGConnectionConfig config, unsigned int count,
                                    std::shared_ptr<Logger> logger)
@@ -17,6 +21,8 @@ std::shared_ptr<DBConnection> PGConnectionPool::createConnection() {
 
     if (!conn->connected())
         conn.reset();
+    else
+        all.push_back(conn);
 
     return conn;
 }
@@ -30,5 +36,18 @@ std::tuple<int, std::string> PGConnectionPool::processHttpRequest(std::string_vi
 }
 
 std::string PGConnectionPool::handleStats(const std::string &request, std::string &error) {
-    return std::__cxx11::string();
+    json body = json::object();
+
+    for(size_t i = 0; i < all.size(); ++i) {
+        const auto &stats = all[i]->getStats();
+        auto &conn = body[std::to_string(i)] = json::object();
+        conn["connects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
+                            {"attempts", stats.connects.attempts.load(std::memory_order_relaxed)}};
+        conn["requests"] = {{"updated", stats.requests.updated.load(std::memory_order_relaxed)},
+                            {"count", stats.requests.count.load(std::memory_order_relaxed)},
+                            {"failed", stats.requests.failed.load(std::memory_order_relaxed)},
+                            {"rtt", stats.requests.rtt.load(std::memory_order_relaxed)}};
+    }
+
+    return body.dump();
 }

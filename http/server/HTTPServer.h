@@ -11,6 +11,7 @@
 #include <string>
 
 #include <boost/asio.hpp>
+#include <boost/beast/ssl.hpp>
 
 #include "HTTPServerUnit.h"
 #include "HTTPSession.h"
@@ -48,6 +49,7 @@ class HTTPServer : public HTTPRequestHandler
     std::shared_ptr<Logger> logger;
 
     boost::asio::io_context ioc;
+    boost::asio::ssl::context ctx;
     std::shared_ptr<HTTPListener> listener;
     std::vector<std::thread> ioRunners;
     ThreadPool *executors;

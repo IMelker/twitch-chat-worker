@@ -80,8 +80,8 @@ void IRCWorker::run() {
             break;
 
         auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
-        stats.connects.timestamp.store(timestamp, std::memory_order_relaxed);
-        stats.connects.count.fetch_add(1, std::memory_order_relaxed);
+        stats.connects.updated.store(timestamp, std::memory_order_relaxed);
+        stats.connects.attempts.fetch_add(1, std::memory_order_relaxed);
 
         logger->logInfo("IRCWorker[{}] connected to {}:{}", fmt::ptr(this), conConfig.host, conConfig.port);
         listener->onConnected(this);
@@ -101,7 +101,7 @@ void IRCWorker::run() {
                 }
             }
         }
-        stats.channels.timestamp.store(count ? timestamp : 0, std::memory_order_relaxed);
+        stats.channels.updated.store(count ? timestamp : 0, std::memory_order_relaxed);
         stats.channels.count.store(count, std::memory_order_relaxed);
 
         listener->onLogin(this);
@@ -142,7 +142,7 @@ bool IRCWorker::joinChannel(const std::string &channel) {
         logger->logInfo("IRCWorker[{}] {} joining to channel({})", fmt::ptr(this), ircConfig.nick, channel);
 
         auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
-        stats.channels.timestamp.store(timestamp, std::memory_order_relaxed);
+        stats.channels.updated.store(timestamp, std::memory_order_relaxed);
         stats.channels.count.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
@@ -166,8 +166,8 @@ void IRCWorker::leaveChannel(const std::string &channel) {
 }
 
 bool IRCWorker::sendMessage(const std::string &channel, const std::string &text) {
-    if (sendIRC(fmt::format("PRIVMSG #{} {}\n", channel, text))) {
-        logger->logTrace(R"(IRCWorker[{}] "{} send to "{}" message "{}")", fmt::ptr(this), ircConfig.nick, channel, text);
+    if (sendIRC(fmt::format("PRIVMSG #{} :{}\n", channel, text))) {
+        logger->logInfo(R"(IRCWorker[{}] "{} send to "{}" message: "{}")", fmt::ptr(this), ircConfig.nick, channel, text);
         return true;
     }
     return false;
@@ -185,7 +185,7 @@ bool IRCWorker::sendIRC(const std::string& message) {
 
     if (client && client->connected() && client->sendIRC(message)) {
         auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
-        stats.messages.out.timestamp.store(timestamp, std::memory_order_relaxed);
+        stats.messages.out.updated.store(timestamp, std::memory_order_relaxed);
         stats.messages.out.count.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
@@ -199,6 +199,6 @@ void IRCWorker::messageHook(IRCMessage message) {
                      message.parameters.at(0), message.parameters.back());
     listener->onMessage(this, std::move(message), timestamp);
 
-    stats.messages.in.timestamp.store(timestamp, std::memory_order_relaxed);
+    stats.messages.in.updated.store(timestamp, std::memory_order_relaxed);
     stats.messages.in.count.fetch_add(1, std::memory_order_relaxed);
 }

@@ -2,12 +2,16 @@
 // Created by imelker on 07.03.2021.
 //
 
-#include "../../common/Logger.h"
-#include "PGConnection.h"
-
 #include <utility>
 #include <thread>
 #include <chrono>
+
+#include "spdlog/fmt/ostr.h"
+
+#include "PGConnection.h"
+
+#include "../../common/Logger.h"
+#include "../../common/Clock.h"
 
 PGConnection::PGConnection(PGConnectionConfig  config, std::shared_ptr<Logger> logger)
   : DBConnection(std::move(logger)), config(std::move(config)) {
@@ -23,40 +27,87 @@ PGConnection::PGConnection(PGConnectionConfig  config, std::shared_ptr<Logger> l
     }
 }
 
-/*inline void sqlRequest(const std::string& request, const std::shared_ptr<PGConnectionPool> &pg) {
-    auto &logger = pg->getLogger();
+bool PGConnection::request(const std::string &request) {
     logger->logTrace("PGConnection request: \"{}\"", request);
-    {
-        DBConnectionLock pgl(pg);
-        PQsendQuery(pgl->raw(), request.c_str());
-        while (auto resp = PQgetResult(pgl->raw())) {
-            if (PQresultStatus(resp) == PGRES_FATAL_ERROR)
-                logger->logError("PGConnection {}", PQresultErrorMessage(resp));
-            PQclear(resp);
+
+    auto first = CurrentTime<std::chrono::system_clock>::milliseconds();
+
+    bool success = false;
+    PQsendQuery(raw(), request.c_str());
+    while (auto resp = PQgetResult(raw())) {
+        auto now = CurrentTime<std::chrono::system_clock>::milliseconds();
+        stats.requests.rtt.store(now - first, std::memory_order_relaxed);
+        stats.requests.updated.store(now, std::memory_order_relaxed);
+
+        auto status = PQresultStatus(resp);
+        if (status == PGRES_TUPLES_OK) {
+            success = true;
         }
+        if (status == PGRES_FATAL_ERROR) {
+            logger->logError("PGConnection Error: {}", PQresultErrorMessage(resp));
+            stats.requests.failed.fetch_add(1, std::memory_order_relaxed);
+            success = false;
+        }
+        PQclear(resp);
     }
-}*/
+
+    stats.requests.count.fetch_add(1, std::memory_order_relaxed);
+    return success;
+}
+
+bool PGConnection::request(const std::string &request, std::vector<std::vector<std::string>>& result) {
+    logger->logTrace("PGConnection request: \"{}\"", request);
+
+    auto first = CurrentTime<std::chrono::system_clock>::milliseconds();
+
+    bool success = false;
+    PQsendQuery(raw(), request.c_str());
+    while (auto resp = PQgetResult(raw())) {
+        auto now = CurrentTime<std::chrono::system_clock>::milliseconds();
+        stats.requests.rtt.store(now - first, std::memory_order_relaxed);
+        stats.requests.updated.store(now, std::memory_order_relaxed);
+
+        auto status = PQresultStatus(resp);
+        if (status == PGRES_TUPLES_OK) {
+            success = true;
+
+            int rows = PQntuples(resp);
+            int columns = PQnfields(resp);
+
+            result.reserve(rows);
+            for (int i = 0; i < rows; ++i) {
+                std::vector<std::string> row;
+                row.reserve(columns);
+                for (int j = 0; j < columns; j++) {
+                    row.emplace_back(PQgetvalue(resp, i, j),
+                                     static_cast<size_t>(PQgetlength(resp, i, j)));
+                }
+                result.push_back(std::move(row));
+            }
+
+            logger->logInfo("PGConnection Request result: rows: {} columns: {}", rows, columns);
+        }
+
+        if (status == PGRES_FATAL_ERROR) {
+            logger->logError("PGConnection Error: {}", PQresultErrorMessage(resp));
+            stats.requests.failed.fetch_add(1, std::memory_order_relaxed);
+            success = false;
+        }
+
+        PQclear(resp);
+    }
+    return success;
+}
 
 bool PGConnection::ping() {
     return retryGuard([this]() {
-        bool success = false;
-        PQsendQuery(raw(), "SELECT 1;");
-        while (auto resp = PQgetResult(raw())) {
-            auto status = PQresultStatus(resp);
-            if (status == PGRES_TUPLES_OK) {
-                success = true;
-            }
-            if (status == PGRES_FATAL_ERROR) {
-                logger->logError("PGConnection Error: {}\n", PQresultErrorMessage(resp));
-                success = false;
-            }
-            PQclear(resp);
-        }
-        return success;
+        return request("SELECT 1;");
     });
 }
 
 bool PGConnection::resetConnect() {
+    stats.connects.attempts.fetch_add(1, std::memory_order_relaxed);
+
     conn.reset(PQsetdbLogin(config.host.c_str(), std::to_string(config.port).c_str(), nullptr, nullptr,
                             config.dbname.c_str(), config.user.c_str(), config.pass.c_str()), &PQfinish);
 
@@ -65,6 +116,7 @@ bool PGConnection::resetConnect() {
         return false;
     } else {
         this->logger->logInfo("PGConnection connected on {}:{}/{}", config.host, config.port, config.dbname);
+        stats.connects.updated.store(CurrentTime<std::chrono::system_clock>::milliseconds(), std::memory_order_relaxed);
         return true;
     }
 }

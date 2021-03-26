@@ -61,7 +61,7 @@ inline void insertMessages(const std::vector<MessageData>& messages, const std::
     block.AppendColumn("timestamp", timestamps);
     try {
         DBConnectionLock chl(ch);
-        chl->raw()->Insert("twitch_chat.messages", block);
+        chl->insert("twitch_chat.messages", block);
         ch->getLogger()->logInfo("Clickhouse insert {} messages", messages.size());
     } catch (const clickhouse::ServerException& err) {
         ch->getLogger()->logError("Clickhouse {}", err.what());

@@ -4,16 +4,32 @@
 
 #include "absl/strings/str_split.h"
 
+#include "../../common/Logger.h"
+#include "../../common/ThreadPool.h"
+
 #include "HTTPServerUnit.h"
 #include "HTTPServer.h"
 #include "HTTPListener.h"
 #include "HTTPResponseFactory.h"
-#include "../../common/Logger.h"
-#include "../../common/ThreadPool.h"
+#include "HTTPServerCertificate.h"
+
 
 HTTPServer::HTTPServer(HTTPControlConfig config, std::shared_ptr<Logger> logger)
- : config(std::move(config)), logger(std::move(logger)), ioc(config.threads), executors(nullptr) {
+    : config(std::move(config)),
+      logger(std::move(logger)),
+      ioc(config.threads),
+      ctx{boost::asio::ssl::context::tlsv12},
+      executors(nullptr) {
     this->logger->logInfo("HTTPServer created with {} threads", this->config.threads);
+    if (this->config.secure) {
+        loadServerCertificate(ctx);
+        if (this->config.verify)
+            ctx.set_verify_mode(boost::asio::ssl::verify_fail_if_no_peer_cert);
+        else
+            ctx.set_verify_mode(boost::asio::ssl::verify_none);
+
+        this->logger->logInfo("HTTPServer SSL certificates loaded");
+    }
 }
 
 HTTPServer::~HTTPServer() {
@@ -38,7 +54,11 @@ bool HTTPServer::start(ThreadPool *pool) {
     }
 
     // Create and launch a listening port
-    listener = std::make_shared<HTTPListener>(ioc, tcp::endpoint{address, config.port}, logger, this);
+    if (config.secure) {
+        listener = std::make_shared<HTTPListener>(ioc, &ctx, tcp::endpoint{address, config.port}, logger, this);
+    } else {
+        listener = std::make_shared<HTTPListener>(ioc, tcp::endpoint{address, config.port}, logger, this);
+    }
     listener->startAcceptConnections();
 
     // Run the I/O service on the requested number of threads
@@ -70,38 +90,46 @@ void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPSessi
     }
 
     executors->enqueue([req = std::move(req), send = std::move(send), &target = path[1], handler = it->second]() {
+        int status = 200;
         std::string err;
-        auto [status, body] = handler->processHttpRequest(target, req.body(), err);
+        std::string body;
+        try {
+            std::tie(status, body) = handler->processHttpRequest(target, req.body(), err);
+        } catch (const std::exception& e) {
+            send(HTTPResponseFactory::ServerError(req, e.what()));
+            return;
+        } catch (...) {
+            send(HTTPResponseFactory::ServerError(req, err));
+        }
+
         if (!err.empty()) {
             send(HTTPResponseFactory::ServerError(req, err));
             return;
         }
 
-        http::response<http::string_body> res{static_cast<http::status>(status), req.version()};
-        res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-        res.set(http::field::content_type, "application/json");
-        res.keep_alive(req.keep_alive());
-        res.body() = body;
-        res.prepare_payload();
-
-        send(std::move(res));
+        send(HTTPResponseFactory::CreateResponse(req, static_cast<http::status>(status), std::move(body)));
     });
 }
 
 void HTTPServer::addControlUnit(const std::string &path, HTTPServerUnit *unit) {
-    logger->logInfo("HTTPServer Add request handle unit to HTTP server: {}", path);
+    if (!unit) {
+        logger->logError("HTTPServer Failed to add empty unit to HTTP server: {}", path);
+        return;
+    }
+
+    logger->logInfo("HTTPServer Add unit to HTTP server: {}", path);
     std::lock_guard lg(unitsMutex);
     units.emplace(path, unit);
 }
 
 void HTTPServer::deleteControlUnit(const std::string &path) {
-    logger->logInfo("HTTPServer Remove request handle unit from HTTP server: {}", path);
+    logger->logInfo("HTTPServer Remove unit from HTTP server: {}", path);
     std::lock_guard lg(unitsMutex);
     units.erase(path);
 }
 
 void HTTPServer::clearUnits() {
-    logger->logInfo("HTTPServer Clear all request handle units from HTTP server. Request handling stopped");
+    logger->logInfo("HTTPServer Clear all units from HTTP server");
     std::lock_guard lg(unitsMutex);
     this->units.clear();
 }

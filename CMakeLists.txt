@@ -34,6 +34,7 @@ include_directories(third-party/spdlog/include)
 include_directories(third-party/toml)
 include_directories(third-party/opts/include)
 include_directories(third-party/clickhouse)
+include_directories(third-party/cld2/public)
 message("- [pg]")
 find_package(PostgreSQL REQUIRED)
 include_directories(${PostgreSQL_INCLUDE_DIRS})
@@ -70,10 +71,14 @@ add_executable(chatsniffer
         common/Clock.h
         )
 
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+    add_definitions(-fstack-protector-all)
+endif()
+
 target_link_libraries(chatsniffer
-        httpserver
         pthread
         stdc++fs
+        httpserver
         nlohmann_json
         spdlog
         clickhouse-cpp-lib-static

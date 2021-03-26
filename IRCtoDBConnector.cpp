@@ -32,32 +32,21 @@ std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionP
         if (!dbl->ping())
             return accounts;
 
-        PQsendQuery(dbl->raw(), request.c_str());
-        while (auto resp = PQgetResult(dbl->raw())) {
-            auto status = PQresultStatus(resp);
-            if (status == PGRES_TUPLES_OK) {
-                int size = PQntuples(resp);
-                logger->logTrace("PGConnection response: {} lines {}", PQresStatus(status), size);
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            accounts.reserve(res.size());
+            for (auto &row: res) {
+                IRCClientConfig config;
+                config.nick = std::move(row[0]);
+                config.user = std::move(row[1]);
+                config.password = std::move(row[2]);
+                config.channels_limit = std::atoi(row.at(3).c_str());
+                config.whisper_per_sec_limit = std::atoi(row.at(4).c_str());
+                config.auth_per_sec_limit = std::atoi(row.at(5).c_str());
+                config.command_per_sec_limit = std::atoi(row.at(6).c_str());
 
-                accounts.reserve(size);
-                for (int i = 0; i < size; ++i) {
-                    IRCClientConfig config;
-                    config.nick = PQgetvalue(resp, i, 0);
-                    config.user = PQgetvalue(resp, i, 1);
-                    config.password = PQgetvalue(resp, i, 2);
-                    config.channels_limit = std::atoi(PQgetvalue(resp, i, 3));
-                    config.whisper_per_sec_limit = std::atoi(PQgetvalue(resp, i, 4));
-                    config.auth_per_sec_limit = std::atoi(PQgetvalue(resp, i, 5));
-                    config.command_per_sec_limit = std::atoi(PQgetvalue(resp, i, 6));
-
-                    accounts.push_back(std::move(config));
-                }
+                accounts.push_back(std::move(config));
             }
-
-            if (status == PGRES_FATAL_ERROR) {
-                logger->logError("DBConnection Error: {}\n", PQresultErrorMessage(resp));
-            }
-            PQclear(resp);
         }
     }
 
@@ -76,23 +65,12 @@ std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>
         if (!dbl->ping())
             return channelsList;
 
-        PQsendQuery(dbl->raw(), request.c_str());
-        while (auto resp = PQgetResult(dbl->raw())) {
-            auto status = PQresultStatus(resp);
-            if (status == PGRES_TUPLES_OK) {
-                int size = PQntuples(resp);
-                logger->logTrace("PGConnection response: {} lines {}", PQresStatus(status), size);
-
-                channelsList.reserve(size);
-                for (int i = 0; i < size; ++i) {
-                    channelsList.emplace_back(PQgetvalue(resp, i, 0));
-                }
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            channelsList.reserve(res.size());
+            for(auto& row: res) {
+                channelsList.push_back(std::move(row[0]));
             }
-
-            if (PQresultStatus(resp) == PGRES_FATAL_ERROR) {
-                logger->logError("PGConnection Error: {}\n", PQresultErrorMessage(resp));
-            }
-            PQclear(resp);
         }
     }
 
@@ -289,13 +267,13 @@ std::string IRCtoDBConnector::handleJoin(const std::string &request, std::string
 
 std::string IRCtoDBConnector::handleAccounts(const std::string &request, std::string &error) {
     auto fillAccount = [] (json& account, const auto& stats) {
-        account["connects"] = {{"updated", stats.connects.timestamp.load(std::memory_order_relaxed)},
-                               {"count", stats.connects.count.load(std::memory_order_relaxed)}};
-        account["channels"] = {{"updated", stats.channels.timestamp.load(std::memory_order_relaxed)},
+        account["connects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
+                               {"count", stats.connects.attempts.load(std::memory_order_relaxed)}};
+        account["channels"] = {{"updated", stats.channels.updated.load(std::memory_order_relaxed)},
                                {"count", stats.channels.count.load(std::memory_order_relaxed)}};
-        account["messages"]["in"] = {{"updated", stats.messages.in.timestamp.load(std::memory_order_relaxed)},
+        account["messages"]["in"] = {{"updated", stats.messages.in.updated.load(std::memory_order_relaxed)},
                                      {"count", stats.messages.in.count.load(std::memory_order_relaxed)}};
-        account["messages"]["out"] = {{"updated", stats.messages.out.timestamp.load(std::memory_order_relaxed)},
+        account["messages"]["out"] = {{"updated", stats.messages.out.updated.load(std::memory_order_relaxed)},
                                       {"count", stats.messages.out.count.load(std::memory_order_relaxed)}};
     };
 
@@ -512,6 +490,7 @@ std::string IRCtoDBConnector::handleCustom(const std::string &request, std::stri
                     continue;
                 }
 
+                logger->logInfo(R"(IRCWorker[{}] "{} send command: {})", fmt::ptr(it->second.get()), acc, command);
                 body[acc] = it->second->sendIRC(command);
             }
             break;
@@ -523,6 +502,7 @@ std::string IRCtoDBConnector::handleCustom(const std::string &request, std::stri
                 break;
             }
 
+            logger->logInfo(R"(IRCWorker[{}] "{} send command: "{}")", fmt::ptr(it->second.get()), acc, command);
             body[acc] = it->second->sendIRC(command);
             break;
         }

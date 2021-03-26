@@ -6,6 +6,8 @@
 #define CHATSNIFFER_PG_PGCONNECTION_H_
 
 #include <memory>
+#include <vector>
+#include <atomic>
 #include <functional>
 #include <libpq-fe.h>
 
@@ -24,6 +26,18 @@ struct PGConnectionConfig {
 class Logger;
 class PGConnection : public DBConnection
 {
+    struct {
+        struct {
+            std::atomic<long long> updated{};
+            std::atomic<unsigned int> attempts{};
+        } connects;
+        struct {
+            std::atomic<long long> updated{};
+            std::atomic<unsigned int> rtt{};
+            std::atomic<unsigned int> count{};
+            std::atomic<unsigned int> failed{};
+        } requests;
+    } stats;
   public:
     explicit PGConnection(PGConnectionConfig  config, std::shared_ptr<Logger> logger);
     ~PGConnection() override = default;
@@ -32,7 +46,11 @@ class PGConnection : public DBConnection
 
     bool resetConnect();
 
+    bool request(const std::string& request);
+    bool request(const std::string& request, std::vector<std::vector<std::string>>& result);
     bool ping();
+
+    [[nodiscard]] const decltype(stats)& getStats() const { return stats; };
   private:
     bool retryGuard(std::function<bool()> func);
 

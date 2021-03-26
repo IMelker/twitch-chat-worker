@@ -2,6 +2,7 @@
 // Created by l2pic on 12.03.2021.
 //
 
+#include <cassert>
 #include <thread>
 
 #include "DBConnectionPool.h"
@@ -14,11 +15,14 @@ DBConnectionPool::DBConnectionPool(unsigned int count, std::shared_ptr<Logger> l
 DBConnectionPool::~DBConnectionPool() = default;
 
 void DBConnectionPool::init() {
+    assert(pool.empty());
+
     std::lock_guard<std::mutex> lg(mutex);
     for (unsigned int i = 0; i < count; ++i) {
         auto conn = createConnection();
-        if (conn)
+        if (conn) {
             pool.emplace(std::move(conn));
+        }
     }
     active = !pool.empty();
 }

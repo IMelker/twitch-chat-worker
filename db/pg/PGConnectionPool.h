@@ -5,6 +5,7 @@
 #ifndef CHATSNIFFER_PG_PGCONNECTIONPOOL_H_
 #define CHATSNIFFER_PG_PGCONNECTIONPOOL_H_
 
+#include <vector>
 #include "PGConnection.h"
 
 #include "../DBConnectionPool.h"
@@ -28,6 +29,7 @@ class PGConnectionPool : public DBConnectionPool, public HTTPServerUnit
     std::string handleStats(const std::string &request, std::string &error);
   private:
     PGConnectionConfig config;
+    std::vector<std::shared_ptr<PGConnection>> all;
 };
 
 #endif //CHATSNIFFER_PG_PGCONNECTIONPOOL_H_

@@ -9,9 +9,11 @@
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
+#include <boost/beast/ssl.hpp>
 
 namespace beast = boost::beast;
 namespace net = boost::asio;
+namespace ssl = boost::asio::ssl;
 using tcp = boost::asio::ip::tcp;
 
 class Logger;
@@ -22,6 +24,7 @@ class HTTPListener : public std::enable_shared_from_this<HTTPListener>
 {
   public:
     HTTPListener(net::io_context &ioc, tcp::endpoint endpoint, std::shared_ptr<Logger> logger, HTTPRequestHandler *handler);
+    HTTPListener(net::io_context &ioc, ssl::context *ctx, tcp::endpoint endpoint, std::shared_ptr<Logger> logger, HTTPRequestHandler *handler);
     ~HTTPListener();
 
     void startAcceptConnections();
@@ -32,6 +35,7 @@ class HTTPListener : public std::enable_shared_from_this<HTTPListener>
     std::shared_ptr<Logger> logger;
 
     net::io_context& ioc;
+    ssl::context *ctx;
     tcp::endpoint endpoint;
     tcp::acceptor acceptor;
     HTTPRequestHandler *handler;

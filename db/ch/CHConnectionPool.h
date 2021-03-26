@@ -5,6 +5,7 @@
 #ifndef CHATSNIFFER_DB_CH_CHCONNECTIONPOOL_H_
 #define CHATSNIFFER_DB_CH_CHCONNECTIONPOOL_H_
 
+#include <vector>
 #include "CHConnection.h"
 
 #include "../DBConnectionPool.h"
@@ -22,6 +23,8 @@ class CHConnectionPool : public DBConnectionPool, public HTTPServerUnit
 
     std::shared_ptr<DBConnection> createConnection() override;
 
+    [[nodiscard]] const std::vector<std::shared_ptr<CHConnection>>& getAll() const { return all; };
+
     // implement HTTPControlUnit
     std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request, std::string &error) override;
 
@@ -29,6 +32,7 @@ class CHConnectionPool : public DBConnectionPool, public HTTPServerUnit
     std::string handleStats(const std::string &request, std::string &error);
   private:
     CHConnectionConfig config;
+    std::vector<std::shared_ptr<CHConnection>> all;
 };
 
 #endif //CHATSNIFFER_DB_CH_CHCONNECTIONPOOL_H_
