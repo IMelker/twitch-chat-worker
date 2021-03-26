@@ -8,6 +8,8 @@
 #include <memory>
 #include <variant>
 
+#include "../../common/Logger.h"
+
 #include <boost/asio.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/strand.hpp>
@@ -15,8 +17,6 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/beast/ssl.hpp>
-
-#include "../../common/Logger.h"
 
 // helper type for stream visitor
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
@@ -27,6 +27,7 @@ namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
+
 
 struct HTTPRequestHandler;
 class HTTPSession : public std::enable_shared_from_this<HTTPSession>
@@ -52,7 +53,8 @@ class HTTPSession : public std::enable_shared_from_this<HTTPSession>
             // pointer in the class to keep it alive.
             holder->response = sp;
 
-            logger->logTrace("HTTPServer Outgoing response:\n{}", *sp);
+            std::ostringstream oss; oss << *sp;
+            logger->logTrace("HTTPServer Outgoing response:\n{}", oss.str());
 
             // Write the response
             std::visit(overloaded {

@@ -79,7 +79,8 @@ void HTTPSession::onRead(beast::error_code ec, std::size_t) {
 
     if (ec) { return logError(ec); }
 
-    logger->logTrace("HTTPSession Incoming request:\n{}", request);
+    std::ostringstream oss; oss << request;
+    logger->logTrace("HTTPSession Incoming request:\n{}", oss.str());
 
     // Move execution to other thread
     handler->handleRequest(std::move(request), SendLambda{shared_from_this(), logger});
