@@ -8,13 +8,13 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include "../common/Logger.h"
 #include "IRCSocket.h"
 
 #define SOCKET_ERROR (-1)
 #define POLL_ERROR (-1)
 #define POLL_TIMEOUT 0
 #define POLL_DELAY 1000
-
 
 IRCSocket::IRCSocket() {
     socketInit();
@@ -26,13 +26,13 @@ IRCSocket::~IRCSocket() {
 
 void IRCSocket::socketInit() {
     if ((this->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == SOCKET_ERROR) {
-        fprintf(stderr, "Socket create failed. Error: %s\n", strerror(errno));
+        DefaultLogger::logCritical("Socket create failed. Error: {}", strerror(errno));
         exit(SOCKET_ERROR);
     }
 
     int on = 1;
     if (setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, (char const *) &on, sizeof(on)) == SOCKET_ERROR) {
-        fprintf(stderr, "Invalid socket. Error: %s\n", strerror(errno));
+        DefaultLogger::logCritical("Invalid socket. Error: {}", strerror(errno));
         exit(SOCKET_ERROR);
     }
 
@@ -44,7 +44,7 @@ bool IRCSocket::connect(char const *host, int port) {
     hostent *he;
 
     if (!(he = gethostbyname(host))) {
-        fprintf(stderr, "Could not resolve host: %s\n", host);
+        DefaultLogger::logCritical("Could not resolve host: {}", host);
         return false;
     }
 
@@ -55,7 +55,7 @@ bool IRCSocket::connect(char const *host, int port) {
     memset(&(addr.sin_zero), '\0', 8);
 
     if (::connect(this->sock, (sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR) {
-        fprintf(stderr, "Could not connect to: %s. Error: %s\n", host, strerror(errno));
+        DefaultLogger::logCritical("Could not connect to: {}. Error: {}", host, strerror(errno));
         return false;
     }
 

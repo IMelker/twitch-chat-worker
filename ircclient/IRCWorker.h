@@ -19,7 +19,7 @@ class IRCWorker;
 struct IRCWorkerListener {
     virtual void onConnected(IRCWorker *worker) = 0;
     virtual void onDisconnected(IRCWorker *worker) = 0;
-    virtual void onMessage(IRCWorker *worker, IRCMessage message, long long now) = 0;
+    virtual void onMessage(IRCWorker *worker, const IRCMessage &message, long long now) = 0;
     virtual void onLogin(IRCWorker *worker) = 0;
 };
 
@@ -76,13 +76,13 @@ class IRCWorker
     [[nodiscard]] std::set<std::string> getJoinedChannels() const;
     [[nodiscard]] const decltype(stats)& getStats() const;
 
-    bool joinChannel(const std::string& channel);
+    bool joinChannel(const std::string &channel, std::string &result);
     void leaveChannel(const std::string& channel);
     bool sendMessage(const std::string& channel, const std::string& text);
 
     bool sendIRC(const std::string& message);
 
-    void messageHook(IRCMessage message);
+    void messageHook(const IRCMessage& message);
   private:
     void run();
 

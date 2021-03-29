@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <map>
 #include <thread>
-#include <langinfo.h>
 
 #include "common/SysSignal.h"
 #include "common/Options.h"
@@ -87,20 +86,27 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
+    auto appLogger = LoggerFactory::create(readLoggerConfig(config, APP));
+    DefaultLogger::setAsDefault(appLogger);
+
+    int threads = config[APP]["threads"].value_or(std::thread::hardware_concurrency());
+    IRCtoDBConnector connector(threads, appLogger);
+
     HTTPControlConfig httpCfg;
     httpCfg.host = config[HTTP_CONTROL]["host"].value_or("localhost");
     httpCfg.port = config[HTTP_CONTROL]["port"].value_or(8080);
     httpCfg.user = config[HTTP_CONTROL]["user"].value_or("admin");
     httpCfg.pass = config[HTTP_CONTROL]["password"].value_or("admin");
-    httpCfg.secure = config[HTTP_CONTROL]["secure"].value_or(true);
-    httpCfg.verify = config[HTTP_CONTROL]["verify"].value_or(false);
     httpCfg.threads = config[HTTP_CONTROL]["threads"].value_or(std::thread::hardware_concurrency());
+    httpCfg.secure = config[HTTP_CONTROL]["secure"].value_or(true);
+    if (httpCfg.secure) {
+        httpCfg.ssl.verify = config[HTTP_CONTROL]["verify"].value_or(false);
+        httpCfg.ssl.cert = config[HTTP_CONTROL]["cert_file"].value_or("cert.pem");
+        httpCfg.ssl.key = config[HTTP_CONTROL]["key_file"].value_or("key.pem");
+        httpCfg.ssl.dh = config[HTTP_CONTROL]["dh_file"].value_or("dh.pem");
+    }
     auto httpLogger = LoggerFactory::create(readLoggerConfig(config, HTTP_CONTROL));
     HTTPServer httpControlServer(std::move(httpCfg), httpLogger);
-
-    int threads = config[APP]["threads"].value_or(std::thread::hardware_concurrency());
-    auto appLogger = LoggerFactory::create(readLoggerConfig(config, APP));
-    IRCtoDBConnector connector(threads, appLogger);
 
     CHConnectionConfig chCfg;
     chCfg.host = config[CLICKHOUSE]["host"].value_or("localhost");
@@ -153,7 +159,10 @@ int main(int argc, char *argv[]) {
         return UNIT_RESTART;
     }
 
-    // TODO Make correct SSL certificates setup for HTTPServer
+    // TODO Make http auth for control
+
+    // TODO rewrite message hooks
+    // TODO add lua runner or python runner
 
     // TODO add google language detection, add CH dictionary
     // https://github.com/scivey/langdetectpp
@@ -162,11 +171,6 @@ int main(int argc, char *argv[]) {
     // user max=25
 
     // TODO make clickhouse SSL client
-
-    // TODO provide http interfaces
-    //      /reload (?)
-    // TODO rewrite message hooks
-    // TODO add lua runner or python runner
 
     IRCtoDBConnector::loop();
     httpControlServer.clearUnits();

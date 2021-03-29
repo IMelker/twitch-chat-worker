@@ -89,7 +89,7 @@ class HTTPSession : public std::enable_shared_from_this<HTTPSession>
     void close();
     void shutdown(beast::error_code ec);
   private:
-    void logError(beast::error_code ec);
+    void logError(beast::error_code ec, std::string &&context);
 
     std::shared_ptr<Logger> logger;
 

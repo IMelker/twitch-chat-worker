@@ -51,7 +51,7 @@ void HTTPSession::start() {
 }
 
 void HTTPSession::handshake(beast::error_code ec) {
-    if (ec) { return logError(ec); }
+    if (ec) { return logError(ec, "Failed handshake"); }
 
     read();
 }
@@ -77,7 +77,7 @@ void HTTPSession::onRead(beast::error_code ec, std::size_t) {
     if (ec == http::error::end_of_stream)
         return close();
 
-    if (ec) { return logError(ec); }
+    if (ec) { return logError(ec, "Failed read"); }
 
     std::ostringstream oss; oss << request;
     logger->logTrace("HTTPSession Incoming request:\n{}", oss.str());
@@ -87,7 +87,7 @@ void HTTPSession::onRead(beast::error_code ec, std::size_t) {
 }
 
 void HTTPSession::onWrite(bool close, beast::error_code ec, std::size_t) {
-    if (ec) { return logError(ec); }
+    if (ec) { return logError(ec, "Failed write"); }
 
     if (close) {
         // This means we should close the connection, usually because
@@ -120,13 +120,13 @@ void HTTPSession::close() {
 }
 
 void HTTPSession::shutdown(beast::error_code ec) {
-    if (ec) { return logError(ec); }
+    if (ec) { return logError(ec, "Failed shutdown"); }
 }
 
-void HTTPSession::logError(beast::error_code ec) {
+void HTTPSession::logError(beast::error_code ec, std::string &&context) {
     if (ec == net::ssl::error::stream_truncated)
         return;
 
-    logger->logError("HTTPSession: {}", ec.message());
+    logger->logError("HTTPSession {}: {}", context, ec.message());
 }
 

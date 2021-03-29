@@ -5,8 +5,6 @@
 #include "IRCClient.h"
 #include "IRCHandler.h"
 
-#include <sstream>
-
 #define MAXDATASIZE 4096
 
 bool IRCClient::connect(const char *host, int port) {
@@ -49,78 +47,46 @@ void IRCClient::receive() {
     int pos = 0;
     for (int i = 0; i < size; ++i) {
         if (buf[i] == '\r' || buf[i] == '\n') {
-            parse(std::string{buf + pos, static_cast<size_t>(i - pos)});
+            process(buf + pos, i - pos);
             pos = i + 1;
         }
     }
 }
 
-void IRCClient::parse(std::string data) {
-    if (data.empty())
+void IRCClient::process(const char* data, size_t len) {
+    if (len == 0)
         return;
 
-    IRCCommandPrefix cmdPrefix;
+    IRCMessage message{data, len};
 
-    // if command has prefix
-    if (data.substr(0, 1) == ":") {
-        cmdPrefix.parse(data);
-        data = data.substr(data.find(' ') + 1);
-    }
-
-    auto command = data.substr(0, data.find(' '));
-    std::transform(command.begin(), command.end(), command.begin(), towupper);
-    if (data.find(' ') != std::string::npos)
-        data = data.substr(data.find(' ') + 1);
-    else
-        data = "";
-
-    std::vector<std::string> parameters;
-
-    if (!data.empty()) {
-        if (data.substr(0, 1) == ":")
-            parameters.push_back(data.substr(1));
-        else {
-            size_t pos1 = 0, pos2;
-            while ((pos2 = data.find(' ', pos1)) != std::string::npos) {
-                parameters.push_back(data.substr(pos1, pos2 - pos1));
-                pos1 = pos2 + 1;
-                if (data.substr(pos1, 1) == ":") {
-                    parameters.push_back(data.substr(pos1 + 1));
-                    break;
-                }
-            }
-            if (parameters.empty())
-                parameters.push_back(data);
-        }
-    }
-
-    if (command == "ERROR") {
+    if (message.command == "ERROR") {
         disconnect();
         return;
     }
 
-    if (command == "PING") {
-        sendIRC("PONG :" + parameters.at(0) + "\n");
+    if (message.command == "PING") {
+        std::string pong;
+        pong.reserve(message.parameters[0].size() + sizeof("PONG :\n"));
+        pong.append("PONG :").append(message.parameters.at(0)).append("\n");
+        sendIRC(pong);
         return;
     }
 
-    IRCMessage ircMessage(command, cmdPrefix, parameters);
-
     // Default handler
-    int commandIndex = getCommandHandler(command);
+    int commandIndex = getCommandHandler(message.command);
     if (commandIndex < NUM_IRC_CMDS) {
         IRCCommandHandler &cmdHandler = ircCommandTable[commandIndex];
-        (this->*cmdHandler.handler)(ircMessage);
+        (this->*cmdHandler.handler)(message);
     }
 
-    callHook(command, ircMessage);
+    callHook(message.command, message);
 }
 
 void IRCClient::registerHook(std::string command, IRCCommandHook hook) {
     hooks.emplace(std::pair(std::move(command), std::move(hook)));
 }
 
-void IRCClient::callHook(const std::string& command, const IRCMessage& message) {
+void IRCClient::callHook(const std::string & command, const IRCMessage& message) {
     if (hooks.empty())
         return;
 

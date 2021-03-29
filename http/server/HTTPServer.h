@@ -23,10 +23,15 @@ class ThreadPool;
 struct HTTPControlConfig {
     std::string host = "localhost";
     unsigned short port = 8080;
-    std::string user = "admin";
-    std::string pass = "admin";
+    std::string user;
+    std::string pass;
     bool secure = true;
-    bool verify = true;
+    struct {
+        bool verify = false;
+        std::string cert;
+        std::string key;
+        std::string dh;
+    } ssl;
     int threads = 1;
 };
 

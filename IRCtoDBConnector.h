@@ -44,7 +44,7 @@ class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
     // implement IRCWorkerListener
     void onConnected(IRCWorker *worker) override;
     void onDisconnected(IRCWorker *worker) override;
-    void onMessage(IRCWorker *worker, IRCMessage message, long long now) override;
+    void onMessage(IRCWorker *worker, const IRCMessage &message, long long now) override;
     void onLogin(IRCWorker *worker) override;
 
     // implement HTTPControlUnit
@@ -57,6 +57,7 @@ class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
     std::string handleChannels(const std::string &request, std::string &error);
     std::string handleJoin(const std::string &request, std::string &error);
     std::string handleLeave(const std::string &request, std::string &error);
+    std::string handleReloadChannels(const std::string &request, std::string &error);
     std::string handleMessage(const std::string &request, std::string &error);
     std::string handleCustom(const std::string &request, std::string &error);
 
@@ -74,7 +75,7 @@ class IRCtoDBConnector : public IRCWorkerListener, public HTTPServerUnit
     std::map<std::string, std::shared_ptr<IRCWorker>, std::less<>> workers;
 
     std::mutex watchMutex;
-    std::vector<std::string> watchChannels;
+    std::map<std::string, IRCWorker*> watchChannels;
 };
 
 #endif //CHATSNIFFER__IRCTODBCONNECTOR_H_

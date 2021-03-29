@@ -14,53 +14,14 @@
 
 #include "../common/Utils.h"
 
+#include "IRCMessage.h"
 #include "IRCSocket.h"
-
-class IRCClient;
-
-struct IRCCommandPrefix
-{
-    void parse(const std::string &data) {
-        if (data.empty())
-            return;
-
-        this->prefix = data.substr(1, data.find(' ') - 1);
-
-        std::vector<std::string> tokens;
-        if (this->prefix.find('@') != std::string::npos) {
-            tokens = absl::StrSplit(this->prefix, '@');
-            this->nickname = tokens.at(0);
-            this->host = tokens.at(1);
-        }
-        if (!this->nickname.empty() && this->nickname.find('!') != std::string::npos) {
-            tokens = absl::StrSplit(this->nickname, '!');
-            this->nickname = tokens.at(0);
-            this->username = tokens.at(1);
-        }
-    };
-
-    std::string prefix;
-    std::string nickname;
-    std::string username;
-    std::string host;
-};
-
-class IRCMessage
-{
-  public:
-    IRCMessage(std::string cmd, IRCCommandPrefix p, std::vector<std::string> params) :
-        command(std::move(cmd)), prefix(std::move(p)), parameters(std::move(params)) {};
-
-    std::string command;
-    IRCCommandPrefix prefix;
-    std::vector<std::string> parameters;
-};
 
 
 class IRCClient
 {
   public:
-    using IRCCommandHook = std::function<void(IRCMessage)>;
+    using IRCCommandHook = std::function<void(const IRCMessage&)>;
 public:
     explicit IRCClient() = default;
     ~IRCClient() = default;
@@ -74,18 +35,18 @@ public:
     bool login(const std::string& nick, const std::string& user, const std::string& password = std::string());
 
     void receive();
-    void parse(std::string data);
+    void process(const char* data, size_t len);
 
     // Default internal handlers
-    void handleCTCP(IRCMessage message);
-    void handlePrivMsg(IRCMessage message);
-    void handleNotice(IRCMessage message);
-    void handleChannelJoinPart(IRCMessage message);
-    void handleUserNickChange(IRCMessage message);
-    void handleUserQuit(IRCMessage message);
-    void handleChannelNamesList(IRCMessage message);
-    void handleNicknameInUse(IRCMessage message);
-    void handleServerMessage(IRCMessage message);
+    void handleCTCP(const IRCMessage& message);
+    void handlePrivMsg(const IRCMessage& message);
+    void handleNotice(const IRCMessage& message);
+    void handleChannelJoinPart(const IRCMessage& message);
+    void handleUserNickChange(const IRCMessage& message);
+    void handleUserQuit(const IRCMessage& message);
+    void handleChannelNamesList(const IRCMessage& message);
+    void handleNicknameInUse(const IRCMessage& message);
+    void handleServerMessage(const IRCMessage& message);
 
     void registerHook(std::string command, IRCCommandHook hook);
 private:
@@ -97,7 +58,7 @@ private:
     std::recursive_mutex mutex;
     IRCSocket ircSocket;
 
-    std::multimap<std::string, IRCCommandHook> hooks;
+    std::multimap<std::string, IRCCommandHook, std::less<>> hooks;
 };
 
 #endif

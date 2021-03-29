@@ -9,6 +9,7 @@
 
 #include "nlohmann/json.hpp"
 
+#include "common/Utils.h"
 #include "common/SysSignal.h"
 #include "common/Logger.h"
 
@@ -40,10 +41,10 @@ std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionP
                 config.nick = std::move(row[0]);
                 config.user = std::move(row[1]);
                 config.password = std::move(row[2]);
-                config.channels_limit = std::atoi(row.at(3).c_str());
-                config.whisper_per_sec_limit = std::atoi(row.at(4).c_str());
-                config.auth_per_sec_limit = std::atoi(row.at(5).c_str());
-                config.command_per_sec_limit = std::atoi(row.at(6).c_str());
+                config.channels_limit = Utils::String::toNumber(row.at(3));
+                config.whisper_per_sec_limit = Utils::String::toNumber(row.at(4));
+                config.auth_per_sec_limit = Utils::String::toNumber(row.at(5));
+                config.command_per_sec_limit = Utils::String::toNumber(row.at(6));
 
                 accounts.push_back(std::move(config));
             }
@@ -148,24 +149,28 @@ void IRCtoDBConnector::updateChannelsList(std::vector<std::string> &&channels) {
     this->logger->logInfo("IRCtoDBConnector watch list updated with {} channels", channels.size());
 
     std::lock_guard lg(watchMutex);
-    this->watchChannels = std::move(channels);
+    std::transform(channels.begin(), channels.end(), std::inserter(watchChannels, watchChannels.end()),
+        [](std::string& channel) -> std::pair<std::string, IRCWorker *> {
+            return std::make_pair(std::move(channel), nullptr);
+        });
+    //this->watchChannels = std::move(channels);
 }
 
 void IRCtoDBConnector::onConnected(IRCWorker *worker) {
-    logger->logTrace("IRCtoDBConnector IRCWorker[{}] connected", fmt::ptr(worker));
+    logger->logTrace("IRCtoDBConnector::IRCWorker[{}] connected", fmt::ptr(worker));
 }
 
 void IRCtoDBConnector::onDisconnected(IRCWorker *worker) {
-    logger->logTrace("IRCtoDBConnector IRCWorker[{}] disconnected", fmt::ptr(worker));
+    logger->logTrace("IRCtoDBConnector::IRCWorker[{}] disconnected", fmt::ptr(worker));
 }
 
-void IRCtoDBConnector::onMessage(IRCWorker *worker, IRCMessage message, long long now) {
-    pool.enqueue([message = std::move(message), now, worker, this]() {
+void IRCtoDBConnector::onMessage(IRCWorker *worker, const IRCMessage &message, long long now) {
+    pool.enqueue([message = message, now, worker, this]() {
         MessageData transformed;
         transformed.timestamp = now;
         msgProcessor.transformMessage(message, transformed);
 
-        logger->logTrace(R"(IRCtoDBConnector process {{worker: {}, channel: "{}", from: "{}", text: "{}", valid: {}}})",
+        logger->logTrace(R"(IRCtoDBConnector::IRCWorker[{}] process {{channel: "{}", from: "{}", text: "{}", valid: {}}})",
                          fmt::ptr(worker), transformed.channel, transformed.user, transformed.text, transformed.valid);
 
         // process request to database
@@ -180,15 +185,20 @@ void IRCtoDBConnector::onMessage(IRCWorker *worker, IRCMessage message, long lon
 }
 
 void IRCtoDBConnector::onLogin(IRCWorker *worker) {
-    logger->logTrace("IRCtoDBConnector IRCWorker[{}] logged in", fmt::ptr(worker));
+    logger->logTrace("IRCtoDBConnector::IRCWorker[{}] logged in", fmt::ptr(worker));
+
+    std::string dev_null;
 
     std::lock_guard lg(watchMutex);
-    size_t pos = 0;
-    for (pos = 0; pos < watchChannels.size(); ++pos) {
-        if (!worker->joinChannel(watchChannels[pos]))
+    for(auto &[channel, assigned] : watchChannels) {
+        if (assigned)
+            continue;
+
+        if (!worker->joinChannel(channel, dev_null))
             break;
+
+        assigned = worker;
     }
-    watchChannels.erase(watchChannels.begin(), watchChannels.begin() + pos);
 }
 
 void IRCtoDBConnector::loop() {
@@ -210,6 +220,8 @@ std::tuple<int, std::string> IRCtoDBConnector::processHttpRequest(std::string_vi
         return {200, handleChannels(request, error)};
     if (path == "leave")
         return {200, handleLeave(request, error)};
+    if (path == "reloadchannels")
+        return {200, handleReloadChannels(request, error)};
     if (path == "version")
         return {200, handleVersion(request, error)};
     if (path == "shutdown")
@@ -242,21 +254,49 @@ std::string IRCtoDBConnector::handleJoin(const std::string &request, std::string
         error = "Account not found";
         return "";
     }
+    auto *worker = it->second.get();
 
     json body = json::object();
+    auto tryToJoinToChannel = [worker, &body, this] (const std::string& channel) {
+        auto it = watchChannels.find(channel);
+        // check if channel already in list
+        if (it != watchChannels.end()) {
+            // check if assigned to worker or not
+            if (it->second) {
+                body[channel] = {{"joined", it->second == worker},
+                                 {"reason", it->second->getClientConfig().nick + " already joined"}};
+            } else {
+                std::string result;
+                bool joined = worker->joinChannel(channel, result);
+                if (joined)
+                    it->second = worker;
+                body[channel] = {{"joined", joined}, {"reason", std::move(result)}};
+            }
+        } else {
+            std::string result;
+            bool joined = worker->joinChannel(channel, result);
+            if (joined)
+                watchChannels.insert(std::make_pair(channel, worker));
+            body[channel] = {{"joined", joined}, {"reason", std::move(result)}};
+        }
+    };
+
     const auto &channels = req["channels"];
     switch (channels.type()) {
-        case json::value_t::array:
+        case json::value_t::array: {
+            std::lock_guard lg(watchMutex);
             for (const auto &channel: channels) {
                 if (!channel.is_string())
                     continue;
                 const auto &chan = channel.get<std::string>();
-                body[chan] = it->second->joinChannel(chan);
+                tryToJoinToChannel(chan);
             }
             break;
+        }
         case json::value_t::string: {
             const auto &chan = channels.get<std::string>();
-            body[chan] = it->second->joinChannel(chan);
+            std::lock_guard lg(watchMutex);
+            tryToJoinToChannel(chan);
             break;
         }
         default:
@@ -368,25 +408,97 @@ std::string IRCtoDBConnector::handleLeave(const std::string &request, std::strin
         return "";
     }
 
+    auto *worker = it->second.get();
+
+    auto tryToJoinToLeave = [worker, this] (const std::string& channel) {
+        auto it = watchChannels.find(channel);
+        if (it != watchChannels.end()) {
+            if (it->second == worker) {
+                worker->leaveChannel(channel);
+                it->second = nullptr;
+            }
+        }
+    };
+
     const auto &channels = req["channels"];
     switch (channels.type()) {
-        case json::value_t::array:
+        case json::value_t::array: {
+            std::lock_guard lg(watchMutex);
             for (const auto &channel: channels) {
                 if (!channel.is_string())
                     continue;
                 const auto &chan = channel.get<std::string>();
-                it->second->leaveChannel(chan);
+                tryToJoinToLeave(chan);
             }
             break;
+        }
         case json::value_t::string: {
             const auto &chan = channels.get<std::string>();
-            it->second->leaveChannel(chan);
+            std::lock_guard lg(watchMutex);
+            tryToJoinToLeave(chan);
             break;
         }
         default:
             break;
     }
     return "";
+}
+
+std::string IRCtoDBConnector::handleReloadChannels(const std::string &request, std::string &error) {
+    auto channels = loadChannels();
+
+    int joined = 0;
+    std::vector<std::string> leaveList;
+    std::vector<std::string> joinList;
+    {
+        std::lock_guard lg(watchMutex);
+        // create leave list
+        for (auto& [channel, _]: watchChannels) {
+            if (std::find(channels.begin(), channels.end(), channel) == channels.end())
+                leaveList.push_back(channel);
+        }
+
+        // create join list
+        for (auto& channel: channels) {
+            if (watchChannels.count(channel) == 0)
+                joinList.push_back(channel);
+        }
+
+        // leave from channels
+        for (auto &channel: leaveList) {
+            auto it = watchChannels.find(channel);
+            it->second->leaveChannel(channel);
+            watchChannels.erase(it);
+        }
+
+        // join to channels list
+        std::transform(joinList.begin(), joinList.end(), std::inserter(watchChannels, watchChannels.end()),
+            [](std::string &channel) -> std::pair<std::string, IRCWorker *> {
+               return std::make_pair(channel, nullptr);
+        });
+
+        // join workers to channels
+        std::string dev_null;
+        auto notAssigned = [](const auto& pair) -> bool { return !pair.second; };
+        auto it = std::find_if(watchChannels.begin(), watchChannels.end(), notAssigned);
+        for (auto&[nick, worker] : workers) {
+            while (it != watchChannels.end()) {
+                if (!worker->joinChannel(it->first, dev_null))
+                    break;
+
+                it->second = worker.get();
+                ++joined;
+
+                it = std::find_if(it, watchChannels.end(), notAssigned);
+            }
+        }
+    }
+
+    logger->logInfo("IRCtoDBConnector Channels reloaded: left: {}, joined: {}/{}",
+                    leaveList.size(), joined, joinList.size());
+
+    json body = {{"leaving", json{leaveList}}, {"left", leaveList.size()}, {"joining", json{joinList}}, {"joined", joined}};
+    return body.dump();
 }
 
 std::string IRCtoDBConnector::handleMessage(const std::string &request, std::string &error) {
@@ -490,7 +602,7 @@ std::string IRCtoDBConnector::handleCustom(const std::string &request, std::stri
                     continue;
                 }
 
-                logger->logInfo(R"(IRCWorker[{}] "{} send command: {})", fmt::ptr(it->second.get()), acc, command);
+                logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second.get()), acc, command);
                 body[acc] = it->second->sendIRC(command);
             }
             break;
@@ -502,7 +614,7 @@ std::string IRCtoDBConnector::handleCustom(const std::string &request, std::stri
                 break;
             }
 
-            logger->logInfo(R"(IRCWorker[{}] "{} send command: "{}")", fmt::ptr(it->second.get()), acc, command);
+            logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second.get()), acc, command);
             body[acc] = it->second->sendIRC(command);
             break;
         }

@@ -72,8 +72,8 @@ void IRCWorker::run() {
     while (!SysSignal::serviceTerminated()) {
         client = std::make_unique<IRCClient>();
 
-        client->registerHook("PRIVMSG", [this] (IRCMessage message) {
-            this->messageHook(std::move(message));
+        client->registerHook("PRIVMSG", [this] (const IRCMessage& message) {
+            this->messageHook(message);
         });
 
         if (!connect(conConfig, client.get(), logger.get()))
@@ -121,17 +121,18 @@ void IRCWorker::run() {
     }
 }
 
-
-bool IRCWorker::joinChannel(const std::string &channel) {
+bool IRCWorker::joinChannel(const std::string &channel, std::string &result) {
     {
         std::lock_guard lg(channelsMutex);
         if (joinedChannels.count(channel)) {
             logger->logInfo(R"(IRCWorker[{}] "{}" already joined to channel({}))", fmt::ptr(this), ircConfig.nick, channel);
+            result = ircConfig.nick + " already joined";
             return true;
         }
 
         if (joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit)) {
             logger->logError(R"(IRCWorker[{}] "{}" failed to join to channel({}). Limit reached)", fmt::ptr(this), ircConfig.nick, channel);
+            result = "Channels limit reached";
             return false;
         }
 
@@ -144,6 +145,7 @@ bool IRCWorker::joinChannel(const std::string &channel) {
         auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
         stats.channels.updated.store(timestamp, std::memory_order_relaxed);
         stats.channels.count.fetch_add(1, std::memory_order_relaxed);
+        result = ircConfig.nick + "joined";
         return true;
     }
     return false;
@@ -192,7 +194,7 @@ bool IRCWorker::sendIRC(const std::string& message) {
     return false;
 }
 
-void IRCWorker::messageHook(IRCMessage message) {
+void IRCWorker::messageHook(const IRCMessage& message) {
     auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
 
     logger->logTrace("IRCWorker[{}] {}({}): {}", fmt::ptr(this), message.prefix.nickname,

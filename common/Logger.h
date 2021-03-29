@@ -24,6 +24,56 @@ enum class LoggerLevel : int
 
 std::shared_ptr<spdlog::logger> getLogger(class Logger *logger);
 
+struct DefaultLogger {
+    static void setAsDefault(const std::shared_ptr<Logger>& logger);
+
+    static void setLogLevel(LoggerLevel level);
+    static LoggerLevel getLogLevel();
+    static bool checkLogLevel(LoggerLevel level);
+
+    static void setPattern(std::string pattern);
+    static void setFormatter(std::unique_ptr<spdlog::formatter> formatter);
+
+    static void enableBacktrace(size_t number);
+    static void disableBacktrace();
+    static void dumpBacktrace();
+
+    static void flush();
+    static void flushOn(LoggerLevel level);
+    static void flushEvery(int sec);
+    static void flushEvery(std::chrono::seconds interval);
+
+    template<typename FormatString, typename... Args>
+    static void logTrace(const FormatString &fmt, Args &&...args) {
+        spdlog::default_logger()->trace(fmt, std::forward<Args>(args)...);
+    }
+
+    template<typename FormatString, typename... Args>
+    static void logDebug(const FormatString &fmt, Args &&...args) {
+        spdlog::default_logger()->debug(fmt, std::forward<Args>(args)...);
+    }
+
+    template<typename FormatString, typename... Args>
+    static void logInfo(const FormatString &fmt, Args &&...args) {
+        spdlog::default_logger()->info(fmt, std::forward<Args>(args)...);
+    }
+
+    template<typename FormatString, typename... Args>
+    static void logWarn(const FormatString &fmt, Args &&...args) {
+        spdlog::default_logger()->warn(fmt, std::forward<Args>(args)...);
+    }
+
+    template<typename FormatString, typename... Args>
+    static void logError(const FormatString &fmt, Args &&...args) {
+        spdlog::default_logger()->error(fmt, std::forward<Args>(args)...);
+    }
+
+    template<typename FormatString, typename... Args>
+    static void logCritical(const FormatString &fmt, Args &&...args) {
+        spdlog::default_logger()->critical(fmt, std::forward<Args>(args)...);
+    }
+};
+
 class Logger // Global log
 {
   public:

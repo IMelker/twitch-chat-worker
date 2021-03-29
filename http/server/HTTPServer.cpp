@@ -22,12 +22,17 @@ HTTPServer::HTTPServer(HTTPControlConfig config, std::shared_ptr<Logger> logger)
       executors(nullptr) {
     this->logger->logInfo("HTTPServer created with {} threads", this->config.threads);
     if (this->config.secure) {
-        loadServerCertificate(ctx);
-        if (this->config.verify)
+        if (this->config.ssl.verify)
             ctx.set_verify_mode(boost::asio::ssl::verify_fail_if_no_peer_cert);
         else
             ctx.set_verify_mode(boost::asio::ssl::verify_none);
 
+        if (std::string err; !loadServerCertificate(ctx, err, &this->config.ssl.cert,
+                                                              &this->config.ssl.key,
+                                                              &this->config.ssl.dh)) {
+            this->logger->logCritical("HTTPServer Failed to load SSL certificates: {}", err);
+            return;
+        }
         this->logger->logInfo("HTTPServer SSL certificates loaded");
     }
 }

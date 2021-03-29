@@ -216,3 +216,7 @@ _deps
 *.iml
 out
 gen
+
+# Secured params
+*.pem
+*.cert

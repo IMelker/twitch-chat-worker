@@ -1,6 +1,8 @@
 #ifndef _IRCSOCKET_H
 #define _IRCSOCKET_H
 
+#define SOCKET int
+
 #include <string>
 
 class IRCSocket
@@ -12,7 +14,7 @@ class IRCSocket
     bool connect(char const *host, int port);
     void disconnect();
 
-    bool connected() const { return this->established; };
+    [[nodiscard]] bool connected() const { return this->established; };
 
     bool send(char const *data, size_t len) const;
     int receive(char *buf, int maxSize);
@@ -20,7 +22,7 @@ class IRCSocket
   private:
     void socketInit();
 
-    int sock = -1;
+    SOCKET sock = -1;
     bool established = false;
 };
 
