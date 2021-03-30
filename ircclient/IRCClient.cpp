@@ -1,11 +1,12 @@
+#include "app.h"
 #include <iostream>
 #include <algorithm>
+
+#include <fmt/format.h>
 
 #include "IRCSocket.h"
 #include "IRCClient.h"
 #include "IRCHandler.h"
-
-#define MAXDATASIZE 4096
 
 bool IRCClient::connect(const char *host, int port) {
     std::lock_guard lg(mutex);
@@ -27,30 +28,51 @@ bool IRCClient::login(const std::string& nick, const std::string& user, const st
     this->user = user;
 
     std::lock_guard lg(mutex);
-    if (sendIRC("HELLO\n")) {
-        if (!password.empty() && !sendIRC("PASS " + password + "\n"))
-            return false;
-        if (sendIRC("NICK " + nick + "\n"))
-            if (sendIRC("USER " + user + " 8 * :Cpp IRC Client\n"))
-                return true;
-    }
+    if (!password.empty() && !sendIRC("PASS " + password + "\n"))
+        return false;
+    if (sendIRC("NICK " + nick + "\n"))
+        if (sendIRC("USER " + user + " 8 * :" APP_NAME "-" APP_VERSION "(" APP_AUTHOR_EMAIL ") IRC Client\n"))
+            return true;
 
     return false;
 }
 
 void IRCClient::receive() {
-    char buf[MAXDATASIZE];
-    int size = this->ircSocket.receive(buf, MAXDATASIZE);
+    int size = this->ircSocket.receive(buffer.getLinearAppendPtr(), static_cast<int>(buffer.getLinearFreeSpace()));
     if (size <= 0)
         return;
+    buffer.expandSize(size);
 
-    int pos = 0;
-    for (int i = 0; i < size; ++i) {
+    char *buf = buffer.getDataPtr();
+    unsigned int pos = 0;
+    for (unsigned int i = 0; i < buffer.getSize(); ++i) {
         if (buf[i] == '\r' || buf[i] == '\n') {
             process(buf + pos, i - pos);
             pos = i + 1;
         }
     }
+
+    if (pos == buffer.getSize())
+        buffer.clear();
+    else
+        buffer.seekData(pos);
+
+    if (buffer.getLinearFreeSpace() < MAX_MESSAGE_LEN)
+        buffer.normilize();
+
+    // message = [":" prefix SPACE] command[params] crlf
+    // prefix = servername / (nickname[["!" user] "@" host])
+    // command = 1 * letter / 3digit
+    // params = *14(SPACE middle)[SPACE ":" trailing]
+    // = / 14(SPACE middle)[SPACE[":"] trailing]
+    //
+    // nospcrlfcl = %x01 - 09 / %x0B - 0C / %x0E - 1F / %x21 - 39 / %x3B - FF
+    // ; any octet except NUL, CR, LF, " " and ":"
+    // middle = nospcrlfcl *(":" / nospcrlfcl)
+    // trailing = *(":" / " " / nospcrlfcl)
+    //
+    // SPACE = %x20; space character
+    // crlf = %x0D %x0A; "carriage return" "linefeed"
 }
 
 void IRCClient::process(const char* data, size_t len) {
@@ -65,10 +87,7 @@ void IRCClient::process(const char* data, size_t len) {
     }
 
     if (message.command == "PING") {
-        std::string pong;
-        pong.reserve(message.parameters[0].size() + sizeof("PONG :\n"));
-        pong.append("PONG :").append(message.parameters.at(0)).append("\n");
-        sendIRC(pong);
+        sendIRC(fmt::format("PONG :{}\n", message.parameters.at(0)));
         return;
     }
 

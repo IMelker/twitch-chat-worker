@@ -11,7 +11,7 @@ std::atomic<bool> SysSignal::terminated(false);
 
 void SysSignal::setupSignalHandling() {
     std::signal(SIGTERM, SysSignal::signalHandler);
-    std::signal(SIGSEGV, SysSignal::signalHandler);
+    //std::signal(SIGSEGV, SysSignal::signalHandler);
     std::signal(SIGKILL, SysSignal::signalHandler);
     std::signal(SIGCHLD, SysSignal::signalHandler);
     std::signal(SIGUSR1, SysSignal::signalHandler);
@@ -23,9 +23,9 @@ void SysSignal::signalHandler(int signal_number) {
     switch (signal_number) {
         case SIGTERM:
         case SIGINT:
-        case SIGSEGV:
-            setServiceTerminated(true);
-            break;
+        //case SIGSEGV:
+        //    setServiceTerminated(true);
+        //    break;
         case SIGKILL:
             setServiceTerminated(true);
             break;

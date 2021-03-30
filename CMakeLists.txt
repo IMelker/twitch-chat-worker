@@ -17,6 +17,7 @@ set(APP_VERSION_MAJOR 0)
 set(APP_VERSION_MINOR 0)
 set(APP_VERSION_PATCH 1)
 set(APP_VERSION ${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH})
+set(APP_AUTHOR_EMAIL "l2pickn@yandex.ru")
 execute_process(COMMAND git rev-parse --verify HEAD OUTPUT_VARIABLE APP_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE)
 execute_process(COMMAND git log -1 --pretty=format:%ad HEAD OUTPUT_VARIABLE APP_GIT_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
 message("-- App: ${APP_NAME}.${APP_VERSION}.${APP_GIT_HASH} ${APP_GIT_DATE}")
@@ -34,6 +35,7 @@ include_directories(third-party/spdlog/include)
 include_directories(third-party/toml)
 include_directories(third-party/opts/include)
 include_directories(third-party/clickhouse)
+include_directories(third-party/langdetect/langdetectpp/include)
 message("- [pg]")
 find_package(PostgreSQL REQUIRED)
 include_directories(${PostgreSQL_INCLUDE_DIRS})
@@ -65,10 +67,13 @@ add_executable(chatsniffer
         common/Options.h common/Options.cpp
         common/Config.h common/Config.cpp
         common/ThreadPool.h common/ThreadPool.cpp
+        common/BufferStatic.h common/BufferStatic.cpp
         common/Logger.h common/Logger.cpp common/LoggerFactory.h
         common/Utils.h common/Utils.cpp
         common/Clock.h
         )
+
+add_subdirectory(common/tests)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_definitions(-fstack-protector-all)
@@ -82,4 +87,5 @@ target_link_libraries(chatsniffer
         spdlog
         clickhouse-cpp-lib-static
         ${PostgreSQL_LIBRARIES}
-        absl::strings)
+        absl::strings
+        langdetectpp)

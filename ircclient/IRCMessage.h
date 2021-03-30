@@ -8,6 +8,8 @@
 #include <string>
 #include <string_view>
 
+#define MAX_MESSAGE_LEN 512
+
 struct IRCPrefix
 {
     IRCPrefix() = default;
@@ -37,18 +39,16 @@ class IRCMessage
     IRCMessage() = default;
     IRCMessage(const char* data, size_t len) : payload(data, static_cast<size_t>(len)) {
         size_t next_space = payload.find(' ');
-        if (payload[0] == ':')
-            prefix = IRCPrefix{&payload[1], next_space - 1};
+        if (payload.front() == ':')
+            prefix = IRCPrefix{payload.data() + 1, next_space - 1};
 
         size_t command_end = payload.find(' ', next_space + 1);
-        command = payload.substr(next_space + 1, command_end - next_space - 1);
+        if (command_end == std::string::npos) {
+            command = payload.substr(next_space + 1);
+        } else {
+            command = payload.substr(next_space + 1, command_end - next_space - 1);
 
-        std::transform(command.begin(), command.end(), command.begin(), ::towupper);
-
-        // parse and fill parameters
-        if (command_end != std::string::npos) {
-            auto c = payload.at(command_end + 1);
-            if (c == ':') {
+            if (payload.at(command_end + 1) == ':') {
                 parameters.push_back(payload.substr(command_end + 2));
             } else {
                 size_t pos1 = command_end + 1, pos2;
@@ -64,6 +64,7 @@ class IRCMessage
                     parameters.push_back(payload.substr(command_end + 1));
             }
         }
+        std::transform(command.begin(), command.end(), command.begin(), ::towupper);
     }
 
     IRCPrefix prefix;

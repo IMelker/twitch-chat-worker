@@ -20,3 +20,6 @@ add_subdirectory(clickhouse)
 
 message("- [abseil]")
 add_subdirectory(abseil)
+
+message("- [langdetect]")
+add_subdirectory(langdetect)

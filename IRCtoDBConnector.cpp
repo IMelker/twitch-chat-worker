@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <ctime>
 
 #include "nlohmann/json.hpp"
 
@@ -25,7 +24,6 @@ std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionP
                                  "auth_per_sec_limit, command_per_sec_limit "
                            "FROM accounts "
                            "WHERE active IS TRUE;";
-    logger->logTrace("PGConnection request: \"{}\"", request);
 
     std::vector<IRCClientConfig> accounts;
     {
@@ -58,7 +56,6 @@ std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>
     auto &logger = pgBackend->getLogger();
 
     std::string request = "SELECT name FROM channel WHERE watch IS TRUE;";
-    logger->logTrace("PGConnection request: \"{}\"", request);
 
     std::vector<std::string> channelsList;
     {
@@ -170,8 +167,8 @@ void IRCtoDBConnector::onMessage(IRCWorker *worker, const IRCMessage &message, l
         transformed.timestamp = now;
         msgProcessor.transformMessage(message, transformed);
 
-        logger->logTrace(R"(IRCtoDBConnector::IRCWorker[{}] process {{channel: "{}", from: "{}", text: "{}", valid: {}}})",
-                         fmt::ptr(worker), transformed.channel, transformed.user, transformed.text, transformed.valid);
+        logger->logTrace(R"(IRCtoDBConnector process {{worker: "{}", channel: "{}", from: "{}", text: "{}", lang: "{}", valid: {}}})",
+                         fmt::ptr(worker), transformed.channel, transformed.user, transformed.text, transformed.lang, transformed.valid);
 
         // process request to database
         if (transformed.valid) {

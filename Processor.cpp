@@ -3,6 +3,7 @@
 //
 
 #include <fmt/format.h>
+#include <langdetectpp/langdetectpp.h>
 
 #include "common/Utils.h"
 #include "common/Logger.h"
@@ -14,10 +15,12 @@
 
 #define MESSAGE_BATCH_SIZE 1000
 
-MessageProcessor::MessageProcessor() = default;
+MessageProcessor::MessageProcessor()
+    : langDetector(langdetectpp::Detector::create()) {
+};
 MessageProcessor::~MessageProcessor() = default;
 
-static const std::string removeSymbol{"\'\"`<>~()[]{}#$%^&*"};
+static const std::string removeSymbol{"\'\"`"};
 
 void MessageProcessor::transformMessage(const IRCMessage &message, MessageData &result) {
     result.channel = message.parameters.at(0)[0] == '#' ? message.parameters.at(0).substr(1) : message.parameters.at(0);
@@ -31,6 +34,9 @@ void MessageProcessor::transformMessage(const IRCMessage &message, MessageData &
         result.text[pos++] = c;
     }
     result.text.resize(pos);
+
+    //auto lang = langDetector->detect(result.text);
+    //result.lang = langdetectpp::toShortName(lang);
 
     result.valid = !result.text.empty();
 }

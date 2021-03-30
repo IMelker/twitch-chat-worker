@@ -12,11 +12,11 @@
 
 #include "absl/strings/str_split.h"
 
+#include "../common/BufferStatic.h"
 #include "../common/Utils.h"
 
 #include "IRCMessage.h"
 #include "IRCSocket.h"
-
 
 class IRCClient
 {
@@ -54,6 +54,8 @@ private:
 
     std::string nick;
     std::string user;
+
+    BufferStatic buffer;
 
     std::recursive_mutex mutex;
     IRCSocket ircSocket;

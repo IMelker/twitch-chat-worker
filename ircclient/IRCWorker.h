@@ -79,7 +79,6 @@ class IRCWorker
     bool joinChannel(const std::string &channel, std::string &result);
     void leaveChannel(const std::string& channel);
     bool sendMessage(const std::string& channel, const std::string& text);
-
     bool sendIRC(const std::string& message);
 
     void messageHook(const IRCMessage& message);

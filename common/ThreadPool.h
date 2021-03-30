@@ -5,27 +5,27 @@
 #ifndef CHATBOT_COMMON_THREADPOOL_H_
 #define CHATBOT_COMMON_THREADPOOL_H_
 
+
 #include <memory>
-#include <vector>
-#include <queue>
-#include <future>
 #include <functional>
+#include <queue>
+#include <vector>
 #include <thread>
+#include <future>
 #include <mutex>
 #include <condition_variable>
-#include <stdexcept>
 
 class ThreadPool
 {
   public:
-    explicit ThreadPool(size_t count);
+    explicit ThreadPool(size_t count = std::max(2u, std::thread::hardware_concurrency()));
     ~ThreadPool();
 
     template<class F, class... Args>
-    auto enqueue(F &&f, Args &&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
+    decltype(auto) enqueue(F &&f, Args &&... args);
   private:
     std::vector<std::thread> workers; // need to keep track of threads so we can join them
-    std::queue<std::function<void()> > tasks; // the task queue
+    std::queue<std::packaged_task<void()> > tasks; // the task queue
 
     // synchronization
     std::mutex mutex;
@@ -35,25 +35,22 @@ class ThreadPool
 
 // add new work item to the pool
 template<class F, class... Args>
-auto ThreadPool::enqueue(F &&f, Args &&... args) -> std::future<typename std::result_of<F(Args...)>::type> {
-    using return_type = typename std::result_of<F(Args...)>::type;
+decltype(auto) ThreadPool::enqueue(F &&f, Args &&... args) {
+    using return_type = std::invoke_result_t<F, Args...>;
 
-    auto task = std::make_shared<std::packaged_task<return_type()> >(
+    auto task = std::packaged_task<return_type()>(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...)
     );
 
-    std::future<return_type> res = task->get_future();
+    std::future<return_type> res = task.get_future();
     {
-        std::unique_lock<std::mutex> lock(this->mutex);
-
+        std::lock_guard<std::mutex> lock(this->mutex);
         // don't allow enqueueing after stopping the pool
         if (this->stop) {
-            //fprintf(stderr, "Pool stopped executing inplace\n");
-            (*task)();
+            res.get();
             return res;
         }
-
-        this->tasks.emplace([task]() { (*task)(); });
+        this->tasks.emplace(std::move(task));
     }
     this->condition.notify_one();
     return res;

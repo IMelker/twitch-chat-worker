@@ -94,7 +94,7 @@ int IRCSocket::receive(char *buf, int maxSize) {
             return ret;
         default:
             auto bytes = recv(this->sock, buf, maxSize - 1, 0);
-            if (bytes < 0 && (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
+            if (bytes <= 0 && (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
                 disconnect();
             return bytes;
     }

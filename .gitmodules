@@ -19,3 +19,6 @@
 [submodule "third-party/clickhouse"]
 	path = third-party/clickhouse
 	url = https://github.com/ClickHouse/clickhouse-cpp.git
+[submodule "third-party/langdetect"]
+	path = third-party/langdetect
+	url = https://github.com/IMelker/langdetectpp.git

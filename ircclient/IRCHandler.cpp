@@ -1,4 +1,7 @@
 #include "app.h"
+
+#include <fmt/format.h>
+
 #include "IRCHandler.h"
 
 IRCCommandHandler ircCommandTable[NUM_IRC_CMDS] =
@@ -32,7 +35,7 @@ IRCCommandHandler ircCommandTable[NUM_IRC_CMDS] =
 };
 
 void IRCClient::handleCTCP(const IRCMessage& message) {
-    std::string text{message.parameters.back()};
+    /*std::string text{message.parameters.back()};
 
     // Remove '\001' from start/end of the string
     text = text.substr(1, text.size() - 2);
@@ -42,30 +45,17 @@ void IRCClient::handleCTCP(const IRCMessage& message) {
     if (auto to = message.parameters[0]; to == nick) {
         // Respond to CTCP VERSION
         if (text == "VERSION") {
-            std::string notice;
-            notice.reserve(message.prefix.nickname.size() + sizeof("NOTICE  :\001VERSION " APP_NAME "-" APP_VERSION " \001\n"));
-            notice.append("NOTICE ");
-            notice.append(message.prefix.nickname);
-            notice.append(" :\001VERSION " APP_NAME "-" APP_VERSION " \001\n");
-            sendIRC(notice);
+            sendIRC(fmt::format("NOTICE {} :\001VERSION " APP_NAME "-" APP_VERSION " \001\n", message.prefix.nickname));
             return;
         }
 
         // CTCP not implemented
-        std::string not_implemented;
-        not_implemented.reserve(message.prefix.nickname.size() + text.size() +
-                                sizeof("NOTICE  :\001ERRMSG  :Not implemented\001\n"));
-        not_implemented.append("NOTICE ");
-        not_implemented.append(message.prefix.nickname);
-        not_implemented.append(" :\001ERRMSG ");
-        not_implemented.append(text);
-        not_implemented.append(" :Not implemented\001\n");
-        sendIRC(not_implemented);
-    }
+        sendIRC(fmt::format("NOTICE {} :\001ERRMSG {} :Not implemented\001\n", message.prefix.nickname, text));
+    }*/
 }
 
 void IRCClient::handlePrivMsg(const IRCMessage& message) {
-    auto to = message.parameters[0];
+    /*auto to = message.parameters[0];
     auto text = message.parameters.back();
 
     // Handle Client-To-Client Protocol
@@ -74,7 +64,7 @@ void IRCClient::handlePrivMsg(const IRCMessage& message) {
         return;
     }
 
-    /*if (to[0] == '#') {
+    if (to[0] == '#') {
         printf("handlePrivMsg: [%s] %s: %s\n", to.c_str(), message.prefix.nickname.c_str(), text.c_str());
     } else {
         printf("handlePrivMsg: %s: %s\n", message.prefix.nickname.c_str(), text.c_str());
@@ -82,7 +72,7 @@ void IRCClient::handlePrivMsg(const IRCMessage& message) {
 }
 
 void IRCClient::handleNotice(const IRCMessage& message) {
-    std::string text;
+    /*std::string text;
     if (!message.parameters.empty())
         text = message.parameters.back();
 
@@ -94,32 +84,32 @@ void IRCClient::handleNotice(const IRCMessage& message) {
             return;
         }
         std::string ctcp = text.substr(0, text.find(' '));
-        //printf("handleNotice: [%s %s reply]: %s\n", from.c_str(), ctcp.c_str(), text.substr(text.find(' ') + 1).c_str());
+        printf("handleNotice: [%s %s reply]: %s\n", from.c_str(), ctcp.c_str(), text.substr(text.find(' ') + 1).c_str());
     } else{
-        //printf("handleNotice: %s- %s\n", from.c_str(), text.c_str());
-    }
+        printf("handleNotice: %s- %s\n", from.c_str(), text.c_str());
+    }*/
 }
 
 void IRCClient::handleChannelJoinPart(const IRCMessage& message) {
-    auto channel = message.parameters.at(0);
+    /*auto channel = message.parameters.at(0);
     auto action = (message.command == "JOIN") ? "joins" : "leaves";
-    //printf("handleChannelJoinPart: %s %s %s\n", message.prefix.nickname.c_str(), action.c_str(), channel.c_str());
+    printf("handleChannelJoinPart: %s %s %s\n", message.prefix.nickname.c_str(), action, channel.c_str());*/
 }
 
 void IRCClient::handleUserNickChange(const IRCMessage& message) {
-    auto newNick = message.parameters.at(0);
-    //printf("handleUserNickChange: %s changed his nick to %s\n", message.prefix.nickname.c_str(), newNick.c_str());
+    /*auto newNick = message.parameters.at(0);
+    printf("handleUserNickChange: %s changed his nick to %s\n", message.prefix.nickname.c_str(), newNick.c_str());*/
 }
 
 void IRCClient::handleUserQuit(const IRCMessage& message) {
-    auto text = message.parameters.at(0);
-    //printf("handleUserQuit: %s quits (%s)\n", message.prefix.nickname.c_str(), text.c_str());
+    /*auto text = message.parameters.at(0);
+    printf("handleUserQuit: %s quits (%s)\n", message.prefix.nickname.c_str(), text.c_str());*/
 }
 
 void IRCClient::handleChannelNamesList(const IRCMessage& message) {
-    auto channel = message.parameters.at(2);
+    /*auto channel = message.parameters.at(2);
     auto nicks = message.parameters.at(3);
-    //printf("handleChannelNamesList: [%s] people:\n%s\n", channel.c_str(), nicks.c_str());
+    //printf("handleChannelNamesList: [%s] people:\n%s\n", channel.c_str(), nicks.c_str());*/
 }
 
 void IRCClient::handleNicknameInUse(const IRCMessage& message) {
@@ -127,12 +117,12 @@ void IRCClient::handleNicknameInUse(const IRCMessage& message) {
 }
 
 void IRCClient::handleServerMessage(const IRCMessage& message) {
-    if (message.parameters.empty())
+    /*if (message.parameters.empty())
         return;
 
-    //auto it = message.parameters.begin();
-    //++it; // skip the first parameter (our nick)
-    //for (; it != message.parameters.end(); ++it)
-    //    printf("%s ", it->c_str());
-    //printf("\n");
+    auto it = message.parameters.begin();
+    ++it; // skip the first parameter (our nick)
+    for (; it != message.parameters.end(); ++it)
+        printf("%s ", it->c_str());
+    printf("\n");*/
 }

@@ -1,4 +1,5 @@
 #cmakedefine APP_NAME "@APP_NAME@"
 #cmakedefine APP_VERSION "@APP_VERSION@"
+#cmakedefine APP_AUTHOR_EMAIL "@APP_AUTHOR_EMAIL@"
 #cmakedefine APP_GIT_HASH "@APP_GIT_HASH@"
 #cmakedefine APP_GIT_DATE "@APP_GIT_DATE@"

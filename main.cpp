@@ -54,6 +54,7 @@ int main(int argc, char *argv[]) {
     if (options.getValue<bool>("version")) {
         printf("Name: " APP_NAME "\n"
                "Version: " APP_VERSION "\n"
+               "Author: " APP_AUTHOR_EMAIL "\n"
                "Git: " APP_GIT_HASH "\n"
                "Build: " APP_GIT_DATE " gcc-" __VERSION__ "\n");
         return UNIT_OK;
@@ -120,11 +121,11 @@ int main(int argc, char *argv[]) {
     int chConns = config[CLICKHOUSE]["connections"].value_or(std::thread::hardware_concurrency());
     auto chLogger = LoggerFactory::create(readLoggerConfig(config, CLICKHOUSE));
 
-    connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
-    if (connector.getCH()->getPoolSize() == 0) {
-        appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
-        return UNIT_RESTART;
-    }
+    //connector.initCHConnectionPool(std::move(chCfg), chConns, chLogger);
+    //if (connector.getCH()->getPoolSize() == 0) {
+    //    appLogger->logCritical("Failed to initialize CHConnectionPool. Exit");
+    //    return UNIT_RESTART;
+    //}
 
     PGConnectionConfig pgCfg;
     pgCfg.host = config[POSTGRESQL]["host"].value_or("localhost");
@@ -159,17 +160,20 @@ int main(int argc, char *argv[]) {
         return UNIT_RESTART;
     }
 
-    // TODO Make http auth for control
-
+    // TODO Add IRCClient logger
     // TODO rewrite message hooks
+
     // TODO add lua runner or python runner
 
-    // TODO add google language detection, add CH dictionary
-    // https://github.com/scivey/langdetectpp
 
     // TODO change CH name and display sizes
-    // user max=25
+    // user max=50
 
+    // TODO add language detection, add CH dictionary
+    // https://github.com/scivey/langdetectpp
+
+
+    // TODO Make http auth for control
     // TODO make clickhouse SSL client
 
     IRCtoDBConnector::loop();
