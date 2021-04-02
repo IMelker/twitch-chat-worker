@@ -70,7 +70,7 @@ inline bool login(const IRCClientConfig &cfg, IRCClient *client, Logger *logger)
 
 void IRCWorker::run() {
     while (!SysSignal::serviceTerminated()) {
-        client = std::make_unique<IRCClient>();
+        client = std::make_unique<IRCClient>(logger);
 
         client->registerHook("PRIVMSG", [this] (const IRCMessage& message) {
             this->messageHook(message);
@@ -197,9 +197,7 @@ bool IRCWorker::sendIRC(const std::string& message) {
 void IRCWorker::messageHook(const IRCMessage& message) {
     auto timestamp = CurrentTime<std::chrono::system_clock>::milliseconds();
 
-    logger->logTrace("IRCWorker[{}] {}({}): {}", fmt::ptr(this), message.prefix.nickname,
-                     message.parameters.at(0), message.parameters.back());
-    listener->onMessage(this, std::move(message), timestamp);
+    listener->onMessage(this, message, timestamp);
 
     stats.messages.in.updated.store(timestamp, std::memory_order_relaxed);
     stats.messages.in.count.fetch_add(1, std::memory_order_relaxed);

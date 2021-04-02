@@ -7,8 +7,11 @@
 
 #include <string>
 #include <string_view>
+#include <iterator>
+#include <vector>
+#include "spdlog/fmt/ostr.h" // must be included
 
-#define MAX_MESSAGE_LEN 512
+#define MAX_MESSAGE_LEN 1024
 
 struct IRCPrefix
 {
@@ -71,5 +74,28 @@ class IRCMessage
     std::string command;
     std::vector<std::string> parameters{};
 };
+
+inline std::ostream& operator<<(std::ostream& os, const IRCPrefix& p) {
+    os << "{";
+    if (!p.username.empty())
+        os << " username: " << p.username << ",";
+    if (!p.host.empty())
+        os << " host: " << p.host << ",";
+    if (!p.nickname.empty())
+        os << " nickname: " << p.nickname;
+    return os << "}";
+}
+
+inline std::ostream& operator<<(std::ostream& os, const std::vector<std::string> &p) {
+    std::copy(p.begin(), p.end(), std::ostream_iterator<std::string>(os, ", "));
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const IRCMessage& m) {
+    os << "{";
+    if (!m.prefix.prefix.empty())
+        os << "prefix:" << m.prefix << ", ";
+    return os << "command: " << m.command << ", parameters: " << m.parameters << "}";
+}
 
 #endif //CHATSNIFFER_IRCCLIENT_IRCMESSAGE_H_

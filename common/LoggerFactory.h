@@ -6,6 +6,7 @@
 #define CHATSNIFFER_COMMON_LOGGERFACTORY_H_
 
 #include "Utils.h"
+#include "Config.h"
 #include "Logger.h"
 
 enum class LoggerType {
@@ -108,6 +109,17 @@ struct LoggerFactory
 
         return logger;
     };
+
+    static LoggerConfig config(Config& config, const std::string& category) {
+        LoggerConfig logConfig;
+        logConfig.name = category;
+        logConfig.type = LoggerFactory::typeFromString(config[category]["log_type"].value_or("file"));
+        logConfig.level = LoggerFactory::levelFromString(config[category]["log_level"].value_or("info"));
+        logConfig.target = config[category]["log_target"].value_or(category + ".log");
+        logConfig.flushEvery = config[category]["flush_every"].value_or(10);
+        logConfig.flushOn = LoggerFactory::levelFromString(config[category]["flush_on"].value_or("error"));
+        return logConfig;
+    }
 };
 
 

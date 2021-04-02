@@ -1,4 +1,4 @@
-add_executable(buffer_test BufferStaticTest.cpp ../BufferStatic.cpp ../BufferStatic.h)
+add_executable(buffer_test BufferStaticTest.cpp ../BufferStatic.h)
 
 set(CMAKE_CXX_STANDARD 17)
 

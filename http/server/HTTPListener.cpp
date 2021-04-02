@@ -13,28 +13,28 @@ HTTPListener::HTTPListener(net::io_context &ioc, tcp::endpoint endpoint,
     // Open the acceptor
     acceptor.open(endpoint.protocol(), ec);
     if (ec) {
-        logger->logError("HTTPListener Failed open: {}", ec.message());
+        this->logger->logError("HTTPListener Failed open: {}", ec.message());
         return;
     }
 
     // Allow address reuse
     acceptor.set_option(net::socket_base::reuse_address(true), ec);
     if (ec) {
-        logger->logError("HTTPListener Failed set option: {}", ec.message());
+        this->logger->logError("HTTPListener Failed set option: {}", ec.message());
         return;
     }
 
     // Bind to the server address
     acceptor.bind(endpoint, ec);
     if (ec) {
-        logger->logError("HTTPListener Failed to bind: {}", ec.message());
+        this->logger->logError("HTTPListener Failed to bind: {}", ec.message());
         return;
     }
 
     // Start listening for connections
     acceptor.listen(net::socket_base::max_listen_connections, ec);
     if (ec) {
-        logger->logError("HTTPListener Failed to listen: {}", ec.message());
+        this->logger->logError("HTTPListener Failed to listen: {}", ec.message());
         return;
     }
 }

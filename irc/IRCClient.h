@@ -18,12 +18,15 @@
 #include "IRCMessage.h"
 #include "IRCSocket.h"
 
+#define BUFF_SIZE (1024 * 4)
+
+class Logger;
 class IRCClient
 {
   public:
     using IRCCommandHook = std::function<void(const IRCMessage&)>;
 public:
-    explicit IRCClient() = default;
+    explicit IRCClient(std::shared_ptr<Logger>  logger);
     ~IRCClient() = default;
 
     bool connect(const char *host, int port);
@@ -52,10 +55,12 @@ public:
 private:
     void callHook(const std::string& command, const IRCMessage& message);
 
+    std::shared_ptr<Logger> logger;
+
     std::string nick;
     std::string user;
 
-    BufferStatic buffer;
+    BufferStatic<BUFF_SIZE> buffer;
 
     std::recursive_mutex mutex;
     IRCSocket ircSocket;

@@ -25,7 +25,8 @@ class DBConnectionPool
     std::shared_ptr<DBConnection> lockConnection();
     void unlockConnection(std::shared_ptr<DBConnection> conn);
 
-    [[nodiscard]] size_t getPoolSize() const { return pool.size(); }
+    [[nodiscard]] size_t size() const { return pool.size(); }
+
     [[nodiscard]] const std::shared_ptr<Logger>& getLogger() const { return logger; };
 
   protected:

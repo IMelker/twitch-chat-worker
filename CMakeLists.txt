@@ -50,8 +50,19 @@ include_directories(${CMAKE_BINARY_DIR})
 message("\n[executable]")
 add_executable(chatsniffer
         main.cpp
-        IRCtoDBConnector.h IRCtoDBConnector.cpp
-        Processor.h Processor.cpp
+        Controller.h Controller.cpp
+        DBStorage.h DBStorage.cpp
+        Message.h MessagePublisher.h MessageSubscriber.h
+        MessageProcessor.h MessageProcessor.cpp
+        MessageStorage.h MessageStorage.cpp
+        common/SysSignal.h common/SysSignal.cpp
+        common/Options.h common/Options.cpp
+        common/Config.h common/Config.cpp
+        common/ThreadPool.h common/ThreadPool.cpp
+        common/BufferStatic.h
+        common/Logger.h common/Logger.cpp common/LoggerFactory.h
+        common/Utils.h common/Utils.cpp
+        common/Clock.h
         db/DBConnectionLock.h
         db/DBConnection.h db/DBConnection.cpp
         db/DBConnectionPool.h db/DBConnectionPool.cpp
@@ -59,18 +70,13 @@ add_executable(chatsniffer
         db/pg/PGConnectionPool.h db/pg/PGConnectionPool.cpp
         db/ch/CHConnection.h db/ch/CHConnection.cpp
         db/ch/CHConnectionPool.h db/ch/CHConnectionPool.cpp
-        ircclient/IRCSocket.h ircclient/IRCSocket.cpp
-        ircclient/IRCClient.h ircclient/IRCClient.cpp
-        ircclient/IRCHandler.h ircclient/IRCHandler.cpp
-        ircclient/IRCWorker.h ircclient/IRCWorker.cpp
-        common/SysSignal.h common/SysSignal.cpp
-        common/Options.h common/Options.cpp
-        common/Config.h common/Config.cpp
-        common/ThreadPool.h common/ThreadPool.cpp
-        common/BufferStatic.h common/BufferStatic.cpp
-        common/Logger.h common/Logger.cpp common/LoggerFactory.h
-        common/Utils.h common/Utils.cpp
-        common/Clock.h
+        irc/IRCSocket.h irc/IRCSocket.cpp
+        irc/IRCClient.h irc/IRCClient.cpp
+        irc/IRCHandler.h irc/IRCHandler.cpp
+        irc/IRCWorker.h irc/IRCWorker.cpp
+        irc/IRCWorkerPool.h irc/IRCWorkerPool.cpp
+        bot/BotsEnvironment.h bot/BotsEnvironment.cpp
+        bot/BotEngine.h bot/BotEngine.cpp
         )
 
 add_subdirectory(common/tests)

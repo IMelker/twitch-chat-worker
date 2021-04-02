@@ -41,8 +41,8 @@ std::string PGConnectionPool::handleStats(const std::string &request, std::strin
     for(size_t i = 0; i < all.size(); ++i) {
         const auto &stats = all[i]->getStats();
         auto &conn = body[std::to_string(i)] = json::object();
-        conn["connects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
-                            {"attempts", stats.connects.attempts.load(std::memory_order_relaxed)}};
+        conn["reconnects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
+                              {"attempts", stats.connects.attempts.load(std::memory_order_relaxed)}};
         conn["requests"] = {{"updated", stats.requests.updated.load(std::memory_order_relaxed)},
                             {"count", stats.requests.count.load(std::memory_order_relaxed)},
                             {"failed", stats.requests.failed.load(std::memory_order_relaxed)},

@@ -21,6 +21,8 @@ class ThreadPool
     explicit ThreadPool(size_t count = std::max(2u, std::thread::hardware_concurrency()));
     ~ThreadPool();
 
+    size_t size() const { return workers.size(); };
+
     template<class F, class... Args>
     decltype(auto) enqueue(F &&f, Args &&... args);
   private:

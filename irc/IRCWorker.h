@@ -14,12 +14,12 @@
 #include "../common/SysSignal.h"
 
 #include "IRCClient.h"
+#include "IRCMessageListener.h"
 
 class IRCWorker;
-struct IRCWorkerListener {
+struct IRCWorkerListener : public IRCMessageListener {
     virtual void onConnected(IRCWorker *worker) = 0;
     virtual void onDisconnected(IRCWorker *worker) = 0;
-    virtual void onMessage(IRCWorker *worker, const IRCMessage &message, long long now) = 0;
     virtual void onLogin(IRCWorker *worker) = 0;
 };
 
@@ -67,9 +67,7 @@ class IRCWorker
     ~IRCWorker();
 
     IRCWorker(IRCWorker&) = delete;
-    IRCWorker(IRCWorker&&) = default;
     IRCWorker& operator=(IRCWorker&) = delete;
-    IRCWorker& operator=(IRCWorker&&) = default;
 
     [[nodiscard]] const IRCConnectConfig& getConnectConfig() const;
     [[nodiscard]] const IRCClientConfig& getClientConfig() const;

@@ -1,188 +1,47 @@
 //
-// Created by l2pic on 06.03.2021.
+// Created by l2pic on 01.04.2021.
 //
-#include "app.h"
-
-#include <algorithm>
-#include <chrono>
 
 #include "nlohmann/json.hpp"
 
-#include "common/Utils.h"
-#include "common/SysSignal.h"
-#include "common/Logger.h"
-
-#include "db/DBConnectionLock.h"
-#include "IRCtoDBConnector.h"
+#include "../common/Logger.h"
+#include "IRCWorkerPool.h"
 
 using json = nlohmann::json;
 
-std::vector<IRCClientConfig> getAccountsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
-    auto &logger = pgBackend->getLogger();
-
-    std::string request = "SELECT username, display, oauth, channels_limit, whisper_per_sec_limit,"
-                                 "auth_per_sec_limit, command_per_sec_limit "
-                           "FROM accounts "
-                           "WHERE active IS TRUE;";
-
-    std::vector<IRCClientConfig> accounts;
-    {
-        DBConnectionLock dbl(pgBackend);
-        if (!dbl->ping())
-            return accounts;
-
-        std::vector<std::vector<std::string>> res;
-        if (dbl->request(request, res)) {
-            accounts.reserve(res.size());
-            for (auto &row: res) {
-                IRCClientConfig config;
-                config.nick = std::move(row[0]);
-                config.user = std::move(row[1]);
-                config.password = std::move(row[2]);
-                config.channels_limit = Utils::String::toNumber(row.at(3));
-                config.whisper_per_sec_limit = Utils::String::toNumber(row.at(4));
-                config.auth_per_sec_limit = Utils::String::toNumber(row.at(5));
-                config.command_per_sec_limit = Utils::String::toNumber(row.at(6));
-
-                accounts.push_back(std::move(config));
-            }
-        }
-    }
-
-    return accounts;
-}
-
-std::vector<std::string> getChannelsList(const std::shared_ptr<PGConnectionPool>& pgBackend) {
-    auto &logger = pgBackend->getLogger();
-
-    std::string request = "SELECT name FROM channel WHERE watch IS TRUE;";
-
-    std::vector<std::string> channelsList;
-    {
-        DBConnectionLock dbl(pgBackend);
-        if (!dbl->ping())
-            return channelsList;
-
-        std::vector<std::vector<std::string>> res;
-        if (dbl->request(request, res)) {
-            channelsList.reserve(res.size());
-            for(auto& row: res) {
-                channelsList.push_back(std::move(row[0]));
-            }
-        }
-    }
-
-    return channelsList;
-}
-
-IRCtoDBConnector::IRCtoDBConnector(unsigned int threads, std::shared_ptr<Logger> logger)
-    : logger(std::move(logger)), pool(threads) {
-    this->logger->logInfo("IRCtoDBConnector created with {} threads", threads);
-}
-
-IRCtoDBConnector::~IRCtoDBConnector() {
-    if (ch)
-        dbProcessor.flushMessages(ch);
-    logger->logTrace("IRCtoDBConnector end of connector");
-};
-
-void IRCtoDBConnector::initPGConnectionPool(PGConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger) {
-    assert(!this->pg);
-    this->logger->logInfo("IRCtoDBConnector init PostgreSQL DB pool with {} connections", connections);
-    pg = std::make_shared<PGConnectionPool>(std::move(config), connections, std::move(logger));
-}
-
-void IRCtoDBConnector::initCHConnectionPool(CHConnectionConfig config, unsigned int connections, std::shared_ptr<Logger> logger) {
-    assert(!this->ch);
-    this->logger->logInfo("IRCtoDBConnector init Clickhouse DB pool with {} connections", connections);
-    ch = std::make_shared<CHConnectionPool>(std::move(config), connections, std::move(logger));
-}
-
-void IRCtoDBConnector::initIRCWorkers(const IRCConnectConfig& config, std::vector<IRCClientConfig> accounts, std::shared_ptr<Logger> ircLogger) {
-    assert(workers.empty());
-
-    this->logger->logInfo("IRCtoDBConnector {} users loaded", accounts.size());
-
-    for (auto &account : accounts) {
-        std::string nick = account.nick;
-        workers.emplace(std::move(nick), std::make_shared<IRCWorker>(config, std::move(account), this, ircLogger));
-    }
-}
-
-const std::shared_ptr<PGConnectionPool> & IRCtoDBConnector::getPG() const {
-    return pg;
-}
-
-const std::shared_ptr<CHConnectionPool> & IRCtoDBConnector::getCH() const {
-    return ch;
-}
-
-ThreadPool *IRCtoDBConnector::getPool() {
-    return &pool;
-}
-
-std::vector<IRCClientConfig> IRCtoDBConnector::loadAccounts() {
-    std::vector<IRCClientConfig> accounts;
-
-    if (pg)
-        accounts = getAccountsList(pg);
-
-    this->logger->logInfo("IRCtoDBConnector {} accounts loaded", accounts.size());
-    return accounts;
-}
-
-
-std::vector<std::string> IRCtoDBConnector::loadChannels() {
-    std::vector<std::string> channels;
-
-    if (pg)
-        channels = getChannelsList(pg);
-
-    this->logger->logInfo("IRCtoDBConnector {} channels loaded", channels.size());
-    return channels;
-}
-
-void IRCtoDBConnector::updateChannelsList(std::vector<std::string> &&channels) {
-    this->logger->logInfo("IRCtoDBConnector watch list updated with {} channels", channels.size());
-
-    std::lock_guard lg(watchMutex);
+IRCWorkerPool::IRCWorkerPool(const IRCConnectConfig &conConfig, DBStorage *db,
+                             IRCMessageListener *listener, std::shared_ptr<Logger> logger)
+  : listener(listener), logger(std::move(logger)), db(db) {
+    auto channels = this->db->loadChannels();
     std::transform(channels.begin(), channels.end(), std::inserter(watchChannels, watchChannels.end()),
         [](std::string& channel) -> std::pair<std::string, IRCWorker *> {
-            return std::make_pair(std::move(channel), nullptr);
+           return std::make_pair(std::move(channel), nullptr);
         });
-    //this->watchChannels = std::move(channels);
+    this->logger->logInfo("IRCWorkerPool watch list updated with {} channels", watchChannels.size());
+
+    auto accounts = this->db->loadAccounts();
+    for (auto &account : accounts) {
+        auto worker = std::make_shared<IRCWorker>(conConfig, std::move(account), this, this->logger);
+        workers.emplace(worker->getClientConfig().nick, worker);
+    }
 }
 
-void IRCtoDBConnector::onConnected(IRCWorker *worker) {
-    logger->logTrace("IRCtoDBConnector::IRCWorker[{}] connected", fmt::ptr(worker));
+IRCWorkerPool::~IRCWorkerPool() = default;
+
+size_t IRCWorkerPool::poolSize() const {
+    return workers.size();
 }
 
-void IRCtoDBConnector::onDisconnected(IRCWorker *worker) {
-    logger->logTrace("IRCtoDBConnector::IRCWorker[{}] disconnected", fmt::ptr(worker));
+void IRCWorkerPool::onConnected(IRCWorker *worker) {
+    logger->logTrace("IRCWorkerPool::IRCWorker[{}] connected", fmt::ptr(worker));
 }
 
-void IRCtoDBConnector::onMessage(IRCWorker *worker, const IRCMessage &message, long long now) {
-    pool.enqueue([message = message, now, worker, this]() {
-        MessageData transformed;
-        transformed.timestamp = now;
-        msgProcessor.transformMessage(message, transformed);
-
-        logger->logTrace(R"(IRCtoDBConnector process {{worker: "{}", channel: "{}", from: "{}", text: "{}", lang: "{}", valid: {}}})",
-                         fmt::ptr(worker), transformed.channel, transformed.user, transformed.text, transformed.lang, transformed.valid);
-
-        // process request to database
-        if (transformed.valid) {
-            pool.enqueue([msg = std::move(transformed), this]() mutable {
-                if (ch) {
-                    dbProcessor.processMessage(std::move(msg), ch);
-                }
-            });
-        }
-    });
+void IRCWorkerPool::onDisconnected(IRCWorker *worker) {
+    logger->logTrace("IRCWorkerPool::IRCWorker[{}] disconnected", fmt::ptr(worker));
 }
 
-void IRCtoDBConnector::onLogin(IRCWorker *worker) {
-    logger->logTrace("IRCtoDBConnector::IRCWorker[{}] logged in", fmt::ptr(worker));
+void IRCWorkerPool::onLogin(IRCWorker *worker) {
+    logger->logTrace("IRCWorkerPool::IRCWorker[{}] logged in", fmt::ptr(worker));
 
     std::string dev_null;
 
@@ -198,13 +57,12 @@ void IRCtoDBConnector::onLogin(IRCWorker *worker) {
     }
 }
 
-void IRCtoDBConnector::loop() {
-    while (!SysSignal::serviceTerminated()){
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+void IRCWorkerPool::onMessage(IRCWorker *worker, const IRCMessage &message, long long now) {
+    listener->onMessage(worker, message, now);
 }
 
-std::tuple<int, std::string> IRCtoDBConnector::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {
+std::tuple<int, std::string> IRCWorkerPool::processHttpRequest(std::string_view path, const std::string &request,
+                                                               std::string &error) {
     if (path == "message")
         return {200, handleMessage(request, error)};
     if (path == "custom")
@@ -219,22 +77,14 @@ std::tuple<int, std::string> IRCtoDBConnector::processHttpRequest(std::string_vi
         return {200, handleLeave(request, error)};
     if (path == "reloadchannels")
         return {200, handleReloadChannels(request, error)};
-    if (path == "version")
-        return {200, handleVersion(request, error)};
-    if (path == "shutdown")
-        return {200, handleShutdown(request, error)};
+
 
     error = "Failed to match path";
     return EMPTY_HTTP_RESPONSE;
 }
 
 
-std::string IRCtoDBConnector::handleShutdown(const std::string &, std::string &) {
-    SysSignal::setServiceTerminated(true);
-    return "Terminated";
-}
-
-std::string IRCtoDBConnector::handleJoin(const std::string &request, std::string &error) {
+std::string IRCWorkerPool::handleJoin(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";
@@ -302,10 +152,10 @@ std::string IRCtoDBConnector::handleJoin(const std::string &request, std::string
     return body.dump();
 }
 
-std::string IRCtoDBConnector::handleAccounts(const std::string &request, std::string &error) {
+std::string IRCWorkerPool::handleAccounts(const std::string &request, std::string &error) {
     auto fillAccount = [] (json& account, const auto& stats) {
-        account["connects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
-                               {"count", stats.connects.attempts.load(std::memory_order_relaxed)}};
+        account["reconnects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
+                                 {"count", stats.connects.attempts.load(std::memory_order_relaxed)}};
         account["channels"] = {{"updated", stats.channels.updated.load(std::memory_order_relaxed)},
                                {"count", stats.channels.count.load(std::memory_order_relaxed)}};
         account["messages"]["in"] = {{"updated", stats.messages.in.updated.load(std::memory_order_relaxed)},
@@ -350,7 +200,7 @@ std::string IRCtoDBConnector::handleAccounts(const std::string &request, std::st
     return body.dump();
 }
 
-std::string IRCtoDBConnector::handleChannels(const std::string &request, std::string &error) {
+std::string IRCWorkerPool::handleChannels(const std::string &request, std::string &error) {
     json body = json::object();
     if (request.empty()) {
         for (auto &[nick, worker]: workers)
@@ -387,7 +237,7 @@ std::string IRCtoDBConnector::handleChannels(const std::string &request, std::st
     return body.dump();
 }
 
-std::string IRCtoDBConnector::handleLeave(const std::string &request, std::string &error) {
+std::string IRCWorkerPool::handleLeave(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";
@@ -441,8 +291,12 @@ std::string IRCtoDBConnector::handleLeave(const std::string &request, std::strin
     return "";
 }
 
-std::string IRCtoDBConnector::handleReloadChannels(const std::string &request, std::string &error) {
-    auto channels = loadChannels();
+std::string IRCWorkerPool::handleReloadChannels(const std::string &, std::string &error) {
+    auto channels = this->db->loadChannels();
+    if (channels.empty()) {
+        error = "Failed to load from db";
+        return "";
+    }
 
     int joined = 0;
     std::vector<std::string> leaveList;
@@ -470,9 +324,9 @@ std::string IRCtoDBConnector::handleReloadChannels(const std::string &request, s
 
         // join to channels list
         std::transform(joinList.begin(), joinList.end(), std::inserter(watchChannels, watchChannels.end()),
-            [](std::string &channel) -> std::pair<std::string, IRCWorker *> {
-               return std::make_pair(channel, nullptr);
-        });
+                       [](std::string &channel) -> std::pair<std::string, IRCWorker *> {
+                           return std::make_pair(channel, nullptr);
+                       });
 
         // join workers to channels
         std::string dev_null;
@@ -491,14 +345,14 @@ std::string IRCtoDBConnector::handleReloadChannels(const std::string &request, s
         }
     }
 
-    logger->logInfo("IRCtoDBConnector Channels reloaded: left: {}, joined: {}/{}",
+    logger->logInfo("Controller Channels reloaded: left: {}, joined: {}/{}",
                     leaveList.size(), joined, joinList.size());
 
     json body = {{"leaving", json{leaveList}}, {"left", leaveList.size()}, {"joining", json{joinList}}, {"joined", joined}};
     return body.dump();
 }
 
-std::string IRCtoDBConnector::handleMessage(const std::string &request, std::string &error) {
+std::string IRCWorkerPool::handleMessage(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";
@@ -571,7 +425,7 @@ std::string IRCtoDBConnector::handleMessage(const std::string &request, std::str
     return body.dump();
 }
 
-std::string IRCtoDBConnector::handleCustom(const std::string &request, std::string &error) {
+std::string IRCWorkerPool::handleCustom(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";
@@ -619,11 +473,5 @@ std::string IRCtoDBConnector::handleCustom(const std::string &request, std::stri
             break;
     }
 
-    return body.dump();
-}
-
-std::string IRCtoDBConnector::handleVersion(const std::string &, std::string &) {
-    json body = json::object();
-    body["version"] = APP_NAME " " APP_VERSION " " APP_GIT_DATE " (" APP_GIT_HASH ")";
     return body.dump();
 }

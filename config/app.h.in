@@ -3,3 +3,10 @@
 #cmakedefine APP_AUTHOR_EMAIL "@APP_AUTHOR_EMAIL@"
 #cmakedefine APP_GIT_HASH "@APP_GIT_HASH@"
 #cmakedefine APP_GIT_DATE "@APP_GIT_DATE@"
+
+#define APP "app"
+#define HTTP_CONTROL "control"
+#define POSTGRESQL "pg"
+#define CLICKHOUSE "ch"
+#define IRC "irc"
+#define BOT "bot"
