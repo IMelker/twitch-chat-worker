@@ -1,21 +1,21 @@
 [app]
 threads = 4
-log_type = "console"
-#log_type = "rotate"
+#log_type = "console"
+log_type = "rotate"
 log_target = "logs/app.log"
 log_level = "trace"
 
 [bot]
-log_type = "console"
-#log_type = "rotate"
+#log_type = "console"
+log_type = "rotate"
 log_target = "logs/bot.log"
 log_level = "info"
 
 [control]
-host = "127.0.0.1"
-port = 8081
-#host = "139.162.133.41"
-#port = 8091
+#host = "127.0.0.1"
+#port = 8081
+host = "139.162.133.41"
+port = 8091
 user = "test"
 secure = true
 verify = true
@@ -23,16 +23,16 @@ threads = 1
 cert_file = "ssl/https_cert.pem"
 key_file = "ssl/https_key.pem"
 dh_file = "ssl/https_dh.pem"
-log_type = "console"
-#log_type = "rotate"
+#log_type = "console"
+log_type = "rotate"
 log_target = "logs/http.log"
 log_level = "trace"
 
 [irc]
 host = "irc.chat.twitch.tv"
 port = 6667
-log_type = "console"
-#log_type = "rotate"
+#log_type = "console"
+log_type = "rotate"
 log_target = "logs/irc.log"
 log_level = "info"
 
@@ -43,8 +43,8 @@ dbname = "twitch_chat"
 user = "service"
 password = "Hfhysqcet12"
 connections = 1
-log_type = "console"
-#log_type = "rotate"
+#log_type = "console"
+log_type = "rotate"
 log_target = "logs/ch.log"
 log_level = "trace"
 
@@ -55,7 +55,7 @@ dbname = "twitch_base"
 user = "twitch_chat"
 password = "Hfhysqcet12"
 connections = 1
-log_type = "console"
-#log_type = "rotate"
+#log_type = "console"
+log_type = "rotate"
 log_target = "logs/pg.log"
 log_level = "trace"

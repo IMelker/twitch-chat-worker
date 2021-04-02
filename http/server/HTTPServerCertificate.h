@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 26.03.2021.
+// Created by imelker on 26.03.2021.
 //
 
 #ifndef CHATSNIFFER_HTTP_BOOSTSSL_H_

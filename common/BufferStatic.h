@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 30.03.2021.
+// Created by imelker on 30.03.2021.
 //
 
 #ifndef CHATSNIFFER_COMMON_BUFFERSTATIC_H_

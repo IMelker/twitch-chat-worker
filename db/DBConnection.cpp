@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 12.03.2021.
+// Created by imelker on 12.03.2021.
 //
 
 #include "DBConnection.h"

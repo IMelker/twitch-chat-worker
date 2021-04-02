@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 06.03.2021.
+// Created by imelker on 06.03.2021.
 //
 
 #ifndef CHATSNIFFER_IRCCLIENT_IRCWORKER_H_

@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 02.04.2021.
+// Created by imelker on 02.04.2021.
 //
 
 #include "BotEngine.h"

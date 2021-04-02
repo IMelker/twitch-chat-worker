@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 07.03.2021.
+// Created by imelker on 07.03.2021.
 //
 
 #ifndef CHATSNIFFER_PG_PGCONNECTIONPOOL_H_

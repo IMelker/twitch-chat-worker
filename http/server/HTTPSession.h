@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 21.03.2021.
+// Created by imelker on 21.03.2021.
 //
 
 #ifndef CHATSNIFFER_HTTP_HTTPSESSION_H_

@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 10.03.2021.
+// Created by imelker on 10.03.2021.
 //
 
 #ifndef CHATSNIFFER_PGSQL_PGCONNECTIONLOCKER_H_

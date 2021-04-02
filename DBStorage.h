@@ -1,15 +1,15 @@
 //
-// Created by l2pic on 03.04.2021.
+// Created by imelker on 03.04.2021.
 //
 
 #ifndef CHATSNIFFER__DBSTORAGE_H_
 #define CHATSNIFFER__DBSTORAGE_H_
 
 #include <memory>
+#include "irc/IRCWorker.h"
 #include "db/pg/PGConnectionPool.h"
 
 class Logger;
-class IRCClientConfig;
 class DBStorage
 {
   public:

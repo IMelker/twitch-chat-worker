@@ -1,5 +1,5 @@
 //
-// Created by l2pic on 11.03.2021.
+// Created by imelker on 11.03.2021.
 //
 
 #ifndef CHATSNIFFER_DB_CH_CHCONNECTIONPOOL_H_
