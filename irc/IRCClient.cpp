@@ -9,7 +9,8 @@
 #include "IRCClient.h"
 #include "IRCHandler.h"
 
-IRCClient::IRCClient(std::shared_ptr<Logger> logger) : logger(std::move(logger)) {
+IRCClient::IRCClient(IRCMessageListener *listener, std::shared_ptr<Logger> logger)
+  : listener(listener), logger(std::move(logger)) {
     this->logger->logTrace("IRCClient[{}] Client created", fmt::ptr(this));
 }
 
@@ -106,24 +107,7 @@ void IRCClient::process(const char* data, size_t len) {
         this->logger->logWarn("IRCClient[{}] Unhandled command: {}", fmt::ptr(this), message);
         return;
     }
-
-    callHook(message.command, message);
 }
-
-void IRCClient::registerHook(std::string command, IRCCommandHook hook) {
-    hooks.emplace(std::pair(std::move(command), std::move(hook)));
-}
-
-void IRCClient::callHook(const std::string & command, const IRCMessage& message) {
-    if (hooks.empty())
-        return;
-
-    auto range = hooks.equal_range(command);
-    for (auto i = range.first; i != range.second; ++i) {
-        i->second(message);
-    }
-}
-
 
 void IRCClient::handleCTCP(const IRCMessage&) {
     /*std::string text{message.parameters.back()};
@@ -145,15 +129,16 @@ void IRCClient::handleCTCP(const IRCMessage&) {
     }*/
 }
 
-void IRCClient::handlePrivMsg(const IRCMessage&) {
-    /*auto to = message.parameters[0];
-    auto text = message.parameters.back();
-
+void IRCClient::handlePrivMsg(const IRCMessage &message) {
     // Handle Client-To-Client Protocol
-    if (text[0] == '\001') {
+    if (message.parameters.back()[0] == '\001') {
         handleCTCP(message);
         return;
     }
+
+    listener->onMessage(message);
+    /*auto to = message.parameters[0];
+    auto text = message.parameters.back();
 
     if (to[0] == '#') {
         printf("handlePrivMsg: [%s] %s: %s\n", to.c_str(), message.prefix.nickname.c_str(), text.c_str());

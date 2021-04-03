@@ -10,6 +10,8 @@
 #include <vector>
 #include <set>
 
+#include <langdetectpp/langdetectpp.h>
+
 #include "irc/IRCMessage.h"
 #include "irc/IRCMessageListener.h"
 
@@ -34,6 +36,7 @@ class MessageProcessor : public IRCMessageListener,
   private:
     ThreadPool *pool;
     std::shared_ptr<Logger> logger;
+    std::shared_ptr<langdetectpp::Detector> langDetector;
 };
 
 #endif //CHATSNIFFER__MESSAGEPROCESSOR_H_

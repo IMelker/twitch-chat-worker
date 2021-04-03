@@ -15,6 +15,7 @@
 #include "../common/BufferStatic.h"
 #include "../common/Utils.h"
 
+#include "IRCMessageListener.h"
 #include "IRCMessage.h"
 #include "IRCSocket.h"
 
@@ -24,9 +25,7 @@ class Logger;
 class IRCClient
 {
   public:
-    using IRCCommandHook = std::function<void(const IRCMessage&)>;
-public:
-    explicit IRCClient(std::shared_ptr<Logger>  logger);
+    explicit IRCClient(IRCMessageListener *listener, std::shared_ptr<Logger>  logger);
     ~IRCClient() = default;
 
     bool connect(const char *host, int port);
@@ -50,11 +49,8 @@ public:
     void handleChannelNamesList(const IRCMessage& message);
     void handleNicknameInUse(const IRCMessage& message);
     void handleServerMessage(const IRCMessage& message);
-
-    void registerHook(std::string command, IRCCommandHook hook);
 private:
-    void callHook(const std::string& command, const IRCMessage& message);
-
+    IRCMessageListener *listener;
     std::shared_ptr<Logger> logger;
 
     std::string nick;
@@ -64,8 +60,6 @@ private:
 
     std::recursive_mutex mutex;
     IRCSocket ircSocket;
-
-    std::multimap<std::string, IRCCommandHook, std::less<>> hooks;
 };
 
 #endif

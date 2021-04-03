@@ -40,7 +40,7 @@ struct IRCClientConfig {
 };
 
 class Logger;
-class IRCWorker
+class IRCWorker : public IRCMessageListener
 {
     struct {
         struct {
@@ -79,7 +79,7 @@ class IRCWorker
     bool sendMessage(const std::string& channel, const std::string& text);
     bool sendIRC(const std::string& message);
 
-    void messageHook(const IRCMessage& message);
+    void onMessage(const IRCMessage &message) override;
   private:
     void run();
 

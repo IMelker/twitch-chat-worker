@@ -107,15 +107,10 @@ int main(int argc, char *argv[]) {
         return UNIT_RESTART;
     }
 
-    // TODO rewrite message hooks
-    // TODO add lua runners
-
     // TODO change CH name and display sizes
     // user max=50
 
-    // TODO add language detection, add CH dictionary
-    // https://github.com/scivey/langdetectpp
-
+    // TODO add lua runners
 
     // TODO IRCMessage to string_view
     // TODO Make http auth for control

@@ -20,7 +20,7 @@ MessageStorage::MessageStorage(CHConnectionConfig config,
   : pool(pool), logger(std::move(logger)) {
     batch.reserve(BATCH_SIZE);
 
-    this->logger->logInfo("Controller init Clickhouse DB pool with {} connections", count);
+    this->logger->logInfo("MessageStorage init Clickhouse DB pool with {} connections", count);
     ch = std::make_shared<CHConnectionPool>(std::move(config), count, this->logger);
 }
 
@@ -44,11 +44,13 @@ void MessageStorage::process(const Batch& messages) {
     auto text = std::make_shared<ColumnString>();
     //auto tags = std::make_shared<ColumnString>();
     auto timestamps = std::make_shared<ColumnDateTime64>(3);
+    auto language = std::make_shared<ColumnFixedString>(16);
     for (const auto & message : messages) {
         channels->Append(message.channel);
         user->Append(message.user);
         text->Append(message.text);
         timestamps->Append(message.timestamp);
+        language->Append(message.lang);
     }
 
     Block block;
@@ -56,6 +58,7 @@ void MessageStorage::process(const Batch& messages) {
     block.AppendColumn("from", user);
     block.AppendColumn("text", text);
     block.AppendColumn("timestamp", timestamps);
+    block.AppendColumn("language", language);
     try {
         DBConnectionLock chl(ch);
         chl->insert("twitch_chat.messages", block);
