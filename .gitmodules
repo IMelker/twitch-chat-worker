@@ -22,3 +22,6 @@
 [submodule "third-party/langdetect"]
 	path = third-party/langdetect
 	url = https://github.com/IMelker/langdetectpp.git
+[submodule "third-party/sol"]
+	path = third-party/sol
+	url = https://github.com/ThePhD/sol2.git

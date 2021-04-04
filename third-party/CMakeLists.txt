@@ -19,7 +19,11 @@ message("- [clickhouse]")
 add_subdirectory(clickhouse)
 
 message("- [abseil]")
+set(BUILD_TESTING OFF)
 add_subdirectory(abseil)
 
 message("- [langdetect]")
 add_subdirectory(langdetect)
+
+message("- [sol]")
+add_subdirectory(sol)

@@ -87,10 +87,10 @@ int main(int argc, char *argv[]) {
     }
 
     // message subscribers
-    if (!controller.initMessageStorage()) {
-        appLogger->logCritical("Failed to initialize MessageStorage. Exit");
-        return UNIT_RESTART;
-    }
+    //if (!controller.initMessageStorage()) {
+    //    appLogger->logCritical("Failed to initialize MessageStorage. Exit");
+    //    return UNIT_RESTART;
+    //}
     if (!controller.initBotsEnvironment()) {
         appLogger->logCritical("Failed to initialize MessageStorage. Exit");
         return UNIT_RESTART;
@@ -102,19 +102,31 @@ int main(int argc, char *argv[]) {
         return UNIT_RESTART;
     }
 
+    if (!controller.startBots()) {
+        appLogger->logCritical("Failed to start Bots. Exit");
+        return UNIT_RESTART;
+    }
+
     if (!controller.startHttpServer()) {
         appLogger->logCritical("Failed to start HTTP Control Server. Exit");
         return UNIT_RESTART;
     }
 
-    // TODO change CH name and display sizes
-    // user max=50
+    // TODO Message to shared_ptr
+    // TODO Message elements to const
+    // TODO add bot, account, channel linkage
+    // TODO add bot logging
+    // TODO add user logs from lua
 
-    // TODO add lua runners
+    // TODO add tags support
+    // TODO add HTTPClient
+    // TODO add TwitchAPI
+    // TODO add smileys detection for messages
 
     // TODO IRCMessage to string_view
     // TODO Make http auth for control
     // TODO make clickhouse SSL client
+    // TODO change CH name and display sizes user max=50
 
     Controller::loop();
     return UNIT_OK;

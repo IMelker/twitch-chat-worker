@@ -2,6 +2,7 @@
 // Created by imelker on 03.04.2021.
 //
 
+#include "common/Utils.h"
 #include "common/Logger.h"
 #include "irc/IRCWorker.h"
 #include "db/DBConnectionLock.h"
@@ -75,4 +76,35 @@ std::vector<std::string> DBStorage::loadChannels() {
 
     DefaultLogger::logInfo("Controller {} channels loaded", channels.size());
     return channels;
+}
+
+std::map<int, BotConfiguration> DBStorage::loadBotConfigurations() {
+    static const std::string request = "SELECT bot.id, channel.name, eh.event_type_id, eh.script "
+                                       "FROM bot "
+                                       "JOIN bot_channel ON bot.id = bot_channel.bot_id "
+                                       "JOIN channel ON bot_channel.channel_id = channel.id "
+                                       "JOIN event_handler as eh on bot.id = eh.bot_id;";
+
+    std::map<int, BotConfiguration> configurations;
+    {
+        DBConnectionLock dbl(pg);
+        if (!dbl->ping())
+            return configurations;
+
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            using namespace Utils::String;
+            for(auto &row : res) {
+                int id = toNumber(row[0]);
+                auto &config = configurations[id];
+                config.botId = id;
+                config.channel = std::move(row[1]);
+                auto &handlers = getHandlers(toNumber(row[2]), config);
+                handlers.push_back(std::move(row[3]));
+            }
+        }
+    }
+
+    DefaultLogger::logInfo("Controller {} bot configurations loaded", configurations.size());
+    return configurations;
 }

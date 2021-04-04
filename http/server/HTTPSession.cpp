@@ -124,7 +124,7 @@ void HTTPSession::shutdown(beast::error_code ec) {
 }
 
 void HTTPSession::logError(beast::error_code ec, std::string &&context) {
-    if (ec == net::ssl::error::stream_truncated)
+    if (ec == net::ssl::error::stream_truncated || ec == beast::error::timeout)
         return;
 
     logger->logError("HTTPSession {}: {}", context, ec.message());

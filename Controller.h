@@ -29,6 +29,7 @@ class Controller : public HTTPServerUnit
     ~Controller();
 
     bool startHttpServer();
+    bool startBots();
 
     bool initDBStorage();
     bool initIRCWorkerPool();

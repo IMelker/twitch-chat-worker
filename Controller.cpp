@@ -49,6 +49,16 @@ bool Controller::startHttpServer() {
     return httpServer->start(pool);
 }
 
+bool Controller::startBots() {
+    assert(botsEnvironment);
+    assert(ircWorkers);
+
+    botsEnvironment->initBots(ircWorkers.get());
+
+    return true;
+}
+
+
 bool Controller::initDBStorage() {
     assert(!db);
 
@@ -117,7 +127,7 @@ bool Controller::initBotsEnvironment() {
     assert(!botsEnvironment);
 
     auto botsLogger = LoggerFactory::create(LoggerFactory::config(config, BOT));
-    botsEnvironment = std::make_shared<BotsEnvironment>(botsLogger);
+    botsEnvironment = std::make_shared<BotsEnvironment>(pool, db.get(), botsLogger);
 
     httpServer->addControlUnit(BOT, botsEnvironment.get());
     msgProcessor->subscribe(botsEnvironment.get());

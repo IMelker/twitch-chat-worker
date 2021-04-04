@@ -8,6 +8,7 @@
 #include <memory>
 #include "irc/IRCWorker.h"
 #include "db/pg/PGConnectionPool.h"
+#include "bot/BotConfiguration.h"
 
 class Logger;
 class DBStorage
@@ -20,6 +21,7 @@ class DBStorage
 
     std::vector<IRCClientConfig> loadAccounts();
     std::vector<std::string> loadChannels();
+    std::map<int, BotConfiguration> loadBotConfigurations();
   private:
     std::shared_ptr<Logger> logger;
     std::shared_ptr<PGConnectionPool> pg;

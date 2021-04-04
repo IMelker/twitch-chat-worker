@@ -14,11 +14,17 @@
 #include "BotEngine.h"
 
 class Logger;
+class ThreadPool;
+class DBStorage;
+class IRCWorkerPool;
+
 class BotsEnvironment : public MessageSubscriber, public HTTPServerUnit
 {
   public:
-    BotsEnvironment(std::shared_ptr<Logger> logger);
+    BotsEnvironment(ThreadPool *pool, DBStorage *db, std::shared_ptr<Logger> logger);
     ~BotsEnvironment();
+
+    void initBots(IRCWorkerPool *irc);
 
     // implement MessageSubscriber
     void onMessage(const Message &message) override;
@@ -26,9 +32,15 @@ class BotsEnvironment : public MessageSubscriber, public HTTPServerUnit
     // implement HTTPControlUnit:
     std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request,
                                                     std::string &error) override;
+
+    // http handlers
+    std::string handleReloadConfiguration(const std::string &request, std::string &error);
   private:
+    ThreadPool *pool;
+    DBStorage *db;
+    IRCWorkerPool *irc = nullptr;
     std::shared_ptr<Logger> logger;
-    std::map<std::string, std::shared_ptr<BotEngine>> bots;
+    std::multimap<std::string, std::shared_ptr<BotEngine>> bots;
 };
 
 #endif //CHATSNIFFER_BOT_BOTENVIRONMENT_H_

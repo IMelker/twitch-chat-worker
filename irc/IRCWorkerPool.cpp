@@ -32,6 +32,22 @@ size_t IRCWorkerPool::poolSize() const {
     return workers.size();
 }
 
+
+void IRCWorkerPool::sendMessage(const std::string &channel, const std::string &text) {
+    IRCWorker *worker = nullptr;
+    {
+        std::lock_guard lg(watchMutex);
+        auto it = watchChannels.find(channel);
+        // check if channel already in list
+        if (it != watchChannels.end()) {
+            worker = it->second;
+        }
+    }
+
+    if (worker)
+        worker->sendMessage(channel, text);
+}
+
 void IRCWorkerPool::onConnected(IRCWorker *worker) {
     logger->logTrace("IRCWorkerPool::IRCWorker[{}] connected", fmt::ptr(worker));
 }

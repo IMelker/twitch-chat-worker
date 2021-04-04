@@ -26,6 +26,8 @@ class IRCWorkerPool : public IRCWorkerListener, public HTTPServerUnit
 
     [[nodiscard]] size_t poolSize() const;
 
+    void sendMessage(const std::string& channel, const std::string& text);
+
     // implementation IRCWorkerListener
     void onConnected(IRCWorker *worker) override;
     void onDisconnected(IRCWorker *worker) override;

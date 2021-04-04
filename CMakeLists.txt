@@ -36,9 +36,16 @@ include_directories(third-party/toml)
 include_directories(third-party/opts/include)
 include_directories(third-party/clickhouse)
 include_directories(third-party/langdetect/langdetectpp/include)
+include_directories(third-party/sol/include)
+
 message("- [pg]")
 find_package(PostgreSQL REQUIRED)
 include_directories(${PostgreSQL_INCLUDE_DIRS})
+
+message("- [lua]")
+find_package(Lua 5.3 EXACT REQUIRED)
+include_directories(${LUA_INCLUDE_DIR})
+
 add_subdirectory(http)
 
 configure_file(${CMAKE_SOURCE_DIR}/config/app.h.in ${CMAKE_BINARY_DIR}/app.h @ONLY)
@@ -77,6 +84,7 @@ add_executable(chatsniffer
         irc/IRCWorkerPool.h irc/IRCWorkerPool.cpp
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
+        bot/BotConfiguration.h
         )
 
 add_subdirectory(common/tests)
@@ -94,4 +102,6 @@ target_link_libraries(chatsniffer
         clickhouse-cpp-lib-static
         ${PostgreSQL_LIBRARIES}
         absl::strings
-        langdetectpp)
+        langdetectpp
+        sol2::sol2
+        ${LUA_LIBRARIES})
