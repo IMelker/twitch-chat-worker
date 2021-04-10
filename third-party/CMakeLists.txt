@@ -1,4 +1,5 @@
 message("- [sobjectizer]")
+set(SOBJECTIZER_BUILD_SHARED OFF)
 add_subdirectory(sobjectizer/dev)
 
 message("- [json]")
