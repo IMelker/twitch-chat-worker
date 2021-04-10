@@ -63,7 +63,10 @@ class IRCWorker : public IRCMessageListener
         } messages;
     } stats;
   public:
-    explicit IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger);
+    explicit IRCWorker(IRCConnectConfig conConfig,
+                       IRCClientConfig ircConfig,
+                       IRCWorkerListener *listener,
+                       std::shared_ptr<Logger> logger);
     ~IRCWorker();
 
     IRCWorker(IRCWorker&) = delete;
@@ -73,6 +76,8 @@ class IRCWorker : public IRCMessageListener
     [[nodiscard]] const IRCClientConfig& getClientConfig() const;
     [[nodiscard]] std::set<std::string> getJoinedChannels() const;
     [[nodiscard]] const decltype(stats)& getStats() const;
+
+    bool channelLimitReached() const;
 
     bool joinChannel(const std::string &channel, std::string &result);
     void leaveChannel(const std::string& channel);

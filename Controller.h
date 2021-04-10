@@ -7,6 +7,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "common/ThreadPool.h"
 
@@ -17,8 +18,8 @@
 #include "db/ch/CHConnectionPool.h"
 #include "bot/BotsEnvironment.h"
 #include "MessageProcessor.h"
-#include "MessageStorage.h"
-#include "DBStorage.h"
+#include "Storage.h"
+#include "DBController.h"
 #include "common/Config.h"
 
 class Logger;
@@ -29,9 +30,9 @@ class Controller : public HTTPServerUnit
     ~Controller();
 
     bool startHttpServer();
-    bool startBots();
+    bool startBotsEnvironment();
 
-    bool initDBStorage();
+    bool initDBController();
     bool initIRCWorkerPool();
     bool initMessageProcessor();
     bool initMessageStorage();
@@ -52,10 +53,10 @@ class Controller : public HTTPServerUnit
 
     std::shared_ptr<Logger> logger;
     std::shared_ptr<HTTPServer> httpServer;
-    std::shared_ptr<DBStorage> db;
+    std::shared_ptr<DBController> db;
 
     std::shared_ptr<BotsEnvironment> botsEnvironment;
-    std::shared_ptr<MessageStorage> msgStorage;
+    std::shared_ptr<Storage> storage;
     std::shared_ptr<MessageProcessor> msgProcessor;
     std::shared_ptr<IRCWorkerPool> ircWorkers;
 };

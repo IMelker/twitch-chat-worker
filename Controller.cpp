@@ -11,6 +11,7 @@
 #include "common/Utils.h"
 #include "common/SysSignal.h"
 #include "common/Logger.h"
+#include "common/Timer.h"
 #include "common/LoggerFactory.h"
 
 #include "db/DBConnectionLock.h"
@@ -49,17 +50,17 @@ bool Controller::startHttpServer() {
     return httpServer->start(pool);
 }
 
-bool Controller::startBots() {
+bool Controller::startBotsEnvironment() {
     assert(botsEnvironment);
     assert(ircWorkers);
 
-    botsEnvironment->initBots(ircWorkers.get());
+    botsEnvironment->start();
 
     return true;
 }
 
 
-bool Controller::initDBStorage() {
+bool Controller::initDBController() {
     assert(!db);
 
     PGConnectionConfig pgCfg;
@@ -71,14 +72,16 @@ bool Controller::initDBStorage() {
     int pgConns = config[POSTGRESQL]["connections"].value_or(std::thread::hardware_concurrency());
     auto pgLogger = LoggerFactory::create(LoggerFactory::config(config, POSTGRESQL));
 
-    db = std::make_shared<DBStorage>(std::move(pgCfg), pgConns, pgLogger);
+    db = std::make_shared<DBController>(std::move(pgCfg), pgConns, pgLogger);
     httpServer->addControlUnit(POSTGRESQL, db->getPGPool());
 
     return db->getPGPool()->size() > 0;
 }
 
 bool Controller::initIRCWorkerPool() {
-    assert(msgProcessor); // as IRCMessageListener
+    assert(msgProcessor);    // as IRCMessageListener
+    assert(storage); // as BotLogger
+    assert(botsEnvironment); // for init sender
     assert(!ircWorkers);
 
     IRCConnectConfig ircConfig;
@@ -87,20 +90,28 @@ bool Controller::initIRCWorkerPool() {
 
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
     ircWorkers = std::make_shared<IRCWorkerPool>(ircConfig, db.get(), msgProcessor.get(), ircLogger);
+
     httpServer->addControlUnit(IRC, ircWorkers.get());
+    botsEnvironment->setSender(ircWorkers.get());
+    botsEnvironment->setBotLogger(storage.get());
 
     return ircWorkers->poolSize() > 0;
 }
 
 bool Controller::initMessageProcessor() {
     assert(!msgProcessor);
-    msgProcessor = std::make_shared<MessageProcessor>(pool, logger);
+
+    MessageProcessorConfig procCfg;
+    procCfg.languageRecognition = config[MESSAGE]["language_recognition"].value_or(false);
+
+    msgProcessor = std::make_shared<MessageProcessor>(std::move(procCfg), pool, logger);
+
     return true;
 }
 
 bool Controller::initMessageStorage() {
     assert(msgProcessor); // as publisher
-    assert(!msgStorage);
+    assert(!storage);
 
     CHConnectionConfig chCfg;
     chCfg.host = config[CLICKHOUSE]["host"].value_or("localhost");
@@ -111,15 +122,18 @@ bool Controller::initMessageStorage() {
     chCfg.secure = config[CLICKHOUSE]["secure"].value_or(false);
     chCfg.verify = config[CLICKHOUSE]["verify"].value_or(true);
     chCfg.sendRetries = config[CLICKHOUSE]["send_retries"].value_or(5);
+    int batchSize = config[CLICKHOUSE]["batch_size"].value_or(1000);
+    int flushEvery = config[CLICKHOUSE]["flush_every"].value_or(3000);
     int chConns = config[CLICKHOUSE]["connections"].value_or(std::thread::hardware_concurrency());
     auto chLogger = LoggerFactory::create(LoggerFactory::config(config, CLICKHOUSE));
 
-    msgStorage = std::make_shared<MessageStorage>(std::move(chCfg), chConns, pool, chLogger);
+    storage = std::make_shared<Storage>(std::move(chCfg), chConns, batchSize, pool, chLogger);
+    httpServer->addControlUnit(CLICKHOUSE, storage->getCHPool());
+    msgProcessor->subscribe(storage.get());
 
-    httpServer->addControlUnit(CLICKHOUSE, msgStorage->getCHPool());
-    msgProcessor->subscribe(msgStorage.get());
+    Timer::instance().setInterval([ch = storage.get()](){ ch->flush(); }, flushEvery);
 
-    return msgStorage->getCHPool()->size() > 0;
+    return storage->getCHPool()->size() > 0;
 }
 
 bool Controller::initBotsEnvironment() {
@@ -139,6 +153,7 @@ void Controller::loop() {
     while (!SysSignal::serviceTerminated()){
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+    Timer::instance().stop();
 }
 
 std::tuple<int, std::string> Controller::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {

@@ -5,7 +5,8 @@
 #ifndef CHATSNIFFER__MESSAGEPUBLISHER_H_
 #define CHATSNIFFER__MESSAGEPUBLISHER_H_
 
-#include <mutex>
+#include <shared_mutex>
+#include <memory>
 #include <vector>
 #include <algorithm>
 #include "Message.h"
@@ -20,11 +21,8 @@ class MessagePublisher
     void subscribe(MessageSubscriber* subscriber) {
         subscribers.push_back(subscriber);
     };
-    void unsubscribe(MessageSubscriber* subscriber) {
-        subscribers.erase(std::find(subscribers.begin(), subscribers.end(), subscriber));
-    }
 
-    void dispatch(const Message &message) {
+    void dispatch(const std::shared_ptr<Message> &message) {
         for (auto *subscriber: subscribers) {
             subscriber->onMessage(message);
         }

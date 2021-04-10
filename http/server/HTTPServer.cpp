@@ -82,7 +82,7 @@ void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPSessi
         return;
     }
 
-    std::lock_guard lg(unitsMutex); // TODO not covering lambda, so fix data race in future
+    std::shared_lock sl(unitsMutex); // TODO not covering lambda, so fix data race in future
     auto it = units.find(path.front());
     if (it == units.end()) {
         send(HTTPResponseFactory::NotFound(req, req.target()));

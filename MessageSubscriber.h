@@ -9,7 +9,7 @@
 
 struct MessageSubscriber
 {
-    virtual void onMessage(const Message &message) = 0;
+        virtual void onMessage(std::shared_ptr<Message> message) = 0;
 };
 
 #endif //CHATSNIFFER__MESSAGESUBSCRIBER_H_

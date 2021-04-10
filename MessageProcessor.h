@@ -22,18 +22,26 @@ class IRCWorker;
 class ThreadPool;
 class Logger;
 
+struct MessageProcessorConfig {
+    bool languageRecognition = false;
+};
+
 class MessageProcessor : public IRCMessageListener,
                          public MessagePublisher
 {
   public:
-    explicit MessageProcessor(ThreadPool *pool, std::shared_ptr<Logger> logger);
+    explicit MessageProcessor(MessageProcessorConfig config,
+                              ThreadPool *pool,
+                              std::shared_ptr<Logger> logger);
     ~MessageProcessor() override;
 
     // implementation IRCMessageProxy
     void onMessage(IRCWorker *worker, const IRCMessage &message, long long now) override;
 
-    void transform(const IRCMessage &message, long long now, Message &result);
+    std::shared_ptr<Message> transform(const IRCMessage &message, long long now);
   private:
+    MessageProcessorConfig config;
+
     ThreadPool *pool;
     std::shared_ptr<Logger> logger;
     std::shared_ptr<langdetectpp::Detector> langDetector;

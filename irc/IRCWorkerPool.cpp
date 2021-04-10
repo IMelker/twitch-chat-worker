@@ -5,25 +5,29 @@
 #include "nlohmann/json.hpp"
 
 #include "../common/Logger.h"
+#include "../common/Clock.h"
 #include "IRCWorkerPool.h"
 
 using json = nlohmann::json;
 
-IRCWorkerPool::IRCWorkerPool(const IRCConnectConfig &conConfig, DBStorage *db,
+IRCWorkerPool::IRCWorkerPool(const IRCConnectConfig &conConfig, DBController *db,
                              IRCMessageListener *listener, std::shared_ptr<Logger> logger)
   : listener(listener), logger(std::move(logger)), db(db) {
-    auto channels = this->db->loadChannels();
-    std::transform(channels.begin(), channels.end(), std::inserter(watchChannels, watchChannels.end()),
-        [](std::string& channel) -> std::pair<std::string, IRCWorker *> {
-           return std::make_pair(std::move(channel), nullptr);
-        });
-    this->logger->logInfo("IRCWorkerPool watch list updated with {} channels", watchChannels.size());
+
+    auto chs = db->loadChannels();
+    std::transform(chs.begin(), chs.end(), std::inserter(this->watchChannels, this->watchChannels.end()),
+        [] (std::string& channel) {
+            return std::make_pair(std::move(channel), nullptr);
+    });
+
+    lastChannelLoadTimestamp = CurrentTime<std::chrono::system_clock>::seconds();
 
     auto accounts = this->db->loadAccounts();
     for (auto &account : accounts) {
         auto worker = std::make_shared<IRCWorker>(conConfig, std::move(account), this, this->logger);
         workers.emplace(worker->getClientConfig().nick, worker);
     }
+    this->logger->logInfo("IRCWorkerPool {} workers inited", workers.size());
 }
 
 IRCWorkerPool::~IRCWorkerPool() = default;
@@ -33,19 +37,15 @@ size_t IRCWorkerPool::poolSize() const {
 }
 
 
-void IRCWorkerPool::sendMessage(const std::string &channel, const std::string &text) {
-    IRCWorker *worker = nullptr;
-    {
-        std::lock_guard lg(watchMutex);
-        auto it = watchChannels.find(channel);
-        // check if channel already in list
-        if (it != watchChannels.end()) {
-            worker = it->second;
-        }
+void IRCWorkerPool::sendMessage(const std::string &account,
+                                const std::string &channel,
+                                const std::string &text) {
+    auto it = workers.find(account);
+    if (it != workers.end()) {
+        it->second->sendMessage(channel, text);
+    } else {
+        logger->logWarn("Failed to find IRC worker for account: ", account);
     }
-
-    if (worker)
-        worker->sendMessage(channel, text);
 }
 
 void IRCWorkerPool::onConnected(IRCWorker *worker) {
@@ -62,14 +62,17 @@ void IRCWorkerPool::onLogin(IRCWorker *worker) {
     std::string dev_null;
 
     std::lock_guard lg(watchMutex);
-    for(auto &[channel, assigned] : watchChannels) {
-        if (assigned)
-            continue;
+    for(auto &[channel, attached]: watchChannels) {
+        if (attached) continue;
 
-        if (!worker->joinChannel(channel, dev_null))
+        if (worker->channelLimitReached())
             break;
 
-        assigned = worker;
+        if (worker->joinChannel(channel, dev_null)) {
+            attached = worker;
+        } else {
+            break;
+        }
     }
 }
 
@@ -120,46 +123,24 @@ std::string IRCWorkerPool::handleJoin(const std::string &request, std::string &e
     auto *worker = it->second.get();
 
     json body = json::object();
-    auto tryToJoinToChannel = [worker, &body, this] (const std::string& channel) {
-        auto it = watchChannels.find(channel);
-        // check if channel already in list
-        if (it != watchChannels.end()) {
-            // check if assigned to worker or not
-            if (it->second) {
-                body[channel] = {{"joined", it->second == worker},
-                                 {"reason", it->second->getClientConfig().nick + " already joined"}};
-            } else {
-                std::string result;
-                bool joined = worker->joinChannel(channel, result);
-                if (joined)
-                    it->second = worker;
-                body[channel] = {{"joined", joined}, {"reason", std::move(result)}};
-            }
-        } else {
-            std::string result;
-            bool joined = worker->joinChannel(channel, result);
-            if (joined)
-                watchChannels.insert(std::make_pair(channel, worker));
-            body[channel] = {{"joined", joined}, {"reason", std::move(result)}};
-        }
+    auto tryToJoinToChannel = [worker, &body] (const std::string& channel) {
+        std::string result;
+        bool joined = worker->joinChannel(channel, result);
+        body[channel] = {{"joined", joined}, {"reason", std::move(result)}};
     };
 
     const auto &channels = req["channels"];
     switch (channels.type()) {
         case json::value_t::array: {
-            std::lock_guard lg(watchMutex);
             for (const auto &channel: channels) {
                 if (!channel.is_string())
                     continue;
-                const auto &chan = channel.get<std::string>();
-                tryToJoinToChannel(chan);
+                tryToJoinToChannel(channel.get<std::string>());
             }
             break;
         }
         case json::value_t::string: {
-            const auto &chan = channels.get<std::string>();
-            std::lock_guard lg(watchMutex);
-            tryToJoinToChannel(chan);
+            tryToJoinToChannel(channels.get<std::string>());
             break;
         }
         default:
@@ -273,32 +254,18 @@ std::string IRCWorkerPool::handleLeave(const std::string &request, std::string &
 
     auto *worker = it->second.get();
 
-    auto tryToJoinToLeave = [worker, this] (const std::string& channel) {
-        auto it = watchChannels.find(channel);
-        if (it != watchChannels.end()) {
-            if (it->second == worker) {
-                worker->leaveChannel(channel);
-                it->second = nullptr;
-            }
-        }
-    };
-
     const auto &channels = req["channels"];
     switch (channels.type()) {
         case json::value_t::array: {
-            std::lock_guard lg(watchMutex);
             for (const auto &channel: channels) {
                 if (!channel.is_string())
                     continue;
-                const auto &chan = channel.get<std::string>();
-                tryToJoinToLeave(chan);
+                worker->leaveChannel(channel.get<std::string>());
             }
             break;
         }
         case json::value_t::string: {
-            const auto &chan = channels.get<std::string>();
-            std::lock_guard lg(watchMutex);
-            tryToJoinToLeave(chan);
+            worker->leaveChannel(channels.get<std::string>());
             break;
         }
         default:
@@ -307,63 +274,53 @@ std::string IRCWorkerPool::handleLeave(const std::string &request, std::string &
     return "";
 }
 
-std::string IRCWorkerPool::handleReloadChannels(const std::string &, std::string &error) {
-    auto channels = this->db->loadChannels();
-    if (channels.empty()) {
-        error = "Failed to load from db";
-        return "";
-    }
+std::string IRCWorkerPool::handleReloadChannels(const std::string &request, std::string &error) {
+    auto channels = this->db->loadChannels(lastChannelLoadTimestamp);
 
-    int joined = 0;
-    std::vector<std::string> leaveList;
-    std::vector<std::string> joinList;
+    std::vector<std::string> leaveList, joinList;
+    int leaved = 0, joined = 0;
+
     {
         std::lock_guard lg(watchMutex);
-        // create leave list
-        for (auto& [channel, _]: watchChannels) {
-            if (std::find(channels.begin(), channels.end(), channel) == channels.end())
-                leaveList.push_back(channel);
-        }
-
-        // create join list
-        for (auto& channel: channels) {
-            if (watchChannels.count(channel) == 0)
+        for (auto &[channel, watch]: channels) {
+            if (watch) {
                 joinList.push_back(channel);
-        }
 
-        // leave from channels
-        for (auto &channel: leaveList) {
-            auto it = watchChannels.find(channel);
-            it->second->leaveChannel(channel);
-            watchChannels.erase(it);
-        }
+                auto it = watchChannels.find(channel);
+                if (it == watchChannels.end()) {
+                    it = watchChannels.insert(std::make_pair(channel, nullptr)).first;
+                }
 
-        // join to channels list
-        std::transform(joinList.begin(), joinList.end(), std::inserter(watchChannels, watchChannels.end()),
-                       [](std::string &channel) -> std::pair<std::string, IRCWorker *> {
-                           return std::make_pair(channel, nullptr);
-                       });
+                if (it->second)
+                    continue;
 
-        // join workers to channels
-        std::string dev_null;
-        auto notAssigned = [](const auto& pair) -> bool { return !pair.second; };
-        auto it = std::find_if(watchChannels.begin(), watchChannels.end(), notAssigned);
-        for (auto&[nick, worker] : workers) {
-            while (it != watchChannels.end()) {
-                if (!worker->joinChannel(it->first, dev_null))
-                    break;
+                std::string dev_null;
+                for (auto &[acc, irc]: workers) {
+                    if (irc->channelLimitReached())
+                        continue;
 
-                it->second = worker.get();
-                ++joined;
+                    if (irc->joinChannel(channel, dev_null)) {
+                        it->second = irc.get();
+                        ++joined;
+                    }
+                }
+            } else {
+                leaveList.push_back(channel);
 
-                it = std::find_if(it, watchChannels.end(), notAssigned);
+                auto it = watchChannels.find(channel);
+                if (it == watchChannels.end())
+                    continue;
+
+                if (it->second) {
+                    it->second->leaveChannel(channel);
+                    ++leaved;
+                }
+                watchChannels.erase(it);
             }
         }
     }
 
-    logger->logInfo("Controller Channels reloaded: left: {}, joined: {}/{}",
-                    leaveList.size(), joined, joinList.size());
-
+    logger->logInfo("Controller Channels reloaded: left: {}, joined: {}", leaved, joined);
     json body = {{"leaving", json{leaveList}}, {"left", leaveList.size()}, {"joining", json{joinList}}, {"joined", joined}};
     return body.dump();
 }

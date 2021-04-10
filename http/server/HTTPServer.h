@@ -7,7 +7,7 @@
 
 #include <memory>
 #include <unordered_map>
-#include <mutex>
+#include <shared_mutex>
 #include <string>
 
 #include <boost/asio.hpp>
@@ -59,7 +59,7 @@ class HTTPServer : public HTTPRequestHandler
     std::vector<std::thread> ioRunners;
     ThreadPool *executors;
 
-    std::mutex unitsMutex;
+    std::shared_mutex unitsMutex;
     std::map<std::string, HTTPServerUnit *, std::less<>> units;
 };
 

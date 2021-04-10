@@ -68,60 +68,66 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
-    auto appLogger = LoggerFactory::create(LoggerFactory::config(config, APP));
-    DefaultLogger::setAsDefault(appLogger);
+    auto logger = LoggerFactory::create(LoggerFactory::config(config, APP));
+    DefaultLogger::setAsDefault(logger);
 
     ThreadPool pool(config[APP]["threads"].value_or(std::thread::hardware_concurrency()));
+    Controller controller(config, &pool, logger);
 
-    Controller controller(config, &pool, appLogger);
-
-    if (!controller.initDBStorage()) {
-        appLogger->logCritical("Failed to initialize DBStorage. Exit");
+    // init DBController
+    if (!controller.initDBController()) {
+        logger->logCritical("Failed to initialize DBController. Exit");
         return UNIT_RESTART;
     }
 
-    // message publisher
     if (!controller.initMessageProcessor()) {
-        appLogger->logCritical("Failed to initialize MessageProcessor. Exit");
+        logger->logCritical("Failed to initialize MessageProcessor. Exit");
         return UNIT_RESTART;
     }
 
-    // message subscribers
-    //if (!controller.initMessageStorage()) {
-    //    appLogger->logCritical("Failed to initialize MessageStorage. Exit");
-    //    return UNIT_RESTART;
-    //}
+    if (!controller.initMessageStorage()) {
+        logger->logCritical("Failed to initialize MessageStorage. Exit");
+        return UNIT_RESTART;
+    }
+
     if (!controller.initBotsEnvironment()) {
-        appLogger->logCritical("Failed to initialize MessageStorage. Exit");
+        logger->logCritical("Failed to initialize MessageStorage. Exit");
         return UNIT_RESTART;
     }
 
-    // this will start processing messages
+    // this will create connections with logins
     if (!controller.initIRCWorkerPool()) {
-        appLogger->logCritical("Failed to initialize IRCWorkerPool. Exit");
+        logger->logCritical("Failed to initialize IRCWorkerPool. Exit");
         return UNIT_RESTART;
     }
 
-    if (!controller.startBots()) {
-        appLogger->logCritical("Failed to start Bots. Exit");
+    if (!controller.startBotsEnvironment()) {
+        logger->logCritical("Failed to start Bots. Exit");
         return UNIT_RESTART;
     }
 
+    // Start HTTPServer as last instance
     if (!controller.startHttpServer()) {
-        appLogger->logCritical("Failed to start HTTP Control Server. Exit");
+        logger->logCritical("Failed to start HTTP Control Server. Exit");
         return UNIT_RESTART;
     }
 
-    // TODO Message to shared_ptr
-    // TODO Message elements to const
-    // TODO add bot, account, channel linkage
-    // TODO add bot logging
-    // TODO add user logs from lua
 
+    // TODO move all to SObjectizer framework
+    // TODO add remove timer events from Timer
+    // TODO add timer and timer event to bot
+
+    // TODO add bot, accounts update
+
+    // TODO Review accounts, channels, bots logic
+    // TODO TCP selector for socket for multiple sockets
     // TODO add tags support
     // TODO add HTTPClient
     // TODO add TwitchAPI
     // TODO add smileys detection for messages
+
+    // TODO blocked date for bot
+    // TODO blocked user for bot
 
     // TODO IRCMessage to string_view
     // TODO Make http auth for control

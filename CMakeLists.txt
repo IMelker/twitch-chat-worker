@@ -1,7 +1,7 @@
 message("[main]")
 
 cmake_minimum_required(VERSION 3.15)
-project(chatsniffer)
+project(chatcontroller)
 
 # -Wpedantic disabled because of https://github.com/abseil/abseil-cpp/issues/157
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -pthread")
@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CXX_STANDARD_REQUIRED ON)
 
 # app info
-set(APP_NAME "Chatsniffer")
+set(APP_NAME "TLuaChat")
 set(APP_VERSION_MAJOR 0)
 set(APP_VERSION_MINOR 0)
 set(APP_VERSION_PATCH 1)
@@ -55,13 +55,14 @@ include_directories(${CMAKE_BINARY_DIR})
 
 # executable configuration
 message("\n[executable]")
-add_executable(chatsniffer
+add_executable(chatcontroller
         main.cpp
         Controller.h Controller.cpp
-        DBStorage.h DBStorage.cpp
+        DBController.h DBController.cpp
         Message.h MessagePublisher.h MessageSubscriber.h
         MessageProcessor.h MessageProcessor.cpp
-        MessageStorage.h MessageStorage.cpp
+        Storage.h Storage.cpp
+        MessageSenderInterface.h
         common/SysSignal.h common/SysSignal.cpp
         common/Options.h common/Options.cpp
         common/Config.h common/Config.cpp
@@ -69,6 +70,7 @@ add_executable(chatsniffer
         common/BufferStatic.h
         common/Logger.h common/Logger.cpp common/LoggerFactory.h
         common/Utils.h common/Utils.cpp
+        common/Timer.h common/Timer.cpp
         common/Clock.h
         db/DBConnectionLock.h
         db/DBConnection.h db/DBConnection.cpp
@@ -84,7 +86,7 @@ add_executable(chatsniffer
         irc/IRCWorkerPool.h irc/IRCWorkerPool.cpp
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
-        bot/BotConfiguration.h
+        bot/BotConfiguration.h bot/BotLogger.h
         )
 
 add_subdirectory(common/tests)
@@ -93,7 +95,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_definitions(-fstack-protector-all)
 endif()
 
-target_link_libraries(chatsniffer
+target_link_libraries(chatcontroller
         pthread
         stdc++fs
         httpserver
@@ -103,5 +105,4 @@ target_link_libraries(chatsniffer
         ${PostgreSQL_LIBRARIES}
         absl::strings
         langdetectpp
-        sol2::sol2
-        ${LUA_LIBRARIES})
+        sol2::sol2 ${LUA_LIBRARIES})

@@ -8,25 +8,30 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 #include <string>
 #include "IRCWorker.h"
 #include "IRCMessageListener.h"
-#include "../DBStorage.h"
+#include "../DBController.h"
+#include "../MessageSenderInterface.h"
 
 #include "../http/server/HTTPServerUnit.h"
 
 class Logger;
-class IRCWorkerPool : public IRCWorkerListener, public HTTPServerUnit
+class IRCWorkerPool : public IRCWorkerListener,
+                      public HTTPServerUnit,
+                      public MessageSenderInterface
 {
   public:
-    IRCWorkerPool(const IRCConnectConfig &conConfig, DBStorage *db,
+    IRCWorkerPool(const IRCConnectConfig &conConfig, DBController *db,
                   IRCMessageListener *listener, std::shared_ptr<Logger> logger);
     ~IRCWorkerPool();
 
     [[nodiscard]] size_t poolSize() const;
 
-    void sendMessage(const std::string& channel, const std::string& text);
+    // implementation MessageSenderInterface
+    void sendMessage(const std::string &account, const std::string &channel, const std::string &text) override;
 
     // implementation IRCWorkerListener
     void onConnected(IRCWorker *worker) override;
@@ -50,12 +55,13 @@ class IRCWorkerPool : public IRCWorkerListener, public HTTPServerUnit
     IRCMessageListener *listener;
     std::shared_ptr<Logger> logger;
 
-    DBStorage *db;
+    DBController *db;
 
     std::map<std::string, std::shared_ptr<IRCWorker>, std::less<>> workers;
 
     std::mutex watchMutex;
-    std::map<std::string, IRCWorker*> watchChannels;
+    long long lastChannelLoadTimestamp = 0;
+    std::map<std::string, IRCWorker *> watchChannels;
 };
 
 #endif //CHATSNIFFER_IRC_IRCWORKERPOOL_H_

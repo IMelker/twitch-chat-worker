@@ -32,6 +32,10 @@ std::string toLower(std::string_view str) {
     return upperStr;
 }
 
+bool toBool(std::string_view str) {
+    return str == "t";
+}
+
 }
 
 }

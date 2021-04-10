@@ -12,8 +12,12 @@
 
 #define AUTH_ATTEMPTS_LIMIT 20
 
-IRCWorker::IRCWorker(IRCConnectConfig conConfig, IRCClientConfig ircConfig, IRCWorkerListener *listener, std::shared_ptr<Logger> logger)
-    : logger(std::move(logger)), listener(listener), conConfig(std::move(conConfig)), ircConfig(std::move(ircConfig)) {
+IRCWorker::IRCWorker(IRCConnectConfig conConfig,
+                     IRCClientConfig ircConfig,
+                     IRCWorkerListener *listener,
+                     std::shared_ptr<Logger> logger)
+    : logger(std::move(logger)), listener(listener),
+      conConfig(std::move(conConfig)), ircConfig(std::move(ircConfig)) {
     thread = std::thread(&IRCWorker::run, this);
 }
 
@@ -126,7 +130,7 @@ bool IRCWorker::joinChannel(const std::string &channel, std::string &result) {
             return true;
         }
 
-        if (joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit)) {
+        if (channelLimitReached()) {
             logger->logError(R"(IRCWorker[{}] "{}" failed to join to channel({}). Limit reached)", fmt::ptr(this), ircConfig.nick, channel);
             result = "Channels limit reached";
             return false;
@@ -197,4 +201,8 @@ void IRCWorker::onMessage(const IRCMessage &message) {
 
     stats.messages.in.updated.store(timestamp, std::memory_order_relaxed);
     stats.messages.in.count.fetch_add(1, std::memory_order_relaxed);
+}
+
+bool IRCWorker::channelLimitReached() const {
+    return joinedChannels.size() >= static_cast<size_t>(ircConfig.channels_limit);
 }

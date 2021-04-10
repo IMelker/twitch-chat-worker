@@ -30,6 +30,8 @@ template<typename T = int> T toNumber(std::string_view str) {
     return res;
 }
 
+bool toBool(std::string_view str);
+
 }
 
 }
