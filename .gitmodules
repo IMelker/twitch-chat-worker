@@ -25,3 +25,6 @@
 [submodule "third-party/sol"]
 	path = third-party/sol
 	url = https://github.com/ThePhD/sol2.git
+[submodule "third-party/sobjectizer"]
+	path = third-party/sobjectizer
+	url = https://github.com/Stiffstream/sobjectizer.git

@@ -1,3 +1,6 @@
+message("- [sobjectizer]")
+add_subdirectory(sobjectizer/dev)
+
 message("- [json]")
 add_subdirectory(json)
 
