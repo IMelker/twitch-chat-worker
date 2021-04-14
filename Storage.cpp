@@ -2,20 +2,28 @@
 // Created by imelker on 01.04.2021.
 //
 
+#include <memory>
+#include <chrono>
+
+#include <so_5/send_functions.hpp>
+
 #include "common/Logger.h"
-#include "common/ThreadPool.h"
 #include "db/DBConnectionLock.h"
 #include "db/ch/CHConnectionPool.h"
 #include "Storage.h"
 
-#include <memory>
-#include <utility>
+#define FLUSH_BOT_LOG_PERIOD std::chrono::seconds{3}, std::chrono::seconds{3}
+#define FLUSH_CHAT_MSG_PERIOD std::chrono::seconds{10}, std::chrono::seconds{10}
 
-Storage::Storage(CHConnectionConfig config, int connections,
-                 int batchSize, ThreadPool *pool,
+Storage::Storage(const context_t &ctx,
+                 so_5::mbox_t publisher,
+                 CHConnectionConfig config,
+                 int connections,
+                 int batchSize,
                  std::shared_ptr<Logger> logger)
-  : pool(pool), logger(std::move(logger)), batchSize(batchSize) {
+  : so_5::agent_t(ctx), publisher(std::move(publisher)), logger(std::move(logger)), batchSize(batchSize) {
     msgBatch.reserve(batchSize);
+    logBatch.reserve(batchSize);
 
     this->logger->logInfo("MessageStorage init Clickhouse DB pool with {} connections", connections);
     ch = std::make_shared<CHConnectionPool>(std::move(config), connections, this->logger);
@@ -23,12 +31,83 @@ Storage::Storage(CHConnectionConfig config, int connections,
 
 Storage::~Storage() {
     logger->logTrace("MessageStorage end of storage");
+}
+
+void Storage::so_define_agent() {
+    so_subscribe(publisher).event(&Storage::evtChatMessage, so_5::thread_safe);
+
+    so_subscribe_self().event(&Storage::evtBotLogMessage, so_5::thread_safe);
+    so_subscribe_self().event(&Storage::evtFlushBotLogMessages, so_5::thread_safe);
+    so_subscribe_self().event(&Storage::evtFlushChatMessages, so_5::thread_safe);
+    so_subscribe_self().event(&Storage::evtFlushAll, so_5::thread_safe);
+}
+
+void Storage::so_evt_start() {
+    botLogFlushTimer = so_5::send_periodic<Storage::FlushBotLogMessages>(*this, FLUSH_BOT_LOG_PERIOD);
+    chatMessageFlushTimer = so_5::send_periodic<Storage::FlushChatMessages>(*this, FLUSH_CHAT_MSG_PERIOD);
+}
+
+void Storage::so_evt_finish() {
     flush();
 }
 
+void Storage::evtChatMessage(mhood_t<Chat::Message> msg) {
+    store(msg.make_holder());
+}
 
-CHConnectionPool *Storage::getCHPool() const {
-    return ch.get();
+void Storage::evtBotLogMessage(mhood_t<BotLogger::Message> msg) {
+    logger->logTrace("Storage BotLogMessage: timestamp: {}, userId: {}, botId: {}, handlerId: {}, text: \"{}\"",
+                     msg->timestamp, msg->userId, msg->botId, msg->handlerId, msg->text);
+
+    store(msg.make_holder());
+}
+
+void Storage::evtFlushBotLogMessages(mhood_t<FlushBotLogMessages>) {
+    BotLogBatch temp;
+    temp.reserve(batchSize);
+    {
+        std::lock_guard ul(logBatchMutex);
+        temp.swap(logBatch);
+    }
+
+    process(temp);
+    ch->getLogger()->flush();
+}
+
+void Storage::evtFlushChatMessages(mhood_t<FlushChatMessages>) {
+    MessageBatch temp;
+    temp.reserve(batchSize);
+    {
+        std::lock_guard ul(msgBatchMutex);
+        temp.swap(msgBatch);
+    }
+
+    process(temp);
+    ch->getLogger()->flush();
+}
+
+void Storage::evtFlushAll(mhood_t<Flush>) {
+    flush();
+}
+
+void Storage::flush() {
+    MessageBatch tempMsg;
+    tempMsg.reserve(batchSize);
+    {
+        std::lock_guard ul(msgBatchMutex);
+        tempMsg.swap(msgBatch);
+    }
+    process(tempMsg);
+
+    BotLogBatch tempLog;
+    tempLog.reserve(batchSize);
+    {
+        std::lock_guard ul(logBatchMutex);
+        tempLog.swap(logBatch);
+    }
+    process(tempLog);
+
+    ch->getLogger()->flush();
 }
 
 void Storage::process(const MessageBatch& messages) {
@@ -65,7 +144,7 @@ void Storage::process(const MessageBatch& messages) {
     }
 }
 
-void Storage::process(const Storage::LogBatch &batch) {
+void Storage::process(const Storage::BotLogBatch &batch) {
     if (batch.empty())
         return;
 
@@ -98,63 +177,30 @@ void Storage::process(const Storage::LogBatch &batch) {
     }
 }
 
-void Storage::store(std::shared_ptr<Message> msg) {
-    thread_local MessageBatch tempBatch;
-    if (std::lock_guard lg(msgMutex); msgBatch.size() < batchSize) {
+void Storage::store(ChatMessageHolder &&msg) {
+    std::unique_lock ul(msgBatchMutex);
+    if (msgBatch.size() < batchSize) {
         msgBatch.push_back(std::move(msg));
-        return;
     } else {
-        tempBatch.reserve(batchSize);
-        tempBatch.swap(msgBatch);
+        MessageBatch temp;
+        temp.reserve(batchSize);
+        temp.swap(msgBatch);
+        ul.unlock();
+
+        process(temp);
     }
-
-    process(tempBatch);
-
-    tempBatch.clear();
 }
 
-void Storage::store(std::unique_ptr<LogMessage> &&msg) {
-    thread_local LogBatch tempBatch;
-    if (std::lock_guard lg(logMutex); logBatch.size() < batchSize) {
+void Storage::store(BotLogHolder &&msg) {
+    std::unique_lock ul(logBatchMutex);
+    if (logBatch.size() < batchSize) {
         logBatch.push_back(std::move(msg));
-        return;
     } else {
-        tempBatch.reserve(batchSize);
-        tempBatch.swap(logBatch);
+        BotLogBatch temp;
+        temp.reserve(batchSize);
+        temp.swap(logBatch);
+        ul.unlock();
+
+        process(temp);
     }
-
-    process(tempBatch);
-
-    tempBatch.clear();
-}
-
-void Storage::flush() {
-    MessageBatch msgTempBatch;
-    {
-        std::lock_guard lg(msgMutex);
-        msgTempBatch.swap(msgBatch);
-    }
-    process(msgTempBatch);
-
-    LogBatch logTempBatch;
-    {
-        std::lock_guard lg(logMutex);
-        logTempBatch.swap(logBatch);
-    }
-    process(logTempBatch);
-
-    ch->getLogger()->flush();
-}
-
-void Storage::onMessage(std::shared_ptr<Message> message) {
-    pool->enqueue([message = std::move(message), this]() mutable {
-        store(std::move(message));
-    });
-}
-
-void Storage::onLog(int userId, int botId, int handlerId, long long int timestamp, const std::string& text) {
-    auto message = std::make_unique<LogMessage>(LogMessage{userId, botId, handlerId, timestamp, text});
-    pool->enqueue([message = std::move(message), this]() mutable {
-        store(std::move(message));
-    });
 }

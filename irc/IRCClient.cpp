@@ -98,6 +98,10 @@ void IRCClient::process(const char* data, size_t len) {
         return;
     }
 
+    if (message.command == "PONG") {
+        return;
+    }
+
     // Default handler
     int commandIndex = getCommandHandler(message.command);
     if (commandIndex < NUM_IRC_CMDS) {

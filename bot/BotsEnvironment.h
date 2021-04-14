@@ -10,9 +10,11 @@
 #include <string>
 #include <map>
 
+#include <so_5/agent.hpp>
+
 #include "BotLogger.h"
+#include "../ChatMessage.h"
 #include "../http/server/HTTPServerUnit.h"
-#include "../MessageSubscriber.h"
 #include "../MessageSenderInterface.h"
 
 class Logger;
@@ -20,20 +22,24 @@ class ThreadPool;
 class DBController;
 class BotEngine;
 
-class BotsEnvironment : public MessageSubscriber, public HTTPServerUnit
+class BotsEnvironment final : public so_5::agent_t, public HTTPServerUnit
 {
   public:
-    BotsEnvironment(ThreadPool *pool, DBController *db, std::shared_ptr<Logger> logger);
-    ~BotsEnvironment();
+    BotsEnvironment(const context_t &ctx,
+                    so_5::mbox_t publisher,
+                    DBController *db,
+                    std::shared_ptr<Logger> logger);
+    ~BotsEnvironment() override;
 
-    void setSender(MessageSenderInterface *sender);
-    void setBotLogger(BotLogger *blogger);
+    void setMessageSender(so_5::mbox_t sender);
+    void setBotLogger(so_5::mbox_t blogger);
 
-    void start();
-    void stop();
+    // so_5::agent_t implementation
+    void so_define_agent() override;
+    void so_evt_start() override;
+    void so_evt_finish() override;
 
-    // implement MessageSubscriber
-    void onMessage(std::shared_ptr<Message> message) override;
+    void evtChatMessage(mhood_t<Chat::Message> msg);
 
     // implement HTTPControlUnit:
     std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request,
@@ -41,17 +47,16 @@ class BotsEnvironment : public MessageSubscriber, public HTTPServerUnit
     // http handlers
     std::string handleReloadConfiguration(const std::string &request, std::string &error);
   private:
-    std::shared_ptr<BotEngine> addBot(BotConfiguration config);
+    so_5::mbox_t publisher;
+    so_5::mbox_t msgSender;
+    so_5::mbox_t botLogger;
 
-    ThreadPool *pool;
     DBController *db;
-    MessageSenderInterface *irc = nullptr;
-    BotLogger *botLogger = nullptr;
     std::shared_ptr<Logger> logger;
 
-    std::shared_mutex botsMutex;
-    std::map<int, std::shared_ptr<BotEngine>> botsById;
-    std::multimap<std::string, std::shared_ptr<BotEngine>> botsByChannel;
+    std::map<int, BotEngine *> botsById;
+    std::map<std::string, so_5::mbox_t> botBoxes;
+    std::vector<std::string> ignoreUsers;
 };
 
 #endif //CHATSNIFFER_BOT_BOTENVIRONMENT_H_

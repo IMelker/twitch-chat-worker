@@ -11,33 +11,34 @@
 #include <shared_mutex>
 #include <vector>
 #include <string>
-#include "IRCWorker.h"
-#include "IRCMessageListener.h"
+
+#include <so_5/agent.hpp>
+
 #include "../DBController.h"
-#include "../MessageSenderInterface.h"
+
+#include "IRCWorker.h"
+#include "IRCEvents.h"
 
 #include "../http/server/HTTPServerUnit.h"
 
 class Logger;
-class IRCWorkerPool : public IRCWorkerListener,
-                      public HTTPServerUnit,
-                      public MessageSenderInterface
+class IRCWorkerPool final : public so_5::agent_t, public HTTPServerUnit
 {
   public:
-    IRCWorkerPool(const IRCConnectConfig &conConfig, DBController *db,
-                  IRCMessageListener *listener, std::shared_ptr<Logger> logger);
-    ~IRCWorkerPool();
+    IRCWorkerPool(const context_t &ctx, so_5::mbox_t processor,
+                  const IRCConnectConfig &conConfig, DBController *db, std::shared_ptr<Logger> logger);
+    ~IRCWorkerPool() override;
 
-    [[nodiscard]] size_t poolSize() const;
+    // implementation so_5::agent_t
+    void so_define_agent() override;
+    void so_evt_start() override;
+    void so_evt_finish() override;
 
-    // implementation MessageSenderInterface
-    void sendMessage(const std::string &account, const std::string &channel, const std::string &text) override;
-
-    // implementation IRCWorkerListener
-    void onConnected(IRCWorker *worker) override;
-    void onDisconnected(IRCWorker *worker) override;
-    void onLogin(IRCWorker *worker) override;
-    void onMessage(IRCWorker *worker, const IRCMessage &message, long long now) override;
+    // so_5 events
+    void evtSendMessage(mhood_t<SendMessage> message);
+    void evtWorkerConnected(mhood_t<WorkerConnected> evt);
+    void evtWorkerDisconnected(mhood_t<WorkerDisconnected> evt);
+    void evtWorkerLogin(mhood_t<WorkerLoggedIn> evt);
 
     // implementation HTTPServerUnit
     std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string& request,
@@ -52,14 +53,14 @@ class IRCWorkerPool : public IRCWorkerListener,
     std::string handleMessage(const std::string &request, std::string &error);
     std::string handleCustom(const std::string &request, std::string &error);
   private:
-    IRCMessageListener *listener;
+    so_5::mbox_t processor;
     std::shared_ptr<Logger> logger;
 
+    const IRCConnectConfig config;
     DBController *db;
 
-    std::map<std::string, std::shared_ptr<IRCWorker>, std::less<>> workers;
+    std::map<std::string, IRCWorker *, std::less<>> workers;
 
-    std::mutex watchMutex;
     long long lastChannelLoadTimestamp = 0;
     std::map<std::string, IRCWorker *> watchChannels;
 };

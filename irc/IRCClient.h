@@ -15,11 +15,14 @@
 #include "../common/BufferStatic.h"
 #include "../common/Utils.h"
 
-#include "IRCMessageListener.h"
 #include "IRCMessage.h"
 #include "IRCSocket.h"
 
 #define BUFF_SIZE (1024 * 4)
+
+struct IRCMessageListener {
+    virtual void onMessage(const IRCMessage &message) {};
+};
 
 class Logger;
 class IRCClient

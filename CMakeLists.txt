@@ -33,6 +33,7 @@ message("\n[third-party]")
 add_subdirectory(third-party)
 include_directories(third-party/spdlog/include)
 include_directories(third-party/toml)
+include_directories(third-party/fmt/include)
 include_directories(third-party/opts/include)
 include_directories(third-party/clickhouse)
 include_directories(third-party/langdetect/langdetectpp/include)
@@ -59,7 +60,7 @@ add_executable(chatcontroller
         main.cpp
         Controller.h Controller.cpp
         DBController.h DBController.cpp
-        Message.h MessagePublisher.h MessageSubscriber.h
+        ChatMessage.h
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
         MessageSenderInterface.h
@@ -87,6 +88,7 @@ add_executable(chatcontroller
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
         bot/BotConfiguration.h bot/BotLogger.h
+        http/HTTPServerAgent.h http/HTTPServerAgent.cpp
         )
 
 add_subdirectory(common/tests)
@@ -96,8 +98,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 endif()
 
 target_link_libraries(chatcontroller
-        pthread
         stdc++fs
+        pthread ssl crypto
+        sobjectizer::StaticLib
         httpserver
         nlohmann_json
         spdlog

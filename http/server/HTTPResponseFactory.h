@@ -6,11 +6,17 @@
 #define CHATSNIFFER_HTTP_SERVER_HTTPRESPONSEFACTORY_H_
 
 #include <string_view>
+
 #include <boost/beast.hpp>
+#include <boost/beast/http.hpp>
+#include <fmt/format.h>
+
 #include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
 
+namespace beast = boost::beast;         // from <boost/beast.hpp>
+namespace http = beast::http;           // from <boost/beast/http.hpp>
 
 struct HTTPResponseFactory {
     template<class Request>

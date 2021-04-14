@@ -8,11 +8,13 @@
 #include <string>
 #include <utility>
 
+namespace Chat {
+
 struct Message {
     Message(std::string user, std::string channel, std::string text,
             std::string lang, long long timestamp, bool valid)
-      : user(std::move(user)), channel(std::move(channel)), text(std::move(text)),
-        lang(std::move(lang)), timestamp(timestamp), valid(valid) {
+        : user(std::move(user)), channel(std::move(channel)), text(std::move(text)),
+          lang(std::move(lang)), timestamp(timestamp), valid(valid) {
     }
 
     const std::string user;
@@ -22,5 +24,7 @@ struct Message {
     const long long timestamp;
     const bool valid;
 };
+
+}
 
 #endif //CHATSNIFFER__MESSAGE_H_

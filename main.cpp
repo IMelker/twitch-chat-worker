@@ -5,6 +5,8 @@
 #include <wait.h>
 #include <thread>
 
+#include <so_5/all.hpp>
+
 #include "common/SysSignal.h"
 #include "common/Options.h"
 #include "common/Config.h"
@@ -14,15 +16,29 @@
 #include "db/ch/CHConnectionPool.h"
 #include "db/pg/PGConnectionPool.h"
 
+#include "DBController.h"
 #include "Controller.h"
 
 #define UNIT_OK 0
 #define UNIT_RESTART 1
-#define UNIT_STOP -1
+#define UNIT_STOP (-1)
 
 void printVersion() {
     printf("Name: " APP_NAME "\nVersion: " APP_VERSION "\nAuthor: " APP_AUTHOR_EMAIL "\n"
            "Git: " APP_GIT_HASH "\nBuild: " APP_GIT_DATE " gcc-" __VERSION__ "\n");
+}
+
+std::shared_ptr<DBController> createDBController(Config& config) {
+    PGConnectionConfig pgCfg;
+    pgCfg.host = config[POSTGRESQL]["host"].value_or("localhost");
+    pgCfg.port = config[POSTGRESQL]["port"].value_or(5432);
+    pgCfg.dbname = config[POSTGRESQL]["dbname"].value_or("postgres");
+    pgCfg.user = config[POSTGRESQL]["user"].value_or("postgres");
+    pgCfg.pass = config[POSTGRESQL]["password"].value_or("postgres");
+    int pgConns = config[POSTGRESQL]["connections"].value_or(std::thread::hardware_concurrency());
+    auto pgLogger = LoggerFactory::create(LoggerFactory::config(config, POSTGRESQL));
+
+    return std::make_shared<DBController>(std::move(pgCfg), pgConns, pgLogger);
 }
 
 int main(int argc, char *argv[]) {
@@ -71,53 +87,38 @@ int main(int argc, char *argv[]) {
     auto logger = LoggerFactory::create(LoggerFactory::config(config, APP));
     DefaultLogger::setAsDefault(logger);
 
-    ThreadPool pool(config[APP]["threads"].value_or(std::thread::hardware_concurrency()));
-    Controller controller(config, &pool, logger);
-
-    // init DBController
-    if (!controller.initDBController()) {
+    auto db = createDBController(config);
+    if (db->getPGPool()->size() == 0) {
         logger->logCritical("Failed to initialize DBController. Exit");
         return UNIT_RESTART;
     }
 
-    if (!controller.initMessageProcessor()) {
-        logger->logCritical("Failed to initialize MessageProcessor. Exit");
+    try {
+        so_5::launch([&](so_5::environment_t &env) {
+            env.register_agent_as_coop(env.make_agent<Controller>(config, db, logger));
+        });
+    }
+    catch (const std::exception &e) {
+        logger->logCritical("Exception: ", e.what());
         return UNIT_RESTART;
     }
+    return UNIT_OK;
 
-    if (!controller.initMessageStorage()) {
-        logger->logCritical("Failed to initialize MessageStorage. Exit");
-        return UNIT_RESTART;
-    }
+    // TODO choose dispatchers
+    // TODO fix options, remove useless and add contolls
 
-    if (!controller.initBotsEnvironment()) {
-        logger->logCritical("Failed to initialize MessageStorage. Exit");
-        return UNIT_RESTART;
-    }
+     // TODO ressurect HTTPServer
 
-    // this will create connections with logins
-    if (!controller.initIRCWorkerPool()) {
-        logger->logCritical("Failed to initialize IRCWorkerPool. Exit");
-        return UNIT_RESTART;
-    }
-
-    if (!controller.startBotsEnvironment()) {
-        logger->logCritical("Failed to start Bots. Exit");
-        return UNIT_RESTART;
-    }
-
-    // Start HTTPServer as last instance
-    if (!controller.startHttpServer()) {
-        logger->logCritical("Failed to start HTTP Control Server. Exit");
-        return UNIT_RESTART;
-    }
-
-
-    // TODO move all to SObjectizer framework
+     // TODO BotEngone timer events
     // TODO add remove timer events from Timer
     // TODO add timer and timer event to bot
 
+     // TODO change channel join behavior
+
+    // TODO move language detect to BOTEngine (?)
+
     // TODO add bot, accounts update
+    // TODO add uuid for message, uuid to storage and link uuid to BotLogger::Message
 
     // TODO Review accounts, channels, bots logic
     // TODO TCP selector for socket for multiple sockets
@@ -133,7 +134,4 @@ int main(int argc, char *argv[]) {
     // TODO Make http auth for control
     // TODO make clickhouse SSL client
     // TODO change CH name and display sizes user max=50
-
-    Controller::loop();
-    return UNIT_OK;
 }

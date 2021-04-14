@@ -11,17 +11,12 @@
 #include <mutex>
 #include <vector>
 
+#include <so_5/agent.hpp>
+#include <so_5/timers.hpp>
+
 #include "../common/SysSignal.h"
-
 #include "IRCClient.h"
-#include "IRCMessageListener.h"
-
-class IRCWorker;
-struct IRCWorkerListener : public IRCMessageListener {
-    virtual void onConnected(IRCWorker *worker) = 0;
-    virtual void onDisconnected(IRCWorker *worker) = 0;
-    virtual void onLogin(IRCWorker *worker) = 0;
-};
+#include "IRCEvents.h"
 
 struct IRCConnectConfig {
     std::string host;
@@ -40,7 +35,7 @@ struct IRCClientConfig {
 };
 
 class Logger;
-class IRCWorker : public IRCMessageListener
+class IRCWorker final : public so_5::agent_t, public IRCMessageListener
 {
     struct {
         struct {
@@ -63,33 +58,45 @@ class IRCWorker : public IRCMessageListener
         } messages;
     } stats;
   public:
-    explicit IRCWorker(IRCConnectConfig conConfig,
+    explicit IRCWorker(const context_t &ctx,
+                       so_5::mbox_t parent,
+                       so_5::mbox_t processor,
+                       IRCConnectConfig conConfig,
                        IRCClientConfig ircConfig,
-                       IRCWorkerListener *listener,
                        std::shared_ptr<Logger> logger);
-    ~IRCWorker();
+    ~IRCWorker() override;
 
     IRCWorker(IRCWorker&) = delete;
     IRCWorker& operator=(IRCWorker&) = delete;
+
+    // implementation so_5::agent_t
+    void so_define_agent() override;
+    void so_evt_start() override;
+    void so_evt_finish() override;
+
+    void evtJoinChannel(mhood_t<JoinChannel> evt);
+    void evtLeaveChannel(mhood_t<LeaveChannel> evt);
+    void evtSendMessage(mhood_t<SendMessage> message);
+    void evtSendIRC(mhood_t<SendIRC> irc);
+    void evtSendPING(mhood_t<SendPING> ping);
 
     [[nodiscard]] const IRCConnectConfig& getConnectConfig() const;
     [[nodiscard]] const IRCClientConfig& getClientConfig() const;
     [[nodiscard]] std::set<std::string> getJoinedChannels() const;
     [[nodiscard]] const decltype(stats)& getStats() const;
 
-    bool channelLimitReached() const;
+    int freeChannelSpace() const;
 
-    bool joinChannel(const std::string &channel, std::string &result);
-    void leaveChannel(const std::string& channel);
-    bool sendMessage(const std::string& channel, const std::string& text);
-    bool sendIRC(const std::string& message);
-
+    // implementation IRCMessageListener
     void onMessage(const IRCMessage &message) override;
   private:
+    bool sendIRC(const std::string& message);
     void run();
 
     const std::shared_ptr<Logger> logger;
-    IRCWorkerListener * const listener;
+
+    so_5::mbox_t parent;
+    so_5::mbox_t processor;
 
     const IRCConnectConfig conConfig;
     const IRCClientConfig ircConfig;
@@ -99,6 +106,7 @@ class IRCWorker : public IRCMessageListener
     mutable std::mutex channelsMutex;
     std::set<std::string> joinedChannels;
 
+    so_5::timer_id_t pingTimer;
     std::thread thread;
 };
 

@@ -4,80 +4,90 @@
 
 #include "nlohmann/json.hpp"
 
+#include <so_5/send_functions.hpp>
+
 #include "../common/Logger.h"
 #include "../common/Clock.h"
 #include "IRCWorkerPool.h"
 
+#include <utility>
+
 using json = nlohmann::json;
 
-IRCWorkerPool::IRCWorkerPool(const IRCConnectConfig &conConfig, DBController *db,
-                             IRCMessageListener *listener, std::shared_ptr<Logger> logger)
-  : listener(listener), logger(std::move(logger)), db(db) {
+IRCWorkerPool::IRCWorkerPool(const context_t &ctx, so_5::mbox_t processor,
+                             const IRCConnectConfig &conConfig,
+                             DBController *db,
+                             std::shared_ptr<Logger> logger)
+  : so_5::agent_t(ctx), processor(std::move(processor)), logger(std::move(logger)), config(conConfig), db(db) {
 
     auto chs = db->loadChannels();
     std::transform(chs.begin(), chs.end(), std::inserter(this->watchChannels, this->watchChannels.end()),
         [] (std::string& channel) {
             return std::make_pair(std::move(channel), nullptr);
     });
-
     lastChannelLoadTimestamp = CurrentTime<std::chrono::system_clock>::seconds();
-
-    auto accounts = this->db->loadAccounts();
-    for (auto &account : accounts) {
-        auto worker = std::make_shared<IRCWorker>(conConfig, std::move(account), this, this->logger);
-        workers.emplace(worker->getClientConfig().nick, worker);
-    }
-    this->logger->logInfo("IRCWorkerPool {} workers inited", workers.size());
 }
 
 IRCWorkerPool::~IRCWorkerPool() = default;
 
-size_t IRCWorkerPool::poolSize() const {
-    return workers.size();
+
+void IRCWorkerPool::so_define_agent() {
+    so_subscribe_self().event(&IRCWorkerPool::evtSendMessage);
+    so_subscribe_self().event(&IRCWorkerPool::evtWorkerConnected);
+    so_subscribe_self().event(&IRCWorkerPool::evtWorkerDisconnected);
+    so_subscribe_self().event(&IRCWorkerPool::evtWorkerLogin);
 }
 
+void IRCWorkerPool::so_evt_start() {
+    auto accounts = this->db->loadAccounts();
 
-void IRCWorkerPool::sendMessage(const std::string &account,
-                                const std::string &channel,
-                                const std::string &text) {
-    auto it = workers.find(account);
-    if (it != workers.end()) {
-        it->second->sendMessage(channel, text);
-    } else {
-        logger->logWarn("Failed to find IRC worker for account: ", account);
-    }
-}
-
-void IRCWorkerPool::onConnected(IRCWorker *worker) {
-    logger->logTrace("IRCWorkerPool::IRCWorker[{}] connected", fmt::ptr(worker));
-}
-
-void IRCWorkerPool::onDisconnected(IRCWorker *worker) {
-    logger->logTrace("IRCWorkerPool::IRCWorker[{}] disconnected", fmt::ptr(worker));
-}
-
-void IRCWorkerPool::onLogin(IRCWorker *worker) {
-    logger->logTrace("IRCWorkerPool::IRCWorker[{}] logged in", fmt::ptr(worker));
-
-    std::string dev_null;
-
-    std::lock_guard lg(watchMutex);
-    for(auto &[channel, attached]: watchChannels) {
-        if (attached) continue;
-
-        if (worker->channelLimitReached())
-            break;
-
-        if (worker->joinChannel(channel, dev_null)) {
-            attached = worker;
-        } else {
-            break;
+    so_5::introduce_child_coop(*this, [&] (so_5::coop_t &coop) {
+        for (auto &account : accounts) {
+            auto *worker = coop.make_agent<IRCWorker>(so_direct_mbox(), processor, config, account, this->logger);
+            workers.emplace(account.nick, worker);
         }
+    });
+
+    this->logger->logInfo("IRCWorkerPool {} workers inited", workers.size());
+}
+
+void IRCWorkerPool::so_evt_finish() {
+
+}
+
+void IRCWorkerPool::evtSendMessage(mhood_t<SendMessage> message) {
+    auto it = workers.find(message->account);
+    if (it != workers.end()) {
+        so_5::send(it->second->so_direct_mbox(), message);
+    } else {
+        logger->logWarn("Failed to find IRC worker for account: ", message->account);
     }
 }
 
-void IRCWorkerPool::onMessage(IRCWorker *worker, const IRCMessage &message, long long now) {
-    listener->onMessage(worker, message, now);
+void IRCWorkerPool::evtWorkerConnected(so_5::mhood_t<WorkerConnected> evt) {
+    logger->logTrace("IRCWorkerPool::IRCWorker[{}] on connected", fmt::ptr(evt->worker));
+}
+
+void IRCWorkerPool::evtWorkerDisconnected(so_5::mhood_t<WorkerDisconnected> evt) {
+    logger->logTrace("IRCWorkerPool::IRCWorker[{}] on disconnected", fmt::ptr(evt->worker));
+}
+
+void IRCWorkerPool::evtWorkerLogin(so_5::mhood_t<WorkerLoggedIn> evt) {
+    logger->logTrace("IRCWorkerPool::IRCWorker[{}] on logged in", fmt::ptr(evt->worker));
+
+    int counter = evt->worker->freeChannelSpace();
+    if (counter == 0)
+        return;
+
+    for(auto &[channel, attached]: watchChannels) {
+        if (attached && attached != evt->worker) continue;
+
+        so_5::send<JoinChannel>(evt->worker->so_direct_mbox(), channel);
+        attached = evt->worker;
+
+        if (--counter == 0)
+            break;
+    }
 }
 
 std::tuple<int, std::string> IRCWorkerPool::processHttpRequest(std::string_view path, const std::string &request,
@@ -120,12 +130,15 @@ std::string IRCWorkerPool::handleJoin(const std::string &request, std::string &e
         error = "Account not found";
         return "";
     }
-    auto *worker = it->second.get();
+    auto *worker = it->second;
+    int channelSpace = worker->freeChannelSpace();
 
     json body = json::object();
-    auto tryToJoinToChannel = [worker, &body] (const std::string& channel) {
+    auto tryToJoinToChannel = [worker, &body, &channelSpace] (const std::string& channel) {
         std::string result;
-        bool joined = worker->joinChannel(channel, result);
+        bool joined = (--channelSpace == 0);
+        if (joined)
+            so_5::send<JoinChannel>(worker->so_direct_mbox(), channel);
         body[channel] = {{"joined", joined}, {"reason", std::move(result)}};
     };
 
@@ -252,7 +265,7 @@ std::string IRCWorkerPool::handleLeave(const std::string &request, std::string &
         return "";
     }
 
-    auto *worker = it->second.get();
+    auto *worker = it->second;
 
     const auto &channels = req["channels"];
     switch (channels.type()) {
@@ -260,12 +273,12 @@ std::string IRCWorkerPool::handleLeave(const std::string &request, std::string &
             for (const auto &channel: channels) {
                 if (!channel.is_string())
                     continue;
-                worker->leaveChannel(channel.get<std::string>());
+                so_5::send<LeaveChannel>(worker->so_direct_mbox(), channel.get<std::string>());
             }
             break;
         }
         case json::value_t::string: {
-            worker->leaveChannel(channels.get<std::string>());
+            so_5::send<LeaveChannel>(worker->so_direct_mbox(), channels.get<std::string>());
             break;
         }
         default:
@@ -281,7 +294,7 @@ std::string IRCWorkerPool::handleReloadChannels(const std::string &request, std:
     int leaved = 0, joined = 0;
 
     {
-        std::lock_guard lg(watchMutex);
+        //std::lock_guard lg(watchMutex);
         for (auto &[channel, watch]: channels) {
             if (watch) {
                 joinList.push_back(channel);
@@ -294,15 +307,15 @@ std::string IRCWorkerPool::handleReloadChannels(const std::string &request, std:
                 if (it->second)
                     continue;
 
-                std::string dev_null;
                 for (auto &[acc, irc]: workers) {
-                    if (irc->channelLimitReached())
+                    int space = irc->freeChannelSpace();
+                    if (space == 0)
                         continue;
 
-                    if (irc->joinChannel(channel, dev_null)) {
-                        it->second = irc.get();
-                        ++joined;
-                    }
+                    so_5::send<JoinChannel>(irc->so_direct_mbox(), channel);
+                    it->second = irc;
+                    ++joined;
+                    break;
                 }
             } else {
                 leaveList.push_back(channel);
@@ -312,7 +325,7 @@ std::string IRCWorkerPool::handleReloadChannels(const std::string &request, std:
                     continue;
 
                 if (it->second) {
-                    it->second->leaveChannel(channel);
+                    so_5::send<LeaveChannel>(it->second->so_direct_mbox(), channel);
                     ++leaved;
                 }
                 watchChannels.erase(it);
@@ -348,12 +361,14 @@ std::string IRCWorkerPool::handleMessage(const std::string &request, std::string
                     if (!channel.is_string())
                         continue;
                     const auto &chan = channel.get<std::string>();
-                    res[chan] = worker->sendMessage(chan, text);
+                    so_5::send<SendMessage>(worker->so_direct_mbox(), worker->getClientConfig().nick, chan, text);
+                    res[chan] = true;
                 }
                 break;
             case json::value_t::string: {
                 const auto &chan = channels.get<std::string>();
-                res[chan] = worker->sendMessage(chan, text);
+                so_5::send<SendMessage>(worker->so_direct_mbox(), worker->getClientConfig().nick, chan, text);
+                res[chan] = true;
                 break;
             }
             default:
@@ -377,7 +392,7 @@ std::string IRCWorkerPool::handleMessage(const std::string &request, std::string
                     continue;
                 }
 
-                body[acc] = sendTextToChannels(it->second.get(), text);
+                body[acc] = sendTextToChannels(it->second, text);
             }
             break;
         case json::value_t::string: {
@@ -388,7 +403,7 @@ std::string IRCWorkerPool::handleMessage(const std::string &request, std::string
                 break;
             }
 
-            body[acc] = sendTextToChannels(it->second.get(), text);
+            body[acc] = sendTextToChannels(it->second, text);
             break;
         }
         default:
@@ -426,8 +441,9 @@ std::string IRCWorkerPool::handleCustom(const std::string &request, std::string 
                     continue;
                 }
 
-                logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second.get()), acc, command);
-                body[acc] = it->second->sendIRC(command);
+                logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second), acc, command);
+                so_5::send<SendIRC>(it->second->so_direct_mbox(), command);
+                body[acc] = true;
             }
             break;
         case json::value_t::string: {
@@ -438,8 +454,9 @@ std::string IRCWorkerPool::handleCustom(const std::string &request, std::string 
                 break;
             }
 
-            logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second.get()), acc, command);
-            body[acc] = it->second->sendIRC(command);
+            logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second), acc, command);
+            so_5::send<SendIRC>(it->second->so_direct_mbox(), command);
+            body[acc] = true;
             break;
         }
         default:

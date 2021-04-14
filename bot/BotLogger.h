@@ -7,8 +7,16 @@
 
 #include <string>
 
-struct BotLogger {
-    virtual void onLog(int userId, int botId, int handlerId, long long timestamp, const std::string& text) = 0;
+namespace BotLogger {
+
+struct Message {
+    int userId = 0;
+    int botId = 0;
+    int handlerId = 0;
+    long long timestamp = 0;
+    std::string text;
+};
+
 };
 
 #endif //CHATCONTROLLER_BOT_BOTLOGGER_H_

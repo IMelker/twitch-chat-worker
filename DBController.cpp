@@ -25,6 +25,28 @@ PGConnectionPool *DBController::getPGPool() const {
     return pg.get();
 }
 
+DBController::Users DBController::loadUsersNicknames() {
+    static const std::string request = "SELECT username FROM accounts WHERE active = true;";
+
+    DBController::Users users;
+    {
+        DBConnectionLock dbl(pg);
+        if (!dbl->ping())
+            return users;
+
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            users.reserve(res.size());
+            std::transform(res.begin(), res.end(), std::back_inserter(users), [] (auto& row) -> std::string&& {
+                return std::move(row[0]);
+            });
+        }
+    }
+
+    DefaultLogger::logInfo("Controller {} our users loaded", users.size());
+    return users;
+}
+
 DBController::Accounts DBController::loadAccounts() {
     static const std::string request = "SELECT username, display, oauth, channels_limit, "
                                        "whisper_per_sec_limit, auth_per_sec_limit, "

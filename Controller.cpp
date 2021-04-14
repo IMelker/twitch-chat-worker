@@ -6,12 +6,14 @@
 #include <algorithm>
 #include <chrono>
 
+#include <so_5/send_functions.hpp>
+#include <so_5/disp/thread_pool/pub.hpp>
+
 #include "nlohmann/json.hpp"
 
 #include "common/Utils.h"
 #include "common/SysSignal.h"
 #include "common/Logger.h"
-#include "common/Timer.h"
 #include "common/LoggerFactory.h"
 
 #include "db/DBConnectionLock.h"
@@ -19,9 +21,13 @@
 
 using json = nlohmann::json;
 
-Controller::Controller(Config &config, ThreadPool *pool, std::shared_ptr<Logger> logger)
-    : pool(pool), config(config), logger(std::move(logger)) {
-    this->logger->logInfo("Controller created with {} threads", pool->size());
+Controller::Controller(const context_t& ctx, Config &config,
+                       std::shared_ptr<DBController> db, std::shared_ptr<Logger> logger)
+    : so_5::agent_t(ctx),
+      config(config),
+      logger(std::move(logger)),
+      db(std::move(db)) {
+    //this->logger->logInfo("Controller created with {} threads", pool->size());
 
     HTTPControlConfig httpCfg;
     httpCfg.host = config[HTTP_CONTROL]["host"].value_or("localhost");
@@ -38,7 +44,9 @@ Controller::Controller(Config &config, ThreadPool *pool, std::shared_ptr<Logger>
     }
     auto httpLogger = LoggerFactory::create(LoggerFactory::config(config, HTTP_CONTROL));
     httpServer = std::make_shared<HTTPServer>(std::move(httpCfg), httpLogger);
+
     httpServer->addControlUnit(APP, this);
+    httpServer->addControlUnit(POSTGRESQL, this->db->getPGPool());
 }
 
 Controller::~Controller() {
@@ -46,73 +54,37 @@ Controller::~Controller() {
     httpServer->clearUnits();
 };
 
-bool Controller::startHttpServer() {
-    return httpServer->start(pool);
+void Controller::so_define_agent() {
+    so_subscribe_self().event([this](mhood_t<Controller::ShutdownCheck>) {
+        if (SysSignal::serviceTerminated()) {
+            so_deregister_agent_coop_normally();
+        }
+    });
 }
 
-bool Controller::startBotsEnvironment() {
-    assert(botsEnvironment);
-    assert(ircWorkers);
+void Controller::so_evt_start() {
+    so_5::introduce_child_coop(*this, [&] (so_5::coop_t &coop) {
+        auto listener = so_environment().create_mbox();
+        storage = makeStorage(coop, listener);
+        botsEnvironment = makeBotsEnvironment(coop, listener);
+        msgProcessor = makeMessageProcessor(coop, listener/*as publisher*/);
+        ircWorkers = makeIRCWorkerPool(coop);
 
-    botsEnvironment->start();
+        botsEnvironment->setMessageSender(ircWorkers->so_direct_mbox());
+        botsEnvironment->setBotLogger(storage->so_direct_mbox());
+    });
 
-    return true;
+    shutdownCheckTimer = so_5::send_periodic<Controller::ShutdownCheck>(so_direct_mbox(),
+                                                                        std::chrono::seconds(1),
+                                                                        std::chrono::seconds(1));
+}
+
+void Controller::so_evt_finish() {
+
 }
 
 
-bool Controller::initDBController() {
-    assert(!db);
-
-    PGConnectionConfig pgCfg;
-    pgCfg.host = config[POSTGRESQL]["host"].value_or("localhost");
-    pgCfg.port = config[POSTGRESQL]["port"].value_or(5432);
-    pgCfg.dbname = config[POSTGRESQL]["dbname"].value_or("postgres");
-    pgCfg.user = config[POSTGRESQL]["user"].value_or("postgres");
-    pgCfg.pass = config[POSTGRESQL]["password"].value_or("postgres");
-    int pgConns = config[POSTGRESQL]["connections"].value_or(std::thread::hardware_concurrency());
-    auto pgLogger = LoggerFactory::create(LoggerFactory::config(config, POSTGRESQL));
-
-    db = std::make_shared<DBController>(std::move(pgCfg), pgConns, pgLogger);
-    httpServer->addControlUnit(POSTGRESQL, db->getPGPool());
-
-    return db->getPGPool()->size() > 0;
-}
-
-bool Controller::initIRCWorkerPool() {
-    assert(msgProcessor);    // as IRCMessageListener
-    assert(storage); // as BotLogger
-    assert(botsEnvironment); // for init sender
-    assert(!ircWorkers);
-
-    IRCConnectConfig ircConfig;
-    ircConfig.host = config[IRC]["host"].value_or("irc.chat.twitch.tv");
-    ircConfig.port = config[IRC]["port"].value_or(6667);
-
-    auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
-    ircWorkers = std::make_shared<IRCWorkerPool>(ircConfig, db.get(), msgProcessor.get(), ircLogger);
-
-    httpServer->addControlUnit(IRC, ircWorkers.get());
-    botsEnvironment->setSender(ircWorkers.get());
-    botsEnvironment->setBotLogger(storage.get());
-
-    return ircWorkers->poolSize() > 0;
-}
-
-bool Controller::initMessageProcessor() {
-    assert(!msgProcessor);
-
-    MessageProcessorConfig procCfg;
-    procCfg.languageRecognition = config[MESSAGE]["language_recognition"].value_or(false);
-
-    msgProcessor = std::make_shared<MessageProcessor>(std::move(procCfg), pool, logger);
-
-    return true;
-}
-
-bool Controller::initMessageStorage() {
-    assert(msgProcessor); // as publisher
-    assert(!storage);
-
+Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listener) {
     CHConnectionConfig chCfg;
     chCfg.host = config[CLICKHOUSE]["host"].value_or("localhost");
     chCfg.port = config[CLICKHOUSE]["port"].value_or(5432);
@@ -123,37 +95,38 @@ bool Controller::initMessageStorage() {
     chCfg.verify = config[CLICKHOUSE]["verify"].value_or(true);
     chCfg.sendRetries = config[CLICKHOUSE]["send_retries"].value_or(5);
     int batchSize = config[CLICKHOUSE]["batch_size"].value_or(1000);
-    int flushEvery = config[CLICKHOUSE]["flush_every"].value_or(3000);
-    int chConns = config[CLICKHOUSE]["connections"].value_or(std::thread::hardware_concurrency());
+    unsigned int chConns = config[CLICKHOUSE]["connections"].value_or(1);
+
     auto chLogger = LoggerFactory::create(LoggerFactory::config(config, CLICKHOUSE));
-
-    storage = std::make_shared<Storage>(std::move(chCfg), chConns, batchSize, pool, chLogger);
-    httpServer->addControlUnit(CLICKHOUSE, storage->getCHPool());
-    msgProcessor->subscribe(storage.get());
-
-    Timer::instance().setInterval([ch = storage.get()](){ ch->flush(); }, flushEvery);
-
-    return storage->getCHPool()->size() > 0;
+    return coop.make_agent<Storage>(listener, std::move(chCfg), chConns, batchSize, chLogger);
 }
 
-bool Controller::initBotsEnvironment() {
-    assert(msgProcessor); // as publisher
-    assert(!botsEnvironment);
-
+BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener) {
     auto botsLogger = LoggerFactory::create(LoggerFactory::config(config, BOT));
-    botsEnvironment = std::make_shared<BotsEnvironment>(pool, db.get(), botsLogger);
-
-    httpServer->addControlUnit(BOT, botsEnvironment.get());
-    msgProcessor->subscribe(botsEnvironment.get());
-
-    return true;
+    return coop.make_agent<BotsEnvironment>(listener, db.get(), botsLogger);
 }
 
-void Controller::loop() {
-    while (!SysSignal::serviceTerminated()){
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-    Timer::instance().stop();
+MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher) {
+    MessageProcessorConfig procCfg;
+    procCfg.languageRecognition = config[MSG]["language_recognition"].value_or(false);
+    unsigned int procThreads = config[MSG]["threads"].value_or(2);
+
+    auto procPool = so_5::disp::thread_pool::make_dispatcher(so_environment(), procThreads);
+    auto procPoolParams = so_5::disp::thread_pool::bind_params_t{};
+    return coop.make_agent_with_binder<MessageProcessor>(procPool.binder(procPoolParams),
+                                                         publisher, std::move(procCfg), this->logger);
+}
+
+IRCWorkerPool *Controller::makeIRCWorkerPool(so_5::coop_t &coop) {
+    IRCConnectConfig ircConfig;
+    ircConfig.host = config[IRC]["host"].value_or("irc.chat.twitch.tv");
+    ircConfig.port = config[IRC]["port"].value_or(6667);
+    auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
+    return coop.make_agent<IRCWorkerPool>(msgProcessor->so_direct_mbox(), ircConfig, db.get(), ircLogger);
+}
+
+bool Controller::startHttpServer() {
+    return true; //httpServer->start(pool);
 }
 
 std::tuple<int, std::string> Controller::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {

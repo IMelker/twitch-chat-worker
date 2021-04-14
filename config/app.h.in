@@ -10,4 +10,4 @@
 #define CLICKHOUSE "ch"
 #define IRC "irc"
 #define BOT "bot"
-#define MESSAGE "message"
+#define MSG "message"

@@ -2,17 +2,17 @@
 // Created by imelker on 08.03.2021.
 //
 
+#include <so_5/send_functions.hpp>
+
 #include "common/ThreadPool.h"
 #include "common/Logger.h"
 #include "irc/IRCWorker.h"
-#include "Message.h"
+#include "ChatMessage.h"
 #include "MessageProcessor.h"
 
-MessageProcessor::MessageProcessor(MessageProcessorConfig config,
-                                   ThreadPool *pool,
-                                   std::shared_ptr<Logger> logger)
-  : config(std::move(config)), pool(pool), logger(std::move(logger)) {
-
+MessageProcessor::MessageProcessor(const context_t &ctx, so_5::mbox_t listener,
+                                   MessageProcessorConfig config, std::shared_ptr<Logger> logger)
+  : so_5::agent_t(ctx), config(std::move(config)), logger(std::move(logger)), listener(std::move(listener)) {
     this->logger->logInfo("MessageProcessor init");
 
     if (this->config.languageRecognition)
@@ -23,19 +23,30 @@ MessageProcessor::~MessageProcessor() {
     logger->logTrace("MessageProcessor end of processor");
 }
 
-void MessageProcessor::onMessage(IRCWorker *worker, const IRCMessage &message, long long now) {
-    pool->enqueue([ircMessage = message, now, worker, this]() {
-        auto message = transform(ircMessage, now);
-
-        logger->logTrace(R"(MessageProcessor process {{worker: "{}", channel: "{}", from: "{}", text: "{}", lang: "{}", valid: {}}})",
-                         fmt::ptr(worker), message->channel, message->user, message->text, message->lang, message->valid);
-
-        dispatch(message);
-    });
+void MessageProcessor::so_define_agent() {
+    so_subscribe_self().event(&MessageProcessor::evtIrcMessage, so_5::thread_safety_t::safe);
 }
 
-std::shared_ptr<Message> MessageProcessor::transform(const IRCMessage &message, long long now) {
-    std::string channel = message.parameters.at(0)[0] == '#' ? message.parameters.at(0).substr(1) : message.parameters.at(0);
+void MessageProcessor::so_evt_start() {
+
+}
+
+void MessageProcessor::so_evt_finish() {
+
+}
+
+void MessageProcessor::evtIrcMessage(const IRCMessage &ircMessage) {
+    auto message = transform(ircMessage);
+
+    logger->logTrace(R"(MessageProcessor process {{channel: "{}", from: "{}", text: "{}", lang: "{}", valid: {}}})",
+                     message->channel, message->user, message->text, message->lang, message->valid);
+
+    so_5::send(listener, message);
+}
+
+MessageProcessor::MessageHolder MessageProcessor::transform(const IRCMessage &message) {
+    std::string channel = (message.parameters.at(0)[0] == '#') ? message.parameters.at(0).substr(1)
+                                                               : message.parameters.at(0);
     std::string text = message.parameters.back();
 
     std::string lang = "UNKNOWN";
@@ -44,6 +55,6 @@ std::shared_ptr<Message> MessageProcessor::transform(const IRCMessage &message, 
 
     bool valid = !text.empty();
 
-    return std::make_shared<Message>(message.prefix.nickname, std::move(channel),
-                                     std::move(text), std::move(lang), now, valid);
+    return MessageHolder::make(message.prefix.nickname, std::move(channel), std::move(text),
+                               std::move(lang), message.timestamp, valid);
 }

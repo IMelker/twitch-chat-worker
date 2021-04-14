@@ -19,6 +19,7 @@ class DBController
   public:
     using Channels = std::vector<std::string>;
     using UpdatedChannels = std::map<std::string, bool>;
+    using Users = std::vector<std::string>;
     using Accounts = std::vector<IRCClientConfig>;
     using BotsConfigurations = std::map<int, BotConfiguration>;
   public:
@@ -27,6 +28,7 @@ class DBController
 
     [[nodiscard]] PGConnectionPool *getPGPool() const;
 
+    Users loadUsersNicknames();
     Accounts loadAccounts();
     Channels loadChannels();
     Channels loadChannelsFor(const std::string& user);

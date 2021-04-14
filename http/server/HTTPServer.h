@@ -49,7 +49,7 @@ class HTTPServer : public HTTPRequestHandler
 
     // implement HTTPRequestHandler
     void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) override;
-  private:
+  protected:
     HTTPControlConfig config;
     std::shared_ptr<Logger> logger;
 
