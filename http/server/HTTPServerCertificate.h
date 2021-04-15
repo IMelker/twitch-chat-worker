@@ -17,6 +17,10 @@ bool readFile(const std::string& filename, std::string& target, std::string& err
     std::ifstream file;
     try {
         file.open(filename);
+        if (!file.is_open()) {
+            err = filename;
+            return false;
+        }
 
         target.clear();
 

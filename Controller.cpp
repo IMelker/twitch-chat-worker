@@ -21,37 +21,17 @@
 
 using json = nlohmann::json;
 
-Controller::Controller(const context_t& ctx, Config &config,
+Controller::Controller(const context_t& ctx, so_5::mbox_t http, Config &config,
                        std::shared_ptr<DBController> db, std::shared_ptr<Logger> logger)
     : so_5::agent_t(ctx),
       config(config),
       logger(std::move(logger)),
-      db(std::move(db)) {
-    //this->logger->logInfo("Controller created with {} threads", pool->size());
-
-    /*HTTPControlConfig httpCfg;
-    httpCfg.host = config[HTTP_CONTROL]["host"].value_or("localhost");
-    httpCfg.port = config[HTTP_CONTROL]["port"].value_or(8080);
-    httpCfg.user = config[HTTP_CONTROL]["user"].value_or("admin");
-    httpCfg.pass = config[HTTP_CONTROL]["password"].value_or("admin");
-    httpCfg.threads = config[HTTP_CONTROL]["threads"].value_or(std::thread::hardware_concurrency());
-    httpCfg.secure = config[HTTP_CONTROL]["secure"].value_or(true);
-    if (httpCfg.secure) {
-        httpCfg.ssl.verify = config[HTTP_CONTROL]["verify"].value_or(false);
-        httpCfg.ssl.cert = config[HTTP_CONTROL]["cert_file"].value_or("cert.pem");
-        httpCfg.ssl.key = config[HTTP_CONTROL]["key_file"].value_or("key.pem");
-        httpCfg.ssl.dh = config[HTTP_CONTROL]["dh_file"].value_or("dh.pem");
-    }
-    auto httpLogger = LoggerFactory::create(LoggerFactory::config(config, HTTP_CONTROL));
-    httpServer = std::make_shared<HTTPServer>(std::move(httpCfg), httpLogger);
-
-    httpServer->addControlUnit(APP, this);
-    httpServer->addControlUnit(POSTGRESQL, this->db->getPGPool());*/
+      db(std::move(db)),
+      http(std::move(http)) {
 }
 
 Controller::~Controller() {
     logger->logTrace("Controller end of controller");
-    //httpServer->clearUnits();
 };
 
 void Controller::so_define_agent() {
@@ -67,7 +47,7 @@ void Controller::so_evt_start() {
         auto listener = so_environment().create_mbox();
         storage = makeStorage(coop, listener);
         botsEnvironment = makeBotsEnvironment(coop, listener);
-        msgProcessor = makeMessageProcessor(coop, listener/*as publisher*/);
+        msgProcessor = makeMessageProcessor(coop, listener /*as publisher*/);
         ircWorkers = makeIRCWorkerPool(coop);
 
         botsEnvironment->setMessageSender(ircWorkers->so_direct_mbox());

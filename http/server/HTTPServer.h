@@ -13,12 +13,12 @@
 #include <boost/asio.hpp>
 #include <boost/beast/ssl.hpp>
 
+#include "HTTPRequestHandler.h"
 #include "HTTPServerUnit.h"
 #include "HTTPSession.h"
 
 class Logger;
 class HTTPListener;
-class ThreadPool;
 
 struct HTTPControlConfig {
     std::string host = "localhost";
@@ -32,20 +32,17 @@ struct HTTPControlConfig {
         std::string key;
         std::string dh;
     } ssl;
-    int threads = 1;
+    unsigned int threads = 1;
 };
 
 class HTTPServer : public HTTPRequestHandler
 {
   public:
-    HTTPServer(HTTPControlConfig config, std::shared_ptr<Logger> logger);
+    HTTPServer(HTTPControlConfig config, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger);
     ~HTTPServer();
 
-    bool start(ThreadPool *pool);
-    void clearUnits();
-
-    void addControlUnit(const std::string& path, HTTPServerUnit *unit);
-    void deleteControlUnit(const std::string& path);
+    bool start();
+    void stop();
 
     // implement HTTPRequestHandler
     void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) override;
@@ -57,10 +54,8 @@ class HTTPServer : public HTTPRequestHandler
     boost::asio::ssl::context ctx;
     std::shared_ptr<HTTPListener> listener;
     std::vector<std::thread> ioRunners;
-    ThreadPool *executors;
 
-    std::shared_mutex unitsMutex;
-    std::map<std::string, HTTPServerUnit *, std::less<>> units;
+    HTTPRequestHandler *handler;
 };
 
 #endif //CHATSNIFFER_HTTP_HTTPSERVER_H_

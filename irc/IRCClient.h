@@ -21,7 +21,7 @@
 #define BUFF_SIZE (1024 * 4)
 
 struct IRCMessageListener {
-    virtual void onMessage(const IRCMessage &message) {};
+    virtual void onMessage(const IRCMessage &message) = 0;
 };
 
 class Logger;

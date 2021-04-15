@@ -12,12 +12,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CXX_STANDARD_REQUIRED ON)
 
 # app info
-set(APP_NAME "TLuaChat")
+set(APP_NAME "TLuaBot")
 set(APP_VERSION_MAJOR 0)
 set(APP_VERSION_MINOR 0)
-set(APP_VERSION_PATCH 1)
+set(APP_VERSION_PATCH 2)
 set(APP_VERSION ${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH})
-set(APP_AUTHOR_EMAIL "l2pickn@yandex.ru")
+set(APP_AUTHOR_EMAIL "twitch.luabot@gmail.com")
 execute_process(COMMAND git rev-parse --verify HEAD OUTPUT_VARIABLE APP_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE)
 execute_process(COMMAND git log -1 --pretty=format:%ad HEAD OUTPUT_VARIABLE APP_GIT_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
 message("-- App: ${APP_NAME}.${APP_VERSION}.${APP_GIT_HASH} ${APP_GIT_DATE}")
@@ -100,8 +100,9 @@ target_link_libraries(chatcontroller
         stdc++fs
         pthread ssl crypto
         sobjectizer::StaticLib
-        httpserver
+        httpserver httpclient ${Boost_LIBRARIES}
         nlohmann_json
+        fmt
         spdlog
         clickhouse-cpp-lib-static
         ${PostgreSQL_LIBRARIES}

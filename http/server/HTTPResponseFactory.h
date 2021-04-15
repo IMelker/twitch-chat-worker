@@ -18,6 +18,10 @@ using json = nlohmann::json;
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 
+inline constexpr std::string_view sv(const boost::beast::string_view& view) {
+    return std::string_view{view.data(), view.size()};
+};
+
 struct HTTPResponseFactory {
     template<class Request>
     static auto CreateResponse(const Request& req, http::status status, std::string&& body) {

@@ -3,6 +3,7 @@
 //
 
 #include "HTTPSession.h"
+#include "HTTPRequestHandler.h"
 
 static const int timeout = 30;
 

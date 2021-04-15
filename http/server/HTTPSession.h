@@ -102,9 +102,4 @@ class HTTPSession : public std::enable_shared_from_this<HTTPSession>
     HTTPRequestHandler* handler;
 };
 
-struct HTTPRequestHandler
-{
-    virtual void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) = 0;
-};
-
 #endif //CHATSNIFFER_HTTP_HTTPSESSION_H_

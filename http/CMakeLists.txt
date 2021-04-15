@@ -16,11 +16,11 @@ if (Boost_FOUND)
             server/HTTPServer.cpp server/HTTPServer.h
             server/HTTPListener.cpp server/HTTPListener.h
             server/HTTPSession.cpp server/HTTPSession.h
-            server/HTTPServerUnit.h server/HTTPServerCertificate.h)
+            server/HTTPServerCertificate.h
+            server/HTTPRequestHandler.h)
+    add_library(httpclient STATIC
+            client/HTTPClient.cpp client/HTTPClient.h )
 
-    if (BOOST_BEAST_USE_STD_STRING_VIEW)
-        target_compile_definitions(httpserver PRIVATE BOOST_BEAST_USE_STD_STRING_VIEW)
-    endif()
-
-    target_link_libraries(httpserver absl::strings nlohmann_json ${Boost_LIBRARIES})
+    target_link_libraries(httpserver ${Boost_LIBRARIES})
+    target_link_libraries(httpclient ${Boost_LIBRARIES})
 endif()

@@ -30,6 +30,7 @@ class Controller final : public so_5::agent_t, public HTTPServerUnit
 
   public:
     explicit Controller(const context_t& ctx,
+                        so_5::mbox_t http,
                         Config &config,
                         std::shared_ptr<DBController> db,
                         std::shared_ptr<Logger> logger);
@@ -56,13 +57,13 @@ class Controller final : public so_5::agent_t, public HTTPServerUnit
 
     std::shared_ptr<Logger> logger;
     std::shared_ptr<DBController> db;
-    //std::shared_ptr<HTTPServer> httpServer;
 
     Storage *storage = nullptr;
     BotsEnvironment *botsEnvironment = nullptr;
     MessageProcessor *msgProcessor = nullptr;
     IRCWorkerPool *ircWorkers = nullptr;
 
+    so_5::mbox_t http;
     so_5::timer_id_t shutdownCheckTimer;
 };
 

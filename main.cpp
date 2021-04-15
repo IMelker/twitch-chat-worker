@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 
     Options options{APP_NAME};
     options.addOption<std::string>("config", "c", "Config filepath", "config.toml");
-    options.addOption<std::string>("pid-file-name", "p", "Filepath for process ID output", "/var/run/chatsniffer.pid");
+    options.addOption<std::string>("pid-file-name", "p", "Filepath for process ID output", "/var/run/chatcontroller.pid");
     options.addOption<bool>("daemon", "d", "Daemon mode", "false");
     options.addOption<bool>("version", "v", "App version", "false");
     options.addOption<bool>("trace-exit-code", "t", "Trace exit code for daemon mode", "false");
@@ -97,8 +97,9 @@ int main(int argc, char *argv[]) {
 
     try {
         so_5::launch([&](so_5::environment_t &env) {
-            auto controller = env.register_agent_as_coop(env.make_agent<Controller>(config, db, logger));
-            auto httpServer = env.register_agent_as_coop(env.make_agent<HttpController>(config, httpLogger));
+            auto httpBox = env.create_mbox();
+            env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, logger));
+            env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, httpLogger));
         });
     }
     catch (const std::exception &e) {
