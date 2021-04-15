@@ -15,7 +15,6 @@
 #include "BotLogger.h"
 #include "../ChatMessage.h"
 #include "../http/server/HTTPServerUnit.h"
-#include "../MessageSenderInterface.h"
 
 class Logger;
 class ThreadPool;

@@ -16,6 +16,7 @@
 #include "db/ch/CHConnectionPool.h"
 #include "db/pg/PGConnectionPool.h"
 
+#include "HttpController.h"
 #include "DBController.h"
 #include "Controller.h"
 
@@ -85,6 +86,7 @@ int main(int argc, char *argv[]) {
     Config config{options.getValue<std::string>("config")};
 
     auto logger = LoggerFactory::create(LoggerFactory::config(config, APP));
+    auto httpLogger = LoggerFactory::create(LoggerFactory::config(config, HTTP_CONTROL));
     DefaultLogger::setAsDefault(logger);
 
     auto db = createDBController(config);
@@ -95,7 +97,8 @@ int main(int argc, char *argv[]) {
 
     try {
         so_5::launch([&](so_5::environment_t &env) {
-            env.register_agent_as_coop(env.make_agent<Controller>(config, db, logger));
+            auto controller = env.register_agent_as_coop(env.make_agent<Controller>(config, db, logger));
+            auto httpServer = env.register_agent_as_coop(env.make_agent<HttpController>(config, httpLogger));
         });
     }
     catch (const std::exception &e) {

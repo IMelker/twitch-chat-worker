@@ -29,7 +29,7 @@ Controller::Controller(const context_t& ctx, Config &config,
       db(std::move(db)) {
     //this->logger->logInfo("Controller created with {} threads", pool->size());
 
-    HTTPControlConfig httpCfg;
+    /*HTTPControlConfig httpCfg;
     httpCfg.host = config[HTTP_CONTROL]["host"].value_or("localhost");
     httpCfg.port = config[HTTP_CONTROL]["port"].value_or(8080);
     httpCfg.user = config[HTTP_CONTROL]["user"].value_or("admin");
@@ -46,12 +46,12 @@ Controller::Controller(const context_t& ctx, Config &config,
     httpServer = std::make_shared<HTTPServer>(std::move(httpCfg), httpLogger);
 
     httpServer->addControlUnit(APP, this);
-    httpServer->addControlUnit(POSTGRESQL, this->db->getPGPool());
+    httpServer->addControlUnit(POSTGRESQL, this->db->getPGPool());*/
 }
 
 Controller::~Controller() {
     logger->logTrace("Controller end of controller");
-    httpServer->clearUnits();
+    //httpServer->clearUnits();
 };
 
 void Controller::so_define_agent() {
@@ -123,10 +123,6 @@ IRCWorkerPool *Controller::makeIRCWorkerPool(so_5::coop_t &coop) {
     ircConfig.port = config[IRC]["port"].value_or(6667);
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
     return coop.make_agent<IRCWorkerPool>(msgProcessor->so_direct_mbox(), ircConfig, db.get(), ircLogger);
-}
-
-bool Controller::startHttpServer() {
-    return true; //httpServer->start(pool);
 }
 
 std::tuple<int, std::string> Controller::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {

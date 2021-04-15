@@ -10,7 +10,6 @@
 #include <so_5/agent.hpp>
 
 #include "../ChatMessage.h"
-#include "../MessageSenderInterface.h"
 #include "BotConfiguration.h"
 #include "BotLogger.h"
 

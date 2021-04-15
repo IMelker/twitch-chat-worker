@@ -44,8 +44,6 @@ class Controller final : public so_5::agent_t, public HTTPServerUnit
     MessageProcessor *makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher);
     IRCWorkerPool *makeIRCWorkerPool(so_5::coop_t &coop);
 
-    bool startHttpServer();
-
     // implement HTTPControlUnit
     std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request,
                                                     std::string &error) override;
@@ -58,7 +56,7 @@ class Controller final : public so_5::agent_t, public HTTPServerUnit
 
     std::shared_ptr<Logger> logger;
     std::shared_ptr<DBController> db;
-    std::shared_ptr<HTTPServer> httpServer;
+    //std::shared_ptr<HTTPServer> httpServer;
 
     Storage *storage = nullptr;
     BotsEnvironment *botsEnvironment = nullptr;

@@ -58,12 +58,12 @@ include_directories(${CMAKE_BINARY_DIR})
 message("\n[executable]")
 add_executable(chatcontroller
         main.cpp
+        HttpController.h HttpController.cpp
         Controller.h Controller.cpp
         DBController.h DBController.cpp
         ChatMessage.h
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
-        MessageSenderInterface.h
         common/SysSignal.h common/SysSignal.cpp
         common/Options.h common/Options.cpp
         common/Config.h common/Config.cpp
@@ -88,7 +88,6 @@ add_executable(chatcontroller
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
         bot/BotConfiguration.h bot/BotLogger.h
-        http/HTTPServerAgent.h http/HTTPServerAgent.cpp
         )
 
 add_subdirectory(common/tests)

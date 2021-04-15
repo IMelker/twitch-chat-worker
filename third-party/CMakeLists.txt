@@ -23,7 +23,7 @@ message("- [clickhouse]")
 add_subdirectory(clickhouse)
 
 message("- [abseil]")
-#set(build_testing off)
+set(BUILD_TESTING OFF)
 add_subdirectory(abseil)
 
 message("- [langdetect]")
