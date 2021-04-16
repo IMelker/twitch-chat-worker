@@ -13,8 +13,8 @@
 #include "HttpController.h"
 
 #define match(num, arg) path[num] == #arg
-#define match_handle2(arg1, arg2) if (path[1] == #arg2) return so_5::send<so_5::mutable_msg<hreq::arg1::arg2>>(listeners, std::move(req), std::move(send))
-#define match_handle3(arg1, arg2, arg3) if (path[2] == #arg3) return so_5::send<so_5::mutable_msg<hreq::arg1::arg2::arg3>>(listeners, std::move(req), std::move(send))
+#define match_handle2(arg1, arg2) if (path[1] == #arg2) return so_5::send<hreq::arg1::arg2>(listeners, std::move(req), std::move(send))
+#define match_handle3(arg1, arg2, arg3) if (path[2] == #arg3) return so_5::send<hreq::arg1::arg2::arg3>(listeners, std::move(req), std::move(send))
 
 HttpController::HttpController(const context_t &ctx, so_5::mbox_t listeners, Config &config, std::shared_ptr<Logger> logger)
   : so_5::agent_t(ctx), config(config), logger(std::move(logger)), listeners(std::move(listeners)) {
@@ -28,7 +28,7 @@ void HttpController::so_define_agent() {
             so_deregister_agent_coop_normally();
         }
     });
-    so_subscribe_self().event([](mutable_mhood_t<hreq::resp> resp) {
+    so_subscribe(listeners).event([](mhood_t<hreq::resp> resp) {
         resp->send(HTTPResponseFactory::CreateResponse(
             resp->req, static_cast<http::status>(resp->status), std::move(resp->body)));
     }, so_5::thread_safe);
@@ -111,43 +111,4 @@ void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPS
     }
 
     send(HTTPResponseFactory::NotFound(req, req.target()));
-    /*
-    std::vector<std::string_view> path = absl::StrSplit(req.target(), '/', absl::SkipWhitespace());
-    if (path.size() < 2) {
-        send(HTTPResponseFactory::BadRequest(req, "Invalid path"));
-        return;
-    }
-
-    std::shared_lock sl(unitsMutex); // TODO not covering lambda, so fix data race in future
-    auto it = units.find(path.front());
-    if (it == units.end()) {
-        send(HTTPResponseFactory::NotFound(req, req.target()));
-        return;
-    }
-
-    if (!executors) {
-        send(HTTPResponseFactory::ServerError(req, "There is no executor for request"));
-        return;
-    }
-
-    executors->enqueue([req = std::move(req), send = std::move(send), &target = path[1], handler = it->second]() {
-        int status = 200;
-        std::string err;
-        std::string body;
-        try {
-            std::tie(status, body) = handler->processHttpRequest(target, req.body(), err);
-        } catch (const std::exception& e) {
-            send(HTTPResponseFactory::ServerError(req, e.what()));
-            return;
-        } catch (...) {
-            send(HTTPResponseFactory::ServerError(req, err));
-        }
-
-        if (!err.empty()) {
-            send(HTTPResponseFactory::ServerError(req, err));
-            return;
-        }
-
-        send(HTTPResponseFactory::CreateResponse(req, static_cast<http::status>(status), std::move(body)));
-    });*/
 }

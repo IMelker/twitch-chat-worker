@@ -26,15 +26,7 @@ std::shared_ptr<DBConnection> CHConnectionPool::createConnection() {
     return conn;
 }
 
-std::tuple<int, std::string> CHConnectionPool::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {
-    if (path == "stats")
-        return {200, handleStats(request, error)};
-
-    error = "Failed to match path";
-    return EMPTY_HTTP_RESPONSE;
-}
-
-std::string CHConnectionPool::handleStats(const std::string &request, std::string &error) {
+std::string CHConnectionPool::httpStats(const std::string &request, std::string &error) {
     json body = json::object();
     for(size_t i = 0; i < all.size(); ++i) {
         const auto &stats = all[i]->getStats();

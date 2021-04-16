@@ -10,10 +10,8 @@
 
 #include "../DBConnectionPool.h"
 
-#include "../../http/server/HTTPServerUnit.h"
-
 class Logger;
-class CHConnectionPool : public DBConnectionPool, public HTTPServerUnit
+class CHConnectionPool : public DBConnectionPool
 {
   public:
     using conn_type = CHConnection;
@@ -23,13 +21,8 @@ class CHConnectionPool : public DBConnectionPool, public HTTPServerUnit
 
     std::shared_ptr<DBConnection> createConnection() override;
 
-    [[nodiscard]] const std::vector<std::shared_ptr<CHConnection>>& getAll() const { return all; };
-
-    // implement HTTPControlUnit
-    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request, std::string &error) override;
-
-    // request handlers
-    std::string handleStats(const std::string &request, std::string &error);
+    // http request handlers
+    std::string httpStats(const std::string &request, std::string &error);
   private:
     CHConnectionConfig config;
     std::vector<std::shared_ptr<CHConnection>> all;

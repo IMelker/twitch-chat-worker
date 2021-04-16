@@ -78,7 +78,7 @@ Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listen
     unsigned int chConns = config[CLICKHOUSE]["connections"].value_or(1);
 
     auto chLogger = LoggerFactory::create(LoggerFactory::config(config, CLICKHOUSE));
-    return coop.make_agent<Storage>(listener, std::move(chCfg), chConns, batchSize, chLogger);
+    return coop.make_agent<Storage>(listener, http, std::move(chCfg), chConns, batchSize, chLogger);
 }
 
 BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener) {

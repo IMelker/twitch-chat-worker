@@ -27,15 +27,7 @@ std::shared_ptr<DBConnection> PGConnectionPool::createConnection() {
     return conn;
 }
 
-std::tuple<int, std::string> PGConnectionPool::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {
-    if (path == "stats")
-        return {200, handleStats(request, error)};
-
-    error = "Failed to match path";
-    return EMPTY_HTTP_RESPONSE;
-}
-
-std::string PGConnectionPool::handleStats(const std::string &request, std::string &error) {
+std::string PGConnectionPool::httpStats(const std::string &request, std::string &error) {
     json body = json::object();
 
     for(size_t i = 0; i < all.size(); ++i) {

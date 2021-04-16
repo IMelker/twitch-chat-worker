@@ -17,11 +17,12 @@
 
 Storage::Storage(const context_t &ctx,
                  so_5::mbox_t publisher,
+                 so_5::mbox_t http,
                  CHConnectionConfig config,
                  int connections,
                  int batchSize,
                  std::shared_ptr<Logger> logger)
-  : so_5::agent_t(ctx), publisher(std::move(publisher)), logger(std::move(logger)), batchSize(batchSize) {
+  : so_5::agent_t(ctx), publisher(std::move(publisher)), http(std::move(http)), logger(std::move(logger)), batchSize(batchSize) {
     msgBatch.reserve(batchSize);
     logBatch.reserve(batchSize);
 
@@ -40,6 +41,8 @@ void Storage::so_define_agent() {
     so_subscribe_self().event(&Storage::evtFlushBotLogMessages, so_5::thread_safe);
     so_subscribe_self().event(&Storage::evtFlushChatMessages, so_5::thread_safe);
     so_subscribe_self().event(&Storage::evtFlushAll, so_5::thread_safe);
+
+    so_subscribe(http).event(&Storage::evtHttpStats, so_5::thread_safe);
 }
 
 void Storage::so_evt_start() {
@@ -202,5 +205,26 @@ void Storage::store(BotLogHolder &&msg) {
         ul.unlock();
 
         process(temp);
+    }
+}
+
+void Storage::evtHttpStats(mhood_t<hreq::storage::stats> req) {
+    logger->logTrace("Storage Gathering storage stats invoked by http request");
+    int status = 200;
+    std::string err, body;
+    try {
+        body = ch->httpStats(req->req.body(), err);
+    } catch (const std::exception& e) {
+        err = e.what();
+    } catch (...) {
+        if (err.empty())
+            err = "Unhandled exception";
+    }
+
+    if (!err.empty()) {
+        status = 501;
+        so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), status, err);
+    } else {
+        so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), status, std::move(body));
     }
 }

@@ -11,13 +11,13 @@
 namespace hreq {
 
 struct base {
-    http::request<http::string_body> req;
-    HTTPSession::SendLambda send;
+    mutable http::request<http::string_body> req;
+    mutable HTTPSession::SendLambda send;
 };
 
 struct resp : public base {
     int status = 200;
-    std::string body;
+    mutable std::string body;
 };
 
 namespace app {

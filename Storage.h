@@ -13,6 +13,7 @@
 
 #include "bot/BotLogger.h"
 
+#include "HttpControllerEvents.h"
 #include "ChatMessage.h"
 
 class CHConnectionPool;
@@ -30,6 +31,7 @@ class Storage final : public so_5::agent_t
   public:
     explicit Storage(const context_t &ctx,
                      so_5::mbox_t publisher,
+                     so_5::mbox_t http,
                      CHConnectionConfig config,
                      int connections,
                      int batchSize,
@@ -47,6 +49,7 @@ class Storage final : public so_5::agent_t
     void evtFlushBotLogMessages(mhood_t<FlushBotLogMessages> flush);
     void evtFlushChatMessages(mhood_t<FlushChatMessages> flush);
     void evtFlushAll(mhood_t<Flush> flush);
+    void evtHttpStats(mhood_t<hreq::storage::stats> req);
   private:
     void store(BotLogHolder &&msg);
     void store(ChatMessageHolder &&msg);
@@ -56,6 +59,7 @@ class Storage final : public so_5::agent_t
     void flush();
 
     so_5::mbox_t publisher;
+    so_5::mbox_t http;
 
     std::shared_ptr<Logger> logger;
     std::shared_ptr<CHConnectionPool> ch;
