@@ -9,16 +9,22 @@
 #include <so_5/timers.hpp>
 
 #include "common/Config.h"
+#include "HttpControllerEvents.h"
 #include "http/server/HTTPServer.h"
 #include "http/server/HTTPRequestHandler.h"
 
 class Logger;
+class DBController;
 class HttpController final : public so_5::agent_t, public HTTPRequestHandler
 {
     struct ShutdownCheck final : public so_5::signal_t {};
 
   public:
-    HttpController(const context_t &ctx, so_5::mbox_t listeners, Config &config, std::shared_ptr<Logger> logger);
+    HttpController(const context_t &ctx,
+                   so_5::mbox_t listeners,
+                   Config &config,
+                   std::shared_ptr<DBController> db,
+                   std::shared_ptr<Logger> logger);
     ~HttpController() override;
 
     // so_5::agent_t implementation
@@ -26,11 +32,15 @@ class HttpController final : public so_5::agent_t, public HTTPRequestHandler
     void so_evt_start() override;
     void so_evt_finish() override;
 
+    // event handlers
+    void evtHttpDBControllerStatus(so_5::mhood_t<hreq::db::stats> req);
+
     // implement HTTPRequestHandler
     void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) override;
   private:
     Config &config;
 
+    std::shared_ptr<DBController> db;
     std::shared_ptr<Logger> logger;
     std::shared_ptr<HTTPServer> server;
 

@@ -26,6 +26,7 @@ class DBController
     DBController(PGConnectionConfig config, unsigned int count, std::shared_ptr<Logger> logger);
     ~DBController();
 
+    std::string getStats() const;
     [[nodiscard]] PGConnectionPool *getPGPool() const;
 
     Users loadUsersNicknames();
@@ -34,6 +35,7 @@ class DBController
     Channels loadChannelsFor(const std::string& user);
     UpdatedChannels loadChannels(long long &timestamp);
     BotsConfigurations loadBotConfigurations();
+    BotConfiguration loadBotConfiguration(int id);
   private:
     std::shared_ptr<Logger> logger;
     std::shared_ptr<PGConnectionPool> pg;

@@ -40,6 +40,17 @@ void Controller::so_define_agent() {
             so_deregister_agent_coop_normally();
         }
     });
+    so_subscribe_self().event([this](mhood_t<hreq::app::shutdown> req) {
+        json body = json::object();
+        body["version"] = APP_NAME " " APP_VERSION " " APP_GIT_DATE " (" APP_GIT_HASH ")";
+        so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), 200, body.dump());
+        SysSignal::setServiceTerminated(true);
+    });
+    so_subscribe_self().event([this](mhood_t<hreq::app::version> req) {
+        json body = json::object();
+        body["version"] = APP_NAME " " APP_VERSION " " APP_GIT_DATE " (" APP_GIT_HASH ")";
+        so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), 200, body.dump());
+    });
 }
 
 void Controller::so_evt_start() {
@@ -83,7 +94,7 @@ Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listen
 
 BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener) {
     auto botsLogger = LoggerFactory::create(LoggerFactory::config(config, BOT));
-    return coop.make_agent<BotsEnvironment>(listener, db.get(), botsLogger);
+    return coop.make_agent<BotsEnvironment>(listener, http, db.get(), botsLogger);
 }
 
 MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher) {
@@ -103,25 +114,4 @@ IRCWorkerPool *Controller::makeIRCWorkerPool(so_5::coop_t &coop) {
     ircConfig.port = config[IRC]["port"].value_or(6667);
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
     return coop.make_agent<IRCWorkerPool>(msgProcessor->so_direct_mbox(), ircConfig, db.get(), ircLogger);
-}
-
-std::tuple<int, std::string> Controller::processHttpRequest(std::string_view path, const std::string &request, std::string &error) {
-    if (path == "version")
-        return {200, handleVersion(request, error)};
-    if (path == "shutdown")
-        return {200, handleShutdown(request, error)};
-
-    error = "Failed to match path";
-    return EMPTY_HTTP_RESPONSE;
-}
-
-std::string Controller::handleShutdown(const std::string &, std::string &) {
-    SysSignal::setServiceTerminated(true);
-    return "Terminated";
-}
-
-std::string Controller::handleVersion(const std::string &, std::string &) {
-    json body = json::object();
-    body["version"] = APP_NAME " " APP_VERSION " " APP_GIT_DATE " (" APP_GIT_HASH ")";
-    return body.dump();
 }

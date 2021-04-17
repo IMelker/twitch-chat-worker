@@ -27,7 +27,7 @@ std::shared_ptr<DBConnection> PGConnectionPool::createConnection() {
     return conn;
 }
 
-std::string PGConnectionPool::httpStats(const std::string &request, std::string &error) {
+std::string PGConnectionPool::statsDump() {
     json body = json::object();
 
     for(size_t i = 0; i < all.size(); ++i) {

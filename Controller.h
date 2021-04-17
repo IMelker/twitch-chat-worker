@@ -24,7 +24,7 @@
 #include "common/Config.h"
 
 class Logger;
-class Controller final : public so_5::agent_t, public HTTPServerUnit
+class Controller final : public so_5::agent_t
 {
     struct ShutdownCheck final : public so_5::signal_t {};
 
@@ -45,13 +45,6 @@ class Controller final : public so_5::agent_t, public HTTPServerUnit
     MessageProcessor *makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher);
     IRCWorkerPool *makeIRCWorkerPool(so_5::coop_t &coop);
 
-    // implement HTTPControlUnit
-    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request,
-                                                    std::string &error) override;
-
-    // request handlers
-    std::string handleShutdown(const std::string &request, std::string &error);
-    std::string handleVersion(const std::string &request, std::string &error);
   private:
     Config &config;
 

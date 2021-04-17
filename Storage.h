@@ -49,6 +49,7 @@ class Storage final : public so_5::agent_t
     void evtFlushBotLogMessages(mhood_t<FlushBotLogMessages> flush);
     void evtFlushChatMessages(mhood_t<FlushChatMessages> flush);
     void evtFlushAll(mhood_t<Flush> flush);
+    // http events
     void evtHttpStats(mhood_t<hreq::storage::stats> req);
   private:
     void store(BotLogHolder &&msg);

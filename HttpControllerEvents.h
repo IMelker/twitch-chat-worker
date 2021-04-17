@@ -20,21 +20,26 @@ struct resp : public base {
     mutable std::string body;
 };
 
+// handled by Controller
 namespace app {
 struct shutdown : public base {};
 struct version : public base {};
 }
 
+// handled by BotsEnvironment
 namespace bot {
 struct add : public base {};
 struct remove : public base {};
 struct reload : public base {};
+struct reloadall : public base {};
 }
 
+// handled by Storage
 namespace storage {
 struct stats : public base {};
 }
 
+// handled by HttpController
 namespace db {
 struct stats : public base {};
 }

@@ -22,7 +22,7 @@ class PGConnectionPool : public DBConnectionPool
     std::shared_ptr<DBConnection> createConnection() override;
 
     // request handlers
-    std::string httpStats(const std::string &request, std::string &error);
+    std::string statsDump();
   private:
     PGConnectionConfig config;
     std::vector<std::shared_ptr<PGConnection>> all;

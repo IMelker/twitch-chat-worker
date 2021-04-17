@@ -9,15 +9,20 @@
 
 #include "common/SysSignal.h"
 #include "http/server/HTTPResponseFactory.h"
-#include "HttpControllerEvents.h"
+#include "DBController.h"
 #include "HttpController.h"
 
 #define match(num, arg) path[num] == #arg
 #define match_handle2(arg1, arg2) if (path[1] == #arg2) return so_5::send<hreq::arg1::arg2>(listeners, std::move(req), std::move(send))
 #define match_handle3(arg1, arg2, arg3) if (path[2] == #arg3) return so_5::send<hreq::arg1::arg2::arg3>(listeners, std::move(req), std::move(send))
 
-HttpController::HttpController(const context_t &ctx, so_5::mbox_t listeners, Config &config, std::shared_ptr<Logger> logger)
-  : so_5::agent_t(ctx), config(config), logger(std::move(logger)), listeners(std::move(listeners)) {
+HttpController::HttpController(const context_t &ctx,
+                               so_5::mbox_t listeners,
+                               Config &config,
+                               std::shared_ptr<DBController> db,
+                               std::shared_ptr<Logger> logger)
+    : so_5::agent_t(ctx), config(config), db(std::move(db)),
+      logger(std::move(logger)), listeners(std::move(listeners)) {
 }
 
 HttpController::~HttpController() = default;
@@ -32,6 +37,7 @@ void HttpController::so_define_agent() {
         resp->send(HTTPResponseFactory::CreateResponse(
             resp->req, static_cast<http::status>(resp->status), std::move(resp->body)));
     }, so_5::thread_safe);
+    so_subscribe(listeners).event(&HttpController::evtHttpDBControllerStatus);
 }
 
 void HttpController::so_evt_start() {
@@ -65,6 +71,10 @@ void HttpController::so_evt_start() {
 void HttpController::so_evt_finish() {
     if (server)
         server->stop();
+}
+
+void HttpController::evtHttpDBControllerStatus(so_5::mhood_t<hreq::db::stats> req) {
+    so_5::send<hreq::resp>(listeners, std::move(req->req), std::move(req->send), 200, db->getStats());
 }
 
 void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
@@ -108,6 +118,7 @@ void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPS
         match_handle2(bot, add);
         else match_handle2(bot, remove);
         else match_handle2(bot, reload);
+        else match_handle2(bot, reloadall);
     }
 
     send(HTTPResponseFactory::NotFound(req, req.target()));

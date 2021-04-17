@@ -19,6 +19,9 @@ class IRCWorkerPool;
 class BotEngine final : public so_5::agent_t
 {
   public:
+    struct Shutdown final : public so_5::signal_t {};
+    struct Reload { mutable BotConfiguration config; };
+  public:
     BotEngine(const context_t &ctx,
               so_5::mbox_t self,
               so_5::mbox_t msgSender,
@@ -31,28 +34,19 @@ class BotEngine final : public so_5::agent_t
     void so_evt_start() override;
     void so_evt_finish() override;
 
-    void handleMessage(mhood_t<Chat::Message> message);
-
-    void start();
-    void stop();
-
-    [[nodiscard]] int getId() const;
-
-    void setConfig(BotConfiguration cfg);
+    // event handlers
+    void evtShutdown(mhood_t<Shutdown> message);
+    void evtReload(mhood_t<Reload> message);
+    void evtChatMessage(mhood_t<Chat::Message> message);
 
     void handleInterval(Handler& handler);
     void handleTimer(Handler& handler);
-
-    // event handlers
-
   private:
     so_5::mbox_t self;
     so_5::mbox_t msgSender;
     so_5::mbox_t botLogger;
 
     std::shared_ptr<Logger> logger;
-
-    std::atomic_bool active;
 
     BotConfiguration config;
 };

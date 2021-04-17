@@ -85,39 +85,38 @@ int main(int argc, char *argv[]) {
 
     Config config{options.getValue<std::string>("config")};
 
-    auto logger = LoggerFactory::create(LoggerFactory::config(config, APP));
+    auto appLogger = LoggerFactory::create(LoggerFactory::config(config, APP));
     auto httpLogger = LoggerFactory::create(LoggerFactory::config(config, HTTP_CONTROL));
-    DefaultLogger::setAsDefault(logger);
+    DefaultLogger::setAsDefault(appLogger);
 
     auto db = createDBController(config);
     if (db->getPGPool()->size() == 0) {
-        logger->logCritical("Failed to initialize DBController. Exit");
+        appLogger->logCritical("Failed to initialize DBController. Exit");
         return UNIT_RESTART;
     }
 
     try {
         so_5::launch([&](so_5::environment_t &env) {
             auto httpBox = env.create_mbox();
-            env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, logger));
-            env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, httpLogger));
+            env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, appLogger));
+            env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, db, httpLogger));
         });
     }
     catch (const std::exception &e) {
-        logger->logCritical("Exception: ", e.what());
+        appLogger->logCritical("Exception: ", e.what());
         return UNIT_RESTART;
     }
     return UNIT_OK;
 
-    // TODO choose dispatchers
-    // TODO fix options, remove useless and add contolls
+    // 1. TODO ressurect HTTPServer
+    // 2. TODO choose dispatchers
 
-     // TODO ressurect HTTPServer
-
-     // TODO BotEngone timer events
+    // TODO fix options, remove useless and add controlls
+    // TODO BotEngone timer events
     // TODO add remove timer events from Timer
     // TODO add timer and timer event to bot
 
-     // TODO change channel join behavior
+    // TODO change channel join behavior
 
     // TODO move language detect to BOTEngine (?)
 

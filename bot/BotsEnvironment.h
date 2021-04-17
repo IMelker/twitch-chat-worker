@@ -11,21 +11,23 @@
 #include <map>
 
 #include <so_5/agent.hpp>
+#include <so_5/coop_handle.hpp>
 
 #include "BotLogger.h"
 #include "../ChatMessage.h"
-#include "../http/server/HTTPServerUnit.h"
+#include "../HttpControllerEvents.h"
 
 class Logger;
 class ThreadPool;
 class DBController;
 class BotEngine;
 
-class BotsEnvironment final : public so_5::agent_t, public HTTPServerUnit
+class BotsEnvironment final : public so_5::agent_t
 {
   public:
     BotsEnvironment(const context_t &ctx,
                     so_5::mbox_t publisher,
+                    so_5::mbox_t http,
                     DBController *db,
                     std::shared_ptr<Logger> logger);
     ~BotsEnvironment() override;
@@ -40,15 +42,22 @@ class BotsEnvironment final : public so_5::agent_t, public HTTPServerUnit
 
     void evtChatMessage(mhood_t<Chat::Message> msg);
 
-    // implement HTTPControlUnit:
-    std::tuple<int, std::string> processHttpRequest(std::string_view path, const std::string &request,
-                                                    std::string &error) override;
+    // http events
+    void evtHttpAdd(mhood_t<hreq::bot::add> req);
+    void evtHttpRemove(mhood_t<hreq::bot::remove> req);
+    void evtHttpReload(mhood_t<hreq::bot::reload> req);
+    void evtHttpReloadAll(mhood_t<hreq::bot::reloadall> req);
+
     // http handlers
     std::string handleReloadConfiguration(const std::string &request, std::string &error);
   private:
+    void addBot(const BotConfiguration &config);
+
     so_5::mbox_t publisher;
     so_5::mbox_t msgSender;
     so_5::mbox_t botLogger;
+    so_5::mbox_t http;
+    so_5::coop_handle_t coop;
 
     DBController *db;
     std::shared_ptr<Logger> logger;

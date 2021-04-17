@@ -21,6 +21,10 @@ DBController::~DBController() {
     logger->logTrace("DBController end of storage");
 }
 
+std::string DBController::getStats() const {
+    return pg->statsDump();
+}
+
 PGConnectionPool *DBController::getPGPool() const {
     return pg.get();
 }
@@ -159,6 +163,45 @@ DBController::BotsConfigurations DBController::loadBotConfigurations() {
 
     DefaultLogger::logInfo("Controller {} bot configurations loaded", configurations.size());
     return configurations;
+}
+
+BotConfiguration DBController::loadBotConfiguration(int id) {
+    static const std::string request = fmt::format("SELECT bot.id, bot.user_id, accounts.username, "
+                                                   "       channel.name, eh.event_type_id, "
+                                                   "       eh.script, eh.id, eh.additional "
+                                                   "FROM bot "
+                                                   "JOIN bot_account ON bot.id = bot_account.bot_id "
+                                                   "JOIN accounts ON bot_account.account_id = accounts.id "
+                                                   "JOIN bot_channel ON bot.id = bot_channel.bot_id "
+                                                   "JOIN channel ON bot_channel.channel_id = channel.id "
+                                                   "JOIN event_handler as eh on bot.id = eh.bot_id "
+                                                   "WHERE bot.id = {};", id);
+
+    BotConfiguration config;
+    {
+        DBConnectionLock dbl(pg);
+        if (!dbl->ping())
+            return config;
+
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            if (res.empty())
+                return config;
+
+            using namespace Utils::String;
+            config.botId = toNumber(res.front()[0]);
+            config.userId = toNumber(res.front()[1]);
+            config.account = std::move(res.front()[2]);
+            config.channel = std::move(res.front()[3]);
+            for(auto &row : res) {
+                auto &handlers = getHandlers(toNumber(row[4]), config);
+                handlers.emplace_back(std::move(row[5]), toNumber(row[6]), std::move(row[7]));
+            }
+        }
+    }
+
+    DefaultLogger::logInfo("Controller bot(id={}) configuration loaded", id);
+    return config;
 }
 
 DBController::UpdatedChannels DBController::loadChannels(long long &timestamp) {
