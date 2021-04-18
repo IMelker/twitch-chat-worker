@@ -16,6 +16,19 @@
 
 #define MAX_MESSAGE_LEN 1024
 
+/*
+ * From RFC 1459:
+ *  <message>  ::= [':' <prefix> <SPACE> ] <command> <params> <crlf>
+ *  <prefix>   ::= <servername> | <nick> [ '!' <user> ] [ '@' <host> ]
+ *  <command>  ::= <letter> { <letter> } | <number> <number> <number>
+ *  <SPACE>    ::= ' ' { ' ' }
+ *  <params>   ::= <SPACE> [ ':' <trailing> | <middle> <params> ]
+ *  <middle>   ::= <Any *non-empty* sequence of octets not including SPACE
+ *                 or NUL or CR or LF, the first of which may not be ':'>
+ *  <trailing> ::= <Any, possibly *empty*, sequence of octets not including
+ *                   NUL or CR or LF>
+ */
+
 struct IRCPrefix
 {
     IRCPrefix() = default;

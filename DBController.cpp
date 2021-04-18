@@ -7,7 +7,7 @@
 #include "common/Utils.h"
 #include "common/Logger.h"
 #include "common/Clock.h"
-#include "irc/IRCWorker.h"
+#include "IRCWorker.h"
 #include "db/DBConnectionLock.h"
 #include "DBController.h"
 

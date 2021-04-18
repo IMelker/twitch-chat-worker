@@ -37,7 +37,7 @@ class IRCClient
 
     bool sendIRC(const std::string& data);
 
-    bool login(const std::string& nick, const std::string& user, const std::string& password = std::string());
+    bool login(const std::string& nickname, const std::string& username, const std::string& password = std::string());
 
     void receive();
     void process(const char* data, size_t len);
@@ -49,6 +49,7 @@ class IRCClient
     void handleChannelJoinPart(const IRCMessage& message);
     void handleUserNickChange(const IRCMessage& message);
     void handleUserQuit(const IRCMessage& message);
+    void handleMode(const IRCMessage& message);
     void handleChannelNamesList(const IRCMessage& message);
     void handleNicknameInUse(const IRCMessage& message);
     void handleServerMessage(const IRCMessage& message);

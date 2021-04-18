@@ -91,34 +91,35 @@ void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPS
     }
     else
     if (match(0, irc)) {
-        if (path.size() < 3) {
-            send(HTTPResponseFactory::BadRequest(req, "Invalid path"));
-            return;
-        }
-        if (match(1, channel)) {
-            match_handle3(irc, channel, stats);
-            else match_handle3(irc, channel, reload);
-            else match_handle3(irc, channel, join);
-            else match_handle3(irc, channel, leave);
-            else match_handle3(irc, channel, message);
-            else match_handle3(irc, channel, custom);
-        }
-        else if (match(1, account)) {
-            match_handle3(irc, account, stats);
-            else match_handle3(irc, account, reload);
+        match_handle2(irc, reload);
+        match_handle2(irc, stats);
+        if (path.size() > 2) {
+            if (match(1, channel)) {
+                match_handle3(irc, channel, stats);
+                match_handle3(irc, channel, join);
+                match_handle3(irc, channel, leave);
+                match_handle3(irc, channel, message);
+                match_handle3(irc, channel, custom);
+            }
+            else if (match(1, account)) {
+                match_handle3(irc, account, stats);
+                match_handle3(irc, account, reload);
+                match_handle3(irc, account, add);
+                match_handle3(irc, account, remove);
+            }
         }
     }
     else
     if (match(0, app)) {
         match_handle2(app, shutdown);
-        else match_handle2(app, version);
+        match_handle2(app, version);
     }
     else
     if (match(0, bot)) {
         match_handle2(bot, add);
-        else match_handle2(bot, remove);
-        else match_handle2(bot, reload);
-        else match_handle2(bot, reloadall);
+        match_handle2(bot, remove);
+        match_handle2(bot, reload);
+        match_handle2(bot, reloadall);
     }
 
     send(HTTPResponseFactory::NotFound(req, req.target()));

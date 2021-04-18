@@ -9,12 +9,12 @@
 #include <string>
 #include <string_view>
 #include <algorithm>
+#include <array>
 #include <charconv>
 
-namespace Utils
-{
+using uint128_t = std::pair<uint64_t, uint64_t>;
 
-namespace String
+namespace Utils::String
 {
 
 void toUpper(std::string *str);
@@ -32,8 +32,15 @@ template<typename T = int> T toNumber(std::string_view str) {
 
 bool toBool(std::string_view str);
 
+std::string uuid();
+
 }
 
+namespace Utils::UUIDv4
+{
+    uint128_t uint128();
+    std::string string();
+    std::pair<uint128_t, std::string> pair();
 }
 
 #endif //CHATBOT_COMMON_UTILS_H_

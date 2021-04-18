@@ -14,7 +14,7 @@
 #include "BotLogger.h"
 
 class Logger;
-class IRCWorkerPool;
+class IRCController;
 
 class BotEngine final : public so_5::agent_t
 {

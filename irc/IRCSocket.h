@@ -20,7 +20,7 @@ class IRCSocket
     int receive(char *buf, int maxSize);
 
   private:
-    void socketInit();
+    void create();
 
     SOCKET sock = -1;
     bool established = false;

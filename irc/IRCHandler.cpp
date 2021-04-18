@@ -12,9 +12,10 @@ IRCCommandHandler ircCommandTable[NUM_IRC_CMDS] =
     { "PART", &IRCClient::handleChannelJoinPart },
     { "NICK", &IRCClient::handleUserNickChange  },
     { "QUIT", &IRCClient::handleUserQuit        },
+    { "MODE", &IRCClient::handleMode            },
     { "353", &IRCClient::handleChannelNamesList },
     { "433", &IRCClient::handleNicknameInUse    },
-    { "001", &IRCClient::handleServerMessage    },
+    { "001", &IRCClient::handleServerMessage    }, // connected signal can be send
     { "002", &IRCClient::handleServerMessage    },
     { "003", &IRCClient::handleServerMessage    },
     { "004", &IRCClient::handleServerMessage    },
@@ -30,7 +31,8 @@ IRCCommandHandler ircCommandTable[NUM_IRC_CMDS] =
     { "366", &IRCClient::handleServerMessage    },
     { "372", &IRCClient::handleServerMessage    },
     { "375", &IRCClient::handleServerMessage    },
-    { "376", &IRCClient::handleServerMessage    },
+    { "376", &IRCClient::handleServerMessage    }, // connected signal can be send
+    { "422", &IRCClient::handleNicknameInUse    }, // connected signal can be send
     { "439", &IRCClient::handleServerMessage    }
 };
 

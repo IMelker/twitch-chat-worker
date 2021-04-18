@@ -6,6 +6,7 @@
 #define CHATCONTROLLER_BOT_BOTLOGGER_H_
 
 #include <string>
+#include "../common/Utils.h"
 
 namespace BotLogger {
 
@@ -13,6 +14,7 @@ struct Message {
     int userId = 0;
     int botId = 0;
     int handlerId = 0;
+    uint128_t messageId;
     long long timestamp = 0;
     std::string text;
 };

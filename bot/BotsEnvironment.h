@@ -14,6 +14,7 @@
 #include <so_5/coop_handle.hpp>
 
 #include "BotLogger.h"
+#include "BotConfiguration.h"
 #include "../ChatMessage.h"
 #include "../HttpControllerEvents.h"
 
@@ -47,9 +48,6 @@ class BotsEnvironment final : public so_5::agent_t
     void evtHttpRemove(mhood_t<hreq::bot::remove> req);
     void evtHttpReload(mhood_t<hreq::bot::reload> req);
     void evtHttpReloadAll(mhood_t<hreq::bot::reloadall> req);
-
-    // http handlers
-    std::string handleReloadConfiguration(const std::string &request, std::string &error);
   private:
     void addBot(const BotConfiguration &config);
 

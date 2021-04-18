@@ -14,9 +14,9 @@
 #include <so_5/agent.hpp>
 #include <so_5/timers.hpp>
 
-#include "../common/SysSignal.h"
-#include "IRCClient.h"
-#include "IRCEvents.h"
+#include "common/SysSignal.h"
+#include "irc/IRCClient.h"
+#include "irc/IRCEvents.h"
 
 struct IRCConnectConfig {
     std::string host;

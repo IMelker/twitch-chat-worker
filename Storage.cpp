@@ -118,26 +118,29 @@ void Storage::process(const MessageBatch& messages) {
         return;
 
     using namespace clickhouse;
+    auto ids = std::make_shared<ColumnUUID>();
     auto channels = std::make_shared<ColumnFixedString>(256);
-    auto user = std::make_shared<ColumnFixedString>(256);
-    auto text = std::make_shared<ColumnString>();
+    auto users = std::make_shared<ColumnFixedString>(256);
+    auto texts = std::make_shared<ColumnString>();
     //auto tags = std::make_shared<ColumnString>();
     auto timestamps = std::make_shared<ColumnDateTime64>(3);
-    auto language = std::make_shared<ColumnFixedString>(16);
+    auto languages = std::make_shared<ColumnFixedString>(16);
     for (const auto & message : messages) {
+        ids->Append(message->uuid.first);
         channels->Append(message->channel);
-        user->Append(message->user);
-        text->Append(message->text);
+        users->Append(message->user);
+        texts->Append(message->text);
         timestamps->Append(message->timestamp);
-        language->Append(message->lang);
+        languages->Append(message->lang);
     }
 
     Block block;
+    block.AppendColumn("id", ids);
     block.AppendColumn("channel", channels);
-    block.AppendColumn("from", user);
-    block.AppendColumn("text", text);
+    block.AppendColumn("from", users);
+    block.AppendColumn("text", texts);
     block.AppendColumn("timestamp", timestamps);
-    block.AppendColumn("language", language);
+    block.AppendColumn("language", languages);
     try {
         DBConnectionLock chl(ch);
         chl->insert("twitch_chat.messages", block);
@@ -157,12 +160,14 @@ void Storage::process(const Storage::BotLogBatch &batch) {
     auto handlerIds = std::make_shared<ColumnInt32>();
     auto timestamps = std::make_shared<ColumnDateTime64>(3);
     auto text = std::make_shared<ColumnString>();
+    auto messageIds = std::make_shared<ColumnUUID>();
     for (const auto & record : batch) {
         userIds->Append(record->userId);
         botIds->Append(record->botId);
         handlerIds->Append(record->handlerId);
         timestamps->Append(record->timestamp);
         text->Append(record->text);
+        messageIds->Append(record->messageId);
     }
 
     Block block;
@@ -171,6 +176,7 @@ void Storage::process(const Storage::BotLogBatch &batch) {
     block.AppendColumn("handler_id", handlerIds);
     block.AppendColumn("timestamp", timestamps);
     block.AppendColumn("text", text);
+    block.AppendColumn("message_id", messageIds);
     try {
         DBConnectionLock chl(ch);
         chl->insert("twitch_chat.user_logs", block);

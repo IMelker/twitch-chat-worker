@@ -12,7 +12,7 @@
 #include "common/Config.h"
 #include "common/LoggerFactory.h"
 
-#include "irc/IRCWorker.h"
+#include "IRCWorker.h"
 #include "db/ch/CHConnectionPool.h"
 #include "db/pg/PGConnectionPool.h"
 
@@ -108,33 +108,36 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
-    // 1. TODO ressurect HTTPServer
-    // 2. TODO choose dispatchers
+    // 1. TODO HTTPServer to IRCController
+    // 2. TODO choose dispatchers/threadpools
 
     // TODO fix options, remove useless and add controlls
-    // TODO BotEngone timer events
-    // TODO add remove timer events from Timer
+
+    // BotEngine
+    // TODO BotEngine timer events
     // TODO add timer and timer event to bot
+    // TODO move language detect to BOTEngine (?) // to decrease cpu usage
 
+    // IRCWorkersPool
     // TODO change channel join behavior
-
-    // TODO move language detect to BOTEngine (?)
-
-    // TODO add bot, accounts update
-    // TODO add uuid for message, uuid to storage and link uuid to BotLogger::Message
-
-    // TODO Review accounts, channels, bots logic
+    // TODO accounts update
     // TODO TCP selector for socket for multiple sockets
+    // TODO IRCMessage to string_view, or something like that
+
+    // Global
+    // TODO Review accounts, channels, bots logic
     // TODO add tags support
+    // TODO add key value storage
     // TODO add HTTPClient
     // TODO add TwitchAPI
     // TODO add smileys detection for messages
 
+    // Blockings and users
     // TODO blocked date for bot
     // TODO blocked user for bot
 
-    // TODO IRCMessage to string_view
-    // TODO Make http auth for control
+    // Clickhouse
+    // TODO set TTL for user_logs messages to 30 days https://clickhouse.tech/docs/en/engines/table-engines/mergetree-family/mergetree/#table_engine-mergetree-ttl
     // TODO make clickhouse SSL client
     // TODO change CH name and display sizes user max=50
 }

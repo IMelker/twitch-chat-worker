@@ -61,9 +61,10 @@ add_executable(chatcontroller
         HttpController.h HttpController.cpp
         Controller.h Controller.cpp
         DBController.h DBController.cpp
-        ChatMessage.h
+        IRCController.h IRCController.cpp
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
+        ChatMessage.h
         common/SysSignal.h common/SysSignal.cpp
         common/Options.h common/Options.cpp
         common/Config.h common/Config.cpp
@@ -83,8 +84,7 @@ add_executable(chatcontroller
         irc/IRCSocket.h irc/IRCSocket.cpp
         irc/IRCClient.h irc/IRCClient.cpp
         irc/IRCHandler.h irc/IRCHandler.cpp
-        irc/IRCWorker.h irc/IRCWorker.cpp
-        irc/IRCWorkerPool.h irc/IRCWorkerPool.cpp
+        IRCWorker.h IRCWorker.cpp
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
         bot/BotConfiguration.h bot/BotLogger.h

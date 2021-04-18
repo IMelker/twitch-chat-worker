@@ -13,14 +13,14 @@
 #include <so_5/environment.hpp>
 
 #include "http/server/HTTPServer.h"
-#include "irc/IRCWorker.h"
-#include "irc/IRCWorkerPool.h"
 #include "db/pg/PGConnectionPool.h"
-#include "db/ch/CHConnectionPool.h"
-#include "bot/BotsEnvironment.h"
-#include "MessageProcessor.h"
-#include "Storage.h"
 #include "DBController.h"
+#include "IRCWorker.h"
+#include "IRCController.h"
+#include "MessageProcessor.h"
+#include "bot/BotsEnvironment.h"
+#include "db/ch/CHConnectionPool.h"
+#include "Storage.h"
 #include "common/Config.h"
 
 class Logger;
@@ -43,7 +43,7 @@ class Controller final : public so_5::agent_t
     Storage *makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listener);
     BotsEnvironment *makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener);
     MessageProcessor *makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher);
-    IRCWorkerPool *makeIRCWorkerPool(so_5::coop_t &coop);
+    IRCController *makeIRCController(so_5::coop_t &coop);
 
   private:
     Config &config;
@@ -54,7 +54,7 @@ class Controller final : public so_5::agent_t
     Storage *storage = nullptr;
     BotsEnvironment *botsEnvironment = nullptr;
     MessageProcessor *msgProcessor = nullptr;
-    IRCWorkerPool *ircWorkers = nullptr;
+    IRCController *ircWorkers = nullptr;
 
     so_5::mbox_t http;
     so_5::timer_id_t shutdownCheckTimer;

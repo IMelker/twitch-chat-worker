@@ -40,13 +40,13 @@ void Controller::so_define_agent() {
             so_deregister_agent_coop_normally();
         }
     });
-    so_subscribe_self().event([this](mhood_t<hreq::app::shutdown> req) {
+    so_subscribe(http).event([this](mhood_t<hreq::app::shutdown> req) {
         json body = json::object();
-        body["version"] = APP_NAME " " APP_VERSION " " APP_GIT_DATE " (" APP_GIT_HASH ")";
+        body["result"] = "Terminating";
         so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), 200, body.dump());
         SysSignal::setServiceTerminated(true);
     });
-    so_subscribe_self().event([this](mhood_t<hreq::app::version> req) {
+    so_subscribe(http).event([this](mhood_t<hreq::app::version> req) {
         json body = json::object();
         body["version"] = APP_NAME " " APP_VERSION " " APP_GIT_DATE " (" APP_GIT_HASH ")";
         so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), 200, body.dump());
@@ -59,7 +59,7 @@ void Controller::so_evt_start() {
         storage = makeStorage(coop, listener);
         botsEnvironment = makeBotsEnvironment(coop, listener);
         msgProcessor = makeMessageProcessor(coop, listener /*as publisher*/);
-        ircWorkers = makeIRCWorkerPool(coop);
+        ircWorkers = makeIRCController(coop);
 
         botsEnvironment->setMessageSender(ircWorkers->so_direct_mbox());
         botsEnvironment->setBotLogger(storage->so_direct_mbox());
@@ -108,10 +108,10 @@ MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_
                                                          publisher, std::move(procCfg), this->logger);
 }
 
-IRCWorkerPool *Controller::makeIRCWorkerPool(so_5::coop_t &coop) {
+IRCController *Controller::makeIRCController(so_5::coop_t &coop) {
     IRCConnectConfig ircConfig;
     ircConfig.host = config[IRC]["host"].value_or("irc.chat.twitch.tv");
     ircConfig.port = config[IRC]["port"].value_or(6667);
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
-    return coop.make_agent<IRCWorkerPool>(msgProcessor->so_direct_mbox(), ircConfig, db.get(), ircLogger);
+    return coop.make_agent<IRCController>(msgProcessor->so_direct_mbox(), http, ircConfig, db, ircLogger);
 }

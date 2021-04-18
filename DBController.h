@@ -9,7 +9,7 @@
 #include <vector>
 #include <string>
 #include <map>
-#include "irc/IRCWorker.h"
+#include "IRCWorker.h"
 #include "db/pg/PGConnectionPool.h"
 #include "bot/BotConfiguration.h"
 

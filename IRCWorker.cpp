@@ -8,8 +8,9 @@
 #include <fmt/format.h>
 #include <so_5/send_functions.hpp>
 
-#include "../common/Logger.h"
-#include "../common/Clock.h"
+#include "common/Logger.h"
+#include "common/Clock.h"
+
 #include "IRCWorker.h"
 
 #define AUTH_ATTEMPTS_LIMIT 20

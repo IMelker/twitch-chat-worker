@@ -6,7 +6,7 @@
 
 #include "common/ThreadPool.h"
 #include "common/Logger.h"
-#include "irc/IRCWorker.h"
+#include "IRCWorker.h"
 #include "ChatMessage.h"
 #include "MessageProcessor.h"
 
@@ -38,8 +38,7 @@ void MessageProcessor::so_evt_finish() {
 void MessageProcessor::evtIrcMessage(const IRCMessage &ircMessage) {
     auto message = transform(ircMessage);
 
-    logger->logTrace(R"(MessageProcessor process {{channel: "{}", from: "{}", text: "{}", lang: "{}", valid: {}}})",
-                     message->channel, message->user, message->text, message->lang, message->valid);
+    logger->logTrace("MessageProcessor process: {}", *message);
 
     so_5::send(listener, message);
 }

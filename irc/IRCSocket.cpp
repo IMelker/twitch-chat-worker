@@ -17,14 +17,14 @@
 #define POLL_DELAY 1000
 
 IRCSocket::IRCSocket() {
-    socketInit();
+    create();
 }
 
 IRCSocket::~IRCSocket() {
     disconnect();
 }
 
-void IRCSocket::socketInit() {
+void IRCSocket::create() {
     if ((this->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == SOCKET_ERROR) {
         DefaultLogger::logCritical("Socket create failed. Error: {}", strerror(errno));
         exit(SOCKET_ERROR);

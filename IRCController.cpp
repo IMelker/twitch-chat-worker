@@ -6,21 +6,25 @@
 
 #include <so_5/send_functions.hpp>
 
-#include "../common/Logger.h"
-#include "../common/Clock.h"
-#include "IRCWorkerPool.h"
+#include "common/Logger.h"
+#include "common/Clock.h"
+#include "DBController.h"
+#include "IRCController.h"
 
 #include <utility>
 
 using json = nlohmann::json;
 
-IRCWorkerPool::IRCWorkerPool(const context_t &ctx, so_5::mbox_t processor,
+IRCController::IRCController(const context_t &ctx,
+                             so_5::mbox_t processor,
+                             so_5::mbox_t http,
                              const IRCConnectConfig &conConfig,
-                             DBController *db,
+                             std::shared_ptr<DBController> db,
                              std::shared_ptr<Logger> logger)
-  : so_5::agent_t(ctx), processor(std::move(processor)), logger(std::move(logger)), config(conConfig), db(db) {
+  : so_5::agent_t(ctx), processor(std::move(processor)), http(std::move(http)),
+    logger(std::move(logger)), db(std::move(db)), config(conConfig) {
 
-    auto chs = db->loadChannels();
+    auto chs = this->db->loadChannels();
     std::transform(chs.begin(), chs.end(), std::inserter(this->watchChannels, this->watchChannels.end()),
         [] (std::string& channel) {
             return std::make_pair(std::move(channel), nullptr);
@@ -28,17 +32,28 @@ IRCWorkerPool::IRCWorkerPool(const context_t &ctx, so_5::mbox_t processor,
     lastChannelLoadTimestamp = CurrentTime<std::chrono::system_clock>::seconds();
 }
 
-IRCWorkerPool::~IRCWorkerPool() = default;
+IRCController::~IRCController() = default;
 
 
-void IRCWorkerPool::so_define_agent() {
-    so_subscribe_self().event(&IRCWorkerPool::evtSendMessage);
-    so_subscribe_self().event(&IRCWorkerPool::evtWorkerConnected);
-    so_subscribe_self().event(&IRCWorkerPool::evtWorkerDisconnected);
-    so_subscribe_self().event(&IRCWorkerPool::evtWorkerLogin);
+void IRCController::so_define_agent() {
+    so_subscribe_self().event(&IRCController::evtSendMessage);
+    so_subscribe_self().event(&IRCController::evtWorkerConnected);
+    so_subscribe_self().event(&IRCController::evtWorkerDisconnected);
+    so_subscribe_self().event(&IRCController::evtWorkerLogin);
+    so_subscribe(http).event(&IRCController::evtHttpStatus);
+    so_subscribe(http).event(&IRCController::evtHttpReload);
+    so_subscribe(http).event(&IRCController::evtHttpChannelJoin);
+    so_subscribe(http).event(&IRCController::evtHttpChannelLeave);
+    so_subscribe(http).event(&IRCController::evtHttpChannelMessage);
+    so_subscribe(http).event(&IRCController::evtHttpChannelCustom);
+    so_subscribe(http).event(&IRCController::evtHttpChannelStats);
+    so_subscribe(http).event(&IRCController::evtHttpAccountAdd);
+    so_subscribe(http).event(&IRCController::evtHttpAccountRemove);
+    so_subscribe(http).event(&IRCController::evtHttpAccountReload);
+    so_subscribe(http).event(&IRCController::evtHttpAccountStats);
 }
 
-void IRCWorkerPool::so_evt_start() {
+void IRCController::so_evt_start() {
     auto accounts = this->db->loadAccounts();
 
     so_5::introduce_child_coop(*this, [&] (so_5::coop_t &coop) {
@@ -51,11 +66,11 @@ void IRCWorkerPool::so_evt_start() {
     this->logger->logInfo("IRCWorkerPool {} workers inited", workers.size());
 }
 
-void IRCWorkerPool::so_evt_finish() {
+void IRCController::so_evt_finish() {
 
 }
 
-void IRCWorkerPool::evtSendMessage(mhood_t<SendMessage> message) {
+void IRCController::evtSendMessage(mhood_t<SendMessage> message) {
     auto it = workers.find(message->account);
     if (it != workers.end()) {
         so_5::send(it->second->so_direct_mbox(), message);
@@ -64,15 +79,15 @@ void IRCWorkerPool::evtSendMessage(mhood_t<SendMessage> message) {
     }
 }
 
-void IRCWorkerPool::evtWorkerConnected(so_5::mhood_t<WorkerConnected> evt) {
+void IRCController::evtWorkerConnected(so_5::mhood_t<WorkerConnected> evt) {
     logger->logTrace("IRCWorkerPool::IRCWorker[{}] on connected", fmt::ptr(evt->worker));
 }
 
-void IRCWorkerPool::evtWorkerDisconnected(so_5::mhood_t<WorkerDisconnected> evt) {
+void IRCController::evtWorkerDisconnected(so_5::mhood_t<WorkerDisconnected> evt) {
     logger->logTrace("IRCWorkerPool::IRCWorker[{}] on disconnected", fmt::ptr(evt->worker));
 }
 
-void IRCWorkerPool::evtWorkerLogin(so_5::mhood_t<WorkerLoggedIn> evt) {
+void IRCController::evtWorkerLogin(so_5::mhood_t<WorkerLoggedIn> evt) {
     logger->logTrace("IRCWorkerPool::IRCWorker[{}] on logged in", fmt::ptr(evt->worker));
 
     int counter = evt->worker->freeChannelSpace();
@@ -90,7 +105,51 @@ void IRCWorkerPool::evtWorkerLogin(so_5::mhood_t<WorkerLoggedIn> evt) {
     }
 }
 
-std::tuple<int, std::string> IRCWorkerPool::processHttpRequest(std::string_view path, const std::string &request,
+void IRCController::evtHttpStatus(mhood_t<hreq::irc::stats> evt) {
+
+}
+
+void IRCController::evtHttpReload(mhood_t<hreq::irc::reload> evt) {
+
+}
+
+void IRCController::evtHttpChannelJoin(mhood_t<hreq::irc::channel::join> evt) {
+
+}
+
+void IRCController::evtHttpChannelLeave(mhood_t<hreq::irc::channel::leave> evt) {
+
+}
+
+void IRCController::evtHttpChannelMessage(mhood_t<hreq::irc::channel::message> evt) {
+
+}
+
+void IRCController::evtHttpChannelCustom(mhood_t<hreq::irc::channel::custom> evt) {
+
+}
+
+void IRCController::evtHttpChannelStats(mhood_t<hreq::irc::channel::stats> evt) {
+
+}
+
+void IRCController::evtHttpAccountAdd(mhood_t<hreq::irc::account::add> evt) {
+
+}
+
+void IRCController::evtHttpAccountRemove(mhood_t<hreq::irc::account::remove> evt) {
+
+}
+
+void IRCController::evtHttpAccountReload(mhood_t<hreq::irc::account::reload> evt) {
+
+}
+
+void IRCController::evtHttpAccountStats(mhood_t<hreq::irc::account::stats> evt) {
+
+}
+
+std::tuple<int, std::string> IRCController::processHttpRequest(std::string_view path, const std::string &request,
                                                                std::string &error) {
     if (path == "message")
         return {200, handleMessage(request, error)};
@@ -107,13 +166,11 @@ std::tuple<int, std::string> IRCWorkerPool::processHttpRequest(std::string_view 
     if (path == "reloadchannels")
         return {200, handleReloadChannels(request, error)};
 
-
     error = "Failed to match path";
-    return EMPTY_HTTP_RESPONSE;
+    return {};
 }
 
-
-std::string IRCWorkerPool::handleJoin(const std::string &request, std::string &error) {
+std::string IRCController::handleJoin(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";
@@ -162,7 +219,7 @@ std::string IRCWorkerPool::handleJoin(const std::string &request, std::string &e
     return body.dump();
 }
 
-std::string IRCWorkerPool::handleAccounts(const std::string &request, std::string &error) {
+std::string IRCController::handleAccounts(const std::string &request, std::string &error) {
     auto fillAccount = [] (json& account, const auto& stats) {
         account["reconnects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
                                  {"count", stats.connects.attempts.load(std::memory_order_relaxed)}};
@@ -210,7 +267,7 @@ std::string IRCWorkerPool::handleAccounts(const std::string &request, std::strin
     return body.dump();
 }
 
-std::string IRCWorkerPool::handleChannels(const std::string &request, std::string &error) {
+std::string IRCController::handleChannels(const std::string &request, std::string &error) {
     json body = json::object();
     if (request.empty()) {
         for (auto &[nick, worker]: workers)
@@ -247,7 +304,7 @@ std::string IRCWorkerPool::handleChannels(const std::string &request, std::strin
     return body.dump();
 }
 
-std::string IRCWorkerPool::handleLeave(const std::string &request, std::string &error) {
+std::string IRCController::handleLeave(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";
@@ -287,7 +344,7 @@ std::string IRCWorkerPool::handleLeave(const std::string &request, std::string &
     return "";
 }
 
-std::string IRCWorkerPool::handleReloadChannels(const std::string &request, std::string &error) {
+std::string IRCController::handleReloadChannels(const std::string &request, std::string &error) {
     auto channels = this->db->loadChannels(lastChannelLoadTimestamp);
 
     std::vector<std::string> leaveList, joinList;
@@ -338,7 +395,7 @@ std::string IRCWorkerPool::handleReloadChannels(const std::string &request, std:
     return body.dump();
 }
 
-std::string IRCWorkerPool::handleMessage(const std::string &request, std::string &error) {
+std::string IRCController::handleMessage(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";
@@ -413,7 +470,7 @@ std::string IRCWorkerPool::handleMessage(const std::string &request, std::string
     return body.dump();
 }
 
-std::string IRCWorkerPool::handleCustom(const std::string &request, std::string &error) {
+std::string IRCController::handleCustom(const std::string &request, std::string &error) {
     json req = json::parse(request, nullptr, false, true);
     if (req.is_discarded()) {
         error = "Failed to parse JSON";

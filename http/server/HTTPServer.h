@@ -14,7 +14,6 @@
 #include <boost/beast/ssl.hpp>
 
 #include "HTTPRequestHandler.h"
-#include "HTTPServerUnit.h"
 #include "HTTPSession.h"
 
 class Logger;
@@ -49,6 +48,8 @@ class HTTPServer : public HTTPRequestHandler
   protected:
     HTTPControlConfig config;
     std::shared_ptr<Logger> logger;
+
+    std::string basicAuth;
 
     boost::asio::io_context ioc;
     boost::asio::ssl::context ctx;

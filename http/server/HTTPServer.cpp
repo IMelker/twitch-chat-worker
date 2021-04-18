@@ -5,18 +5,22 @@
 #include <exception>
 
 #include "../../common/Logger.h"
-
-#include "HTTPServerUnit.h"
+#include "../details/details.h"
 #include "HTTPServer.h"
 #include "HTTPListener.h"
 #include "HTTPServerCertificate.h"
+#include "HTTPResponseFactory.h"
 
 HTTPServer::HTTPServer(HTTPControlConfig config, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger)
     : config(std::move(config)),
       logger(std::move(logger)),
-      ioc(config.threads),
+      ioc(this->config.threads),
       ctx(boost::asio::ssl::context::tlsv12),
       handler(handler) {
+    if (!this->config.pass.empty()) {
+        basicAuth = base64::encode64(this->config.user + ":" + this->config.pass);
+    }
+
     if (this->config.secure) {
         if (this->config.ssl.verify)
             ctx.set_verify_mode(boost::asio::ssl::verify_fail_if_no_peer_cert);
@@ -74,5 +78,24 @@ void HTTPServer::stop() {
 }
 
 void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
+    if (!basicAuth.empty()) {
+        auto it = req.find("Authorization");
+        if (it == req.end()) {
+            return send(HTTPResponseFactory::Unauthorized(req));
+        }
+        else {
+            auto pos = it->value().find(' ');
+
+            auto type =  it->value().substr(0, pos);
+            if (type != "Basic")
+                return send(HTTPResponseFactory::NotAcceptable(req));
+
+            auto encoded = it->value().substr(pos + 1);
+            if (encoded != basicAuth)
+                return send(HTTPResponseFactory::Forbidden(req));
+            // auth succeed
+        }
+    }
+
     handler->handleRequest(std::move(req), std::move(send));
 }

@@ -8,7 +8,7 @@
 
 #include <so_5/send_functions.hpp>
 
-#include "../irc/IRCWorkerPool.h"
+#include "../IRCController.h"
 #include "../common/Logger.h"
 #include "../common/Clock.h"
 #include "../common/Timer.h"
@@ -104,8 +104,9 @@ void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
     auto engine = lua.create_named_table("engine");
     engine["message"] = *message;
 
-    engine.set_function("log", [this, &lua] (const std::string& text) {
-        so_5::send<BotLogger::Message>(botLogger, config.userId, config.botId, lua.get<int>("_handler_id"),
+    engine.set_function("log", [this, &lua, message] (const std::string& text) {
+        so_5::send<BotLogger::Message>(botLogger, config.userId, config.botId,
+                                       lua.get<int>("_handler_id"), message->uuid.first,
                                        CurrentTime<std::chrono::system_clock>::milliseconds(), text);
     });
     engine.set_function("send", [this, &account = config.account, &channel = config.channel] (const std::string& text) {
@@ -117,7 +118,7 @@ void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
         sol::protected_function_result pfr = lua.safe_script(script, &sol::script_pass_on_error);
         if (!pfr.valid()) {
             sol::error err = pfr;
-            so_5::send<BotLogger::Message>(botLogger, config.userId, config.botId, id,
+            so_5::send<BotLogger::Message>(botLogger, config.userId, config.botId, id, message->uuid.first,
                                            CurrentTime<std::chrono::system_clock>::milliseconds(), err.what());
         }
     }
