@@ -78,11 +78,11 @@ void BotEngine::so_evt_finish() {
     this->logger->logInfo("BotEngine bot(id={}) stoped", this->config.botId);
 }
 
-void BotEngine::evtShutdown(so_5::mhood_t<BotEngine::Shutdown>) {
+void BotEngine::evtShutdown(so_5::mhood_t<Bot::Shutdown>) {
     so_deregister_agent_coop_normally();
 }
 
-void BotEngine::evtReload(so_5::mhood_t<BotEngine::Reload> message) {
+void BotEngine::evtReload(so_5::mhood_t<Bot::Reload> message) {
     this->logger->logInfo("BotEngine bot(id={}) config update", this->config.botId);
     this->config = std::move(message->config);
 }
@@ -105,12 +105,12 @@ void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
     engine["message"] = *message;
 
     engine.set_function("log", [this, &lua, message] (const std::string& text) {
-        so_5::send<BotLogger::Message>(botLogger, config.userId, config.botId,
+        so_5::send<Bot::LogMessage>(botLogger, config.userId, config.botId,
                                        lua.get<int>("_handler_id"), message->uuid.first,
                                        CurrentTime<std::chrono::system_clock>::milliseconds(), text);
     });
     engine.set_function("send", [this, &account = config.account, &channel = config.channel] (const std::string& text) {
-        so_5::send<SendMessage>(msgSender, account, channel, text);
+        so_5::send<Irc::SendMessage>(msgSender, account, channel, text);
     });
 
     for (auto &[script, id, additional]: config.onMessage) {
@@ -118,7 +118,7 @@ void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
         sol::protected_function_result pfr = lua.safe_script(script, &sol::script_pass_on_error);
         if (!pfr.valid()) {
             sol::error err = pfr;
-            so_5::send<BotLogger::Message>(botLogger, config.userId, config.botId, id, message->uuid.first,
+            so_5::send<Bot::LogMessage>(botLogger, config.userId, config.botId, id, message->uuid.first,
                                            CurrentTime<std::chrono::system_clock>::milliseconds(), err.what());
         }
     }
@@ -146,7 +146,7 @@ void BotEngine::handleTimer(Handler &handler) {
 
         auto engine = lua.create_named_table("engine");
         engine.set_function("log", [this, &lua] (const std::string& text) {
-            so_5::send<BotLogger::Message>(botLogger,
+            so_5::send<Bot::LogMessage>(botLogger,
                                            config.userId, config.botId, lua.get<int>("_handler_id"),
                                            CurrentTime<std::chrono::system_clock>::milliseconds(), text);
         });

@@ -15,6 +15,7 @@
 #include "BotConfiguration.h"
 #include "BotsEnvironment.h"
 #include "BotEngine.h"
+#include "BotEvents.h"
 
 #define resp(str) json{{"result", str}}.dump()
 
@@ -23,10 +24,11 @@ using json = nlohmann::json;
 BotsEnvironment::BotsEnvironment(const context_t &ctx,
                                  so_5::mbox_t publisher,
                                  so_5::mbox_t http,
-                                 DBController *db,
+                                 std::shared_ptr<DBController> db,
                                  std::shared_ptr<Logger> logger)
-  : so_5::agent_t(ctx), publisher(std::move(publisher)), http(std::move(http)), db(db), logger(std::move(logger)) {
-    ignoreUsers = db->loadUsersNicknames();
+    : so_5::agent_t(ctx), publisher(std::move(publisher)), http(std::move(http)),
+      db(std::move(db)), logger(std::move(logger)) {
+    ignoreUsers = this->db->loadUsersNicknames();
 }
 
 BotsEnvironment::~BotsEnvironment() {
@@ -82,82 +84,82 @@ void BotsEnvironment::evtChatMessage(mhood_t<Chat::Message> msg) {
     }
 }
 
-void BotsEnvironment::evtHttpAdd(mhood_t<hreq::bot::add> add) {
+void BotsEnvironment::evtHttpAdd(mhood_t<hreq::bot::add> evt) {
     logger->logTrace("BotsEnvironment Add new bot");
 
-    json req = json::parse(add->req.body(), nullptr, false, true);
+    json req = json::parse(evt->req.body(), nullptr, false, true);
     if (req.is_discarded())
-        return so_5::send<hreq::resp>(http, std::move(add->req), std::move(add->send), 501, resp("Failed to parse JSON"));
+        return send_http_resp(http, evt, 501, resp("Failed to parse JSON"));
 
     const auto& botId = req["id"];
     if (!botId.is_number())
-        return so_5::send<hreq::resp>(http, std::move(add->req), std::move(add->send), 400, resp("Wrong bot id"));
+        return send_http_resp(http, evt, 400, resp("Wrong bot id"));
 
     int id = botId.get<int>();
     auto it = botsById.find(id);
     if (it != botsById.end())
-        return so_5::send<hreq::resp>(http, std::move(add->req), std::move(add->send), 403, resp("Bot already added"));
+        return send_http_resp(http, evt, 403, resp("Bot already added"));
 
     auto config = db->loadBotConfiguration(id);
     if (config.botId == 0)
-        return so_5::send<hreq::resp>(http, std::move(add->req), std::move(add->send), 404, resp("Bot not found in DB"));
+        return send_http_resp(http, evt, 404, resp("Bot not found in DB"));
 
     addBot(config);
 
     json body = {{"id", config.botId}, {"result", "Bot added"}};
-    so_5::send<hreq::resp>(http, std::move(add->req), std::move(add->send), 200, body.dump());
+    send_http_resp(http, evt, 200, body.dump());
 }
 
-void BotsEnvironment::evtHttpRemove(mhood_t<hreq::bot::remove> rem) {
-    json req = json::parse(rem->req.body(), nullptr, false, true);
+void BotsEnvironment::evtHttpRemove(mhood_t<hreq::bot::remove> evt) {
+    json req = json::parse(evt->req.body(), nullptr, false, true);
     if (req.is_discarded())
-        return so_5::send<hreq::resp>(http, std::move(rem->req), std::move(rem->send), 501, resp("Failed to parse JSON"));
+        return send_http_resp(http, evt, 501, resp("Failed to parse JSON"));
 
     const auto& botId = req["id"];
     if (!botId.is_number())
-        return so_5::send<hreq::resp>(http, std::move(rem->req), std::move(rem->send), 400, resp("Wrong bot id"));
+        return send_http_resp(http, evt, 400, resp("Wrong bot id"));
 
     int id = botId.get<int>();
     auto it = botsById.find(id);
     if (it == botsById.end())
-        return so_5::send<hreq::resp>(http, std::move(rem->req), std::move(rem->send), 404, resp("Bot not found"));
+        return send_http_resp(http, evt, 404, resp("Bot not found"));
 
     // TODO add remove mbox
-    so_5::send<BotEngine::Shutdown>(it->second->so_direct_mbox());
+    so_5::send<Bot::Shutdown>(it->second->so_direct_mbox());
     botsById.erase(it);
     logger->logTrace("BotsEnvironment Remove bot(id={})", id);
 
     json body = {{"botId", id}, {"result", "Bot removed"}};
-    so_5::send<hreq::resp>(http, std::move(rem->req), std::move(rem->send), 200, body.dump());
+    send_http_resp(http, evt, 200, body.dump());
 }
 
-void BotsEnvironment::evtHttpReload(mhood_t<hreq::bot::reload> rel) {
-    json req = json::parse(rel->req.body(), nullptr, false, true);
+void BotsEnvironment::evtHttpReload(mhood_t<hreq::bot::reload> evt) {
+    json req = json::parse(evt->req.body(), nullptr, false, true);
     if (req.is_discarded())
-        return so_5::send<hreq::resp>(http, std::move(rel->req), std::move(rel->send), 501, resp("Failed to parse JSON"));
+        return send_http_resp(http, evt, 501, resp("Failed to parse JSON"));
 
     const auto& botId = req["id"];
     if (!botId.is_number())
-        return so_5::send<hreq::resp>(http, std::move(rel->req), std::move(rel->send), 400, resp("Wrong bot id"));
+        return send_http_resp(http, evt, 400, resp("Wrong bot id"));
 
     int id = botId.get<int>();
     auto it = botsById.find(id);
     if (it == botsById.end())
-        return so_5::send<hreq::resp>(http, std::move(rel->req), std::move(rel->send), 404, resp("Bot not found"));
+        return send_http_resp(http, evt, 404, resp("Bot not found"));
 
     auto config = db->loadBotConfiguration(id);
     if (config.botId == 0)
-        return so_5::send<hreq::resp>(http, std::move(rel->req), std::move(rel->send), 404, resp("Bot not found in DB"));
+        return send_http_resp(http, evt, 404, resp("Bot not found in DB"));
 
-    so_5::send<BotEngine::Reload>(it->second->so_direct_mbox(), std::move(config));
+    so_5::send<Bot::Reload>(it->second->so_direct_mbox(), std::move(config));
     logger->logTrace("BotsEnvironment Reload bot(id={})", id);
 
     json body = {{"botId", id}, {"result", "Bot reloaded"}};
-    so_5::send<hreq::resp>(http, std::move(rel->req), std::move(rel->send), 200, body.dump());
+    send_http_resp(http, evt, 200, body.dump());
 }
 
-void BotsEnvironment::evtHttpReloadAll(mhood_t<hreq::bot::reloadall> rel) {
-    // TODO hanlde unregistered bots
+void BotsEnvironment::evtHttpReloadAll(mhood_t<hreq::bot::reloadall> evt) {
+    // TODO handle unregistered bots
     auto configs = db->loadBotConfigurations();
     for (auto &[id, config]: configs) {
         auto it = botsById.find(id);
@@ -165,11 +167,11 @@ void BotsEnvironment::evtHttpReloadAll(mhood_t<hreq::bot::reloadall> rel) {
             addBot(config);
         }
         else {
-            so_5::send<BotEngine::Reload>(it->second->so_direct_mbox(), std::move(config));
+            so_5::send<Bot::Reload>(it->second->so_direct_mbox(), std::move(config));
         }
     }
     this->logger->logInfo("BotsEnvironment Configuration reloaded for {} bots", configs.size());
 
     json body = {{"result", "Reloaded"}};
-    so_5::send<hreq::resp>(http, std::move(rel->req), std::move(rel->send), 200, body.dump());
+    send_http_resp(http, evt, 200, body.dump());
 }

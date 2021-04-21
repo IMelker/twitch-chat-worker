@@ -48,8 +48,8 @@ class Controller final : public so_5::agent_t
   private:
     Config &config;
 
-    std::shared_ptr<Logger> logger;
-    std::shared_ptr<DBController> db;
+    const std::shared_ptr<Logger> logger;
+    const std::shared_ptr<DBController> db;
 
     Storage *storage = nullptr;
     BotsEnvironment *botsEnvironment = nullptr;

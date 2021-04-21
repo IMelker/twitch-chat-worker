@@ -54,18 +54,18 @@ void Storage::so_evt_finish() {
     flush();
 }
 
-void Storage::evtChatMessage(mhood_t<Chat::Message> msg) {
+void Storage::evtChatMessage(so_5::mhood_t<Chat::Message> msg) {
     store(msg.make_holder());
 }
 
-void Storage::evtBotLogMessage(mhood_t<BotLogger::Message> msg) {
+void Storage::evtBotLogMessage(so_5::mhood_t<Bot::LogMessage> msg) {
     logger->logTrace("Storage BotLogMessage: timestamp: {}, userId: {}, botId: {}, handlerId: {}, text: \"{}\"",
                      msg->timestamp, msg->userId, msg->botId, msg->handlerId, msg->text);
 
     store(msg.make_holder());
 }
 
-void Storage::evtFlushBotLogMessages(mhood_t<FlushBotLogMessages>) {
+void Storage::evtFlushBotLogMessages(so_5::mhood_t<FlushBotLogMessages>) {
     BotLogBatch temp;
     temp.reserve(batchSize);
     {
@@ -77,7 +77,7 @@ void Storage::evtFlushBotLogMessages(mhood_t<FlushBotLogMessages>) {
     ch->getLogger()->flush();
 }
 
-void Storage::evtFlushChatMessages(mhood_t<FlushChatMessages>) {
+void Storage::evtFlushChatMessages(so_5::mhood_t<FlushChatMessages>) {
     MessageBatch temp;
     temp.reserve(batchSize);
     {
@@ -89,7 +89,7 @@ void Storage::evtFlushChatMessages(mhood_t<FlushChatMessages>) {
     ch->getLogger()->flush();
 }
 
-void Storage::evtFlushAll(mhood_t<Flush>) {
+void Storage::evtFlushAll(so_5::mhood_t<Flush>) {
     flush();
 }
 
@@ -214,12 +214,12 @@ void Storage::store(BotLogHolder &&msg) {
     }
 }
 
-void Storage::evtHttpStats(mhood_t<hreq::storage::stats> req) {
+void Storage::evtHttpStats(so_5::mhood_t<hreq::storage::stats> evt) {
     logger->logTrace("Storage Gathering storage stats invoked by http request");
     int status = 200;
     std::string err, body;
     try {
-        body = ch->httpStats(req->req.body(), err);
+        body = ch->httpStats(evt->req.body(), err);
     } catch (const std::exception& e) {
         err = e.what();
     } catch (...) {
@@ -229,8 +229,8 @@ void Storage::evtHttpStats(mhood_t<hreq::storage::stats> req) {
 
     if (!err.empty()) {
         status = 501;
-        so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), status, err);
+        send_http_resp(http, evt, status, err);
     } else {
-        so_5::send<hreq::resp>(http, std::move(req->req), std::move(req->send), status, std::move(body));
+        send_http_resp(http, evt, status, std::move(body));
     }
 }

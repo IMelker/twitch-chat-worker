@@ -62,6 +62,8 @@ add_executable(chatcontroller
         Controller.h Controller.cpp
         DBController.h DBController.cpp
         IRCController.h IRCController.cpp
+        IRCWorker.h IRCWorker.cpp IRCEvents.h
+        ChannelController.h ChannelController.cpp
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
         ChatMessage.h
@@ -84,10 +86,9 @@ add_executable(chatcontroller
         irc/IRCSocket.h irc/IRCSocket.cpp
         irc/IRCClient.h irc/IRCClient.cpp
         irc/IRCHandler.h irc/IRCHandler.cpp
-        IRCWorker.h IRCWorker.cpp
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
-        bot/BotConfiguration.h bot/BotLogger.h
+        bot/BotConfiguration.h bot/BotEvents.h
         )
 
 add_subdirectory(common/tests)
@@ -98,7 +99,9 @@ endif()
 
 target_link_libraries(chatcontroller
         stdc++fs
-        pthread ssl crypto
+        pthread
+        ssl
+        crypto
         sobjectizer::StaticLib
         httpserver httpclient ${Boost_LIBRARIES}
         nlohmann_json

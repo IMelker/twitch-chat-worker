@@ -110,6 +110,9 @@ int main(int argc, char *argv[]) {
 
     // 1. TODO HTTPServer to IRCController
     // 2. TODO choose dispatchers/threadpools
+    // 3. TODO add logging
+
+    // TODO add so_5::state for IRCWorker, refactorings
 
     // TODO fix options, remove useless and add controlls
 

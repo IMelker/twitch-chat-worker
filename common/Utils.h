@@ -12,6 +12,9 @@
 #include <array>
 #include <charconv>
 
+#include "nlohmann/json.hpp"
+
+using json = nlohmann::json;
 using uint128_t = std::pair<uint64_t, uint64_t>;
 
 namespace Utils::String

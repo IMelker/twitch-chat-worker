@@ -45,9 +45,9 @@ class MessageProcessor final : public so_5::agent_t
   private:
     MessageHolder transform(const IRCMessage &message);
 
-    MessageProcessorConfig config;
+    const MessageProcessorConfig config;
 
-    std::shared_ptr<Logger> logger;
+    const std::shared_ptr<Logger> logger;
     std::shared_ptr<langdetectpp::Detector> langDetector;
 
     so_5::mbox_t listener;

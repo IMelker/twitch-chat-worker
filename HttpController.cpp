@@ -73,8 +73,8 @@ void HttpController::so_evt_finish() {
         server->stop();
 }
 
-void HttpController::evtHttpDBControllerStatus(so_5::mhood_t<hreq::db::stats> req) {
-    so_5::send<hreq::resp>(listeners, std::move(req->req), std::move(req->send), 200, db->getStats());
+void HttpController::evtHttpDBControllerStatus(so_5::mhood_t<hreq::db::stats> evt) {
+    so_5::send<hreq::resp>(listeners, std::move(evt->req), std::move(evt->send), 200, db->getStats());
 }
 
 void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
@@ -93,13 +93,13 @@ void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPS
     if (match(0, irc)) {
         match_handle2(irc, reload);
         match_handle2(irc, stats);
+        match_handle2(irc, custom);
         if (path.size() > 2) {
             if (match(1, channel)) {
                 match_handle3(irc, channel, stats);
                 match_handle3(irc, channel, join);
                 match_handle3(irc, channel, leave);
                 match_handle3(irc, channel, message);
-                match_handle3(irc, channel, custom);
             }
             else if (match(1, account)) {
                 match_handle3(irc, account, stats);

@@ -7,8 +7,9 @@
 #include "common/Utils.h"
 #include "common/Logger.h"
 #include "common/Clock.h"
-#include "IRCWorker.h"
+
 #include "db/DBConnectionLock.h"
+
 #include "DBController.h"
 
 DBController::DBController(PGConnectionConfig config, unsigned int count, std::shared_ptr<Logger> logger)
@@ -47,12 +48,12 @@ DBController::Users DBController::loadUsersNicknames() {
         }
     }
 
-    DefaultLogger::logInfo("Controller {} our users loaded", users.size());
+    DefaultLogger::logInfo("DBController {} our users loaded", users.size());
     return users;
 }
 
 DBController::Accounts DBController::loadAccounts() {
-    static const std::string request = "SELECT username, display, oauth, channels_limit, "
+    static const std::string request = "SELECT id, username, display, oauth, channels_limit, "
                                        "whisper_per_sec_limit, auth_per_sec_limit, "
                                        "command_per_sec_limit FROM accounts WHERE active = true;";
 
@@ -67,20 +68,54 @@ DBController::Accounts DBController::loadAccounts() {
             for (auto &row : res) {
                 using Utils::String::toNumber;
                 IRCClientConfig cfg;
-                cfg.nick = std::move(row[0]);
-                cfg.user = std::move(row[1]);
-                cfg.password = std::move(row[2]);
-                cfg.channels_limit = toNumber(row[3]);
-                cfg.command_per_sec_limit = toNumber(row[4]);
-                cfg.whisper_per_sec_limit = toNumber(row[5]);
-                cfg.auth_per_sec_limit = toNumber(row[6]);
+                cfg.id = toNumber(row[0]);
+                cfg.nick = std::move(row[1]);
+                cfg.user = std::move(row[2]);
+                cfg.password = std::move(row[3]);
+                cfg.channels_limit = toNumber(row[4]);
+                cfg.command_per_sec_limit = toNumber(row[5]);
+                cfg.whisper_per_sec_limit = toNumber(row[6]);
+                cfg.auth_per_sec_limit = toNumber(row[7]);
                 accounts.push_back(std::move(cfg));
             }
         }
     }
 
-    DefaultLogger::logInfo("Controller {} accounts loaded", accounts.size());
+    DefaultLogger::logInfo("DBController {} accounts loaded", accounts.size());
     return accounts;
+}
+
+DBController::Account DBController::loadAccount(int id) {
+    const std::string request = fmt::format("SELECT username, display, oauth, channels_limit, "
+                                            "whisper_per_sec_limit, auth_per_sec_limit, "
+                                            "command_per_sec_limit FROM accounts WHERE id = {};", id);
+
+    DBController::Account account;
+    {
+        DBConnectionLock dbl(pg);
+        if (!dbl->ping())
+            return account;
+
+        using Utils::String::toNumber;
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            if (res.empty())
+                return account;
+
+            auto &row = res.front();
+            account.id = id;
+            account.nick = std::move(row[0]);
+            account.user = std::move(row[1]);
+            account.password = std::move(row[2]);
+            account.channels_limit = toNumber(row[3]);
+            account.command_per_sec_limit = toNumber(row[4]);
+            account.whisper_per_sec_limit = toNumber(row[5]);
+            account.auth_per_sec_limit = toNumber(row[6]);
+        }
+    }
+
+    DefaultLogger::logInfo("DBController Account(id={}) loaded", id);
+    return account;
 }
 
 DBController::Channels DBController::loadChannels() {
@@ -99,16 +134,16 @@ DBController::Channels DBController::loadChannels() {
         }
     }
 
-    DefaultLogger::logInfo("Controller {} watched channels loaded", channels.size());
+    DefaultLogger::logInfo("DBController {} watched channels loaded", channels.size());
     return channels;
 }
 
 DBController::Channels DBController::loadChannelsFor(const std::string &user) {
-    std::string request = fmt::format("SELECT channel.name FROM bot_account "
-                                      "JOIN bot_channel ON bot_account.bot_id = bot_channel.bot_id "
-                                      "JOIN accounts ON bot_account.account_id = accounts.id "
-                                      "JOIN channel ON bot_channel.channel_id = channel.id "
-                                      "WHERE accounts.username = '{}';", user);
+    const std::string request = fmt::format("SELECT channel.name FROM bot_account "
+                                            "JOIN bot_channel ON bot_account.bot_id = bot_channel.bot_id "
+                                            "JOIN accounts ON bot_account.account_id = accounts.id "
+                                            "JOIN channel ON bot_channel.channel_id = channel.id "
+                                            "WHERE accounts.username = '{}';", user);
 
     DBController::Channels channels;
     {
@@ -123,7 +158,7 @@ DBController::Channels DBController::loadChannelsFor(const std::string &user) {
         }
     }
 
-    DefaultLogger::logInfo("Controller {} channels loaded for {}", channels.size(), user);
+    DefaultLogger::logInfo("DBController {} channels loaded for {}", channels.size(), user);
     return channels;
 }
 
@@ -161,21 +196,21 @@ DBController::BotsConfigurations DBController::loadBotConfigurations() {
         }
     }
 
-    DefaultLogger::logInfo("Controller {} bot configurations loaded", configurations.size());
+    DefaultLogger::logInfo("DBController {} bot configurations loaded", configurations.size());
     return configurations;
 }
 
 BotConfiguration DBController::loadBotConfiguration(int id) {
-    static const std::string request = fmt::format("SELECT bot.id, bot.user_id, accounts.username, "
-                                                   "       channel.name, eh.event_type_id, "
-                                                   "       eh.script, eh.id, eh.additional "
-                                                   "FROM bot "
-                                                   "JOIN bot_account ON bot.id = bot_account.bot_id "
-                                                   "JOIN accounts ON bot_account.account_id = accounts.id "
-                                                   "JOIN bot_channel ON bot.id = bot_channel.bot_id "
-                                                   "JOIN channel ON bot_channel.channel_id = channel.id "
-                                                   "JOIN event_handler as eh on bot.id = eh.bot_id "
-                                                   "WHERE bot.id = {};", id);
+    const std::string request = fmt::format("SELECT bot.id, bot.user_id, accounts.username, "
+                                            "       channel.name, eh.event_type_id, "
+                                            "       eh.script, eh.id, eh.additional "
+                                            "FROM bot "
+                                            "JOIN bot_account ON bot.id = bot_account.bot_id "
+                                            "JOIN accounts ON bot_account.account_id = accounts.id "
+                                            "JOIN bot_channel ON bot.id = bot_channel.bot_id "
+                                            "JOIN channel ON bot_channel.channel_id = channel.id "
+                                            "JOIN event_handler as eh on bot.id = eh.bot_id "
+                                            "WHERE bot.id = {};", id);
 
     BotConfiguration config;
     {
@@ -200,7 +235,7 @@ BotConfiguration DBController::loadBotConfiguration(int id) {
         }
     }
 
-    DefaultLogger::logInfo("Controller bot(id={}) configuration loaded", id);
+    DefaultLogger::logInfo("DBController bot(id={}) configuration loaded", id);
     return config;
 }
 
@@ -222,6 +257,6 @@ DBController::UpdatedChannels DBController::loadChannels(long long &timestamp) {
     }
 
     timestamp = CurrentTime<std::chrono::system_clock>::seconds();
-    DefaultLogger::logInfo("Controller {} watched channels loaded", channels.size());
+    DefaultLogger::logInfo("DBController {} watched channels loaded", channels.size());
     return channels;
 }

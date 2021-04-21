@@ -71,9 +71,8 @@ void Controller::so_evt_start() {
 }
 
 void Controller::so_evt_finish() {
-
+    // TODO notify about it
 }
-
 
 Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listener) {
     CHConnectionConfig chCfg;
@@ -94,7 +93,7 @@ Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listen
 
 BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener) {
     auto botsLogger = LoggerFactory::create(LoggerFactory::config(config, BOT));
-    return coop.make_agent<BotsEnvironment>(listener, http, db.get(), botsLogger);
+    return coop.make_agent<BotsEnvironment>(listener, http, db, botsLogger);
 }
 
 MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher) {

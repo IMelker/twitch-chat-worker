@@ -11,7 +11,7 @@
 #include <so_5/agent.hpp>
 #include <so_5/timers.hpp>
 
-#include "bot/BotLogger.h"
+#include "bot/BotEvents.h"
 
 #include "HttpControllerEvents.h"
 #include "ChatMessage.h"
@@ -22,7 +22,7 @@ class Storage final : public so_5::agent_t
   public:
     using ChatMessageHolder = so_5::message_holder_t<Chat::Message>;
     using MessageBatch = std::vector<ChatMessageHolder>;
-    using BotLogHolder = so_5::message_holder_t<BotLogger::Message>;
+    using BotLogHolder = so_5::message_holder_t<Bot::LogMessage>;
     using BotLogBatch = std::vector<BotLogHolder>;
 
     struct Flush final : public so_5::signal_t {};
@@ -44,13 +44,13 @@ class Storage final : public so_5::agent_t
     void so_evt_finish() override;
 
     // so_5 events
-    void evtChatMessage(mhood_t<Chat::Message> msg);
-    void evtBotLogMessage(mhood_t<BotLogger::Message> msg);
-    void evtFlushBotLogMessages(mhood_t<FlushBotLogMessages> flush);
-    void evtFlushChatMessages(mhood_t<FlushChatMessages> flush);
-    void evtFlushAll(mhood_t<Flush> flush);
+    void evtChatMessage(so_5::mhood_t<Chat::Message> msg);
+    void evtBotLogMessage(so_5::mhood_t<Bot::LogMessage> msg);
+    void evtFlushBotLogMessages(so_5::mhood_t<FlushBotLogMessages> flush);
+    void evtFlushChatMessages(so_5::mhood_t<FlushChatMessages> flush);
+    void evtFlushAll(so_5::mhood_t<Flush> flush);
     // http events
-    void evtHttpStats(mhood_t<hreq::storage::stats> req);
+    void evtHttpStats(so_5::mhood_t<hreq::storage::stats> evt);
   private:
     void store(BotLogHolder &&msg);
     void store(ChatMessageHolder &&msg);
@@ -62,7 +62,7 @@ class Storage final : public so_5::agent_t
     so_5::mbox_t publisher;
     so_5::mbox_t http;
 
-    std::shared_ptr<Logger> logger;
+    const std::shared_ptr<Logger> logger;
     std::shared_ptr<CHConnectionPool> ch;
 
     BotLogBatch logBatch;

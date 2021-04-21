@@ -11,16 +11,13 @@
 
 #include "../ChatMessage.h"
 #include "BotConfiguration.h"
-#include "BotLogger.h"
+#include "BotEvents.h"
 
 class Logger;
 class IRCController;
 
 class BotEngine final : public so_5::agent_t
 {
-  public:
-    struct Shutdown final : public so_5::signal_t {};
-    struct Reload { mutable BotConfiguration config; };
   public:
     BotEngine(const context_t &ctx,
               so_5::mbox_t self,
@@ -35,8 +32,8 @@ class BotEngine final : public so_5::agent_t
     void so_evt_finish() override;
 
     // event handlers
-    void evtShutdown(mhood_t<Shutdown> message);
-    void evtReload(mhood_t<Reload> message);
+    void evtShutdown(mhood_t<Bot::Shutdown> message);
+    void evtReload(mhood_t<Bot::Reload> message);
     void evtChatMessage(mhood_t<Chat::Message> message);
 
     void handleInterval(Handler& handler);
@@ -46,7 +43,7 @@ class BotEngine final : public so_5::agent_t
     so_5::mbox_t msgSender;
     so_5::mbox_t botLogger;
 
-    std::shared_ptr<Logger> logger;
+    const std::shared_ptr<Logger> logger;
 
     BotConfiguration config;
 };
