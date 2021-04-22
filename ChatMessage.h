@@ -30,15 +30,6 @@ struct Message {
     const bool valid;
 };
 
-inline std::ostream& operator<<(std::ostream& os, const Message& message) {
-    return os << "{uuid: \"" << message.uuid.second <<
-              "\", channel: \"" << message.channel <<
-              "\", from \"" << message.user <<
-              "\", text: \"" << message.text <<
-              "\", lang: \"" << message.lang <<
-              "\", valid: " << message.valid << "}";
-}
-
 }
 
 #endif //CHATSNIFFER__MESSAGE_H_

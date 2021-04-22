@@ -64,7 +64,7 @@ void IRCWorker::so_evt_finish() {
         thread.join();
 }
 
-void IRCWorker::evtShutdown(so_5::mhood_t<Irc::Shutdown> evt) {
+void IRCWorker::evtShutdown(so_5::mhood_t<Irc::Shutdown>) {
     so_deregister_agent_coop_normally();
 }
 

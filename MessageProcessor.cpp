@@ -38,7 +38,8 @@ void MessageProcessor::so_evt_finish() {
 void MessageProcessor::evtIrcMessage(const IRCMessage &ircMessage) {
     auto message = transform(ircMessage);
 
-    logger->logTrace("MessageProcessor process: {}", *message);
+    logger->logTrace(R"(MessageProcessor process: {{uuid: "{}", channel: "{}", from "{}", text: "{}", lang: "{}", valid: {} }})",
+                     message->uuid.second, message->channel, message->user, message->text, message->lang ,message->valid);
 
     so_5::send(listener, message);
 }
