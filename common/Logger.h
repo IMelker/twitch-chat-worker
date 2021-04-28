@@ -6,6 +6,7 @@
 #define CHATSNIFFER_COMMON_LOGGER_H_
 
 #include <utility>
+#include <chrono>
 
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/tcp_sink.h"

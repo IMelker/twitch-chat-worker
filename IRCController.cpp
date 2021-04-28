@@ -349,7 +349,14 @@ void IRCController::evtHttpAccountReload(mhood_t<hreq::irc::account::reload> evt
 }
 
 void IRCController::evtHttpAccountStats(mhood_t<hreq::irc::account::stats> evt) {
+    json req = json::parse(evt->req.body(), nullptr, false, true);
+    if (req.is_discarded())
+        return send_http_resp(http, evt, 501, resp("Failed to parse JSON"));
 
+    json body = json::object();
+
+
+    send_http_resp(http, evt, 200, body.dump());
 }
 
 std::string IRCController::handleAccounts(const std::string &request, std::string &error) {

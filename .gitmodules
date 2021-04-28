@@ -28,3 +28,6 @@
 [submodule "third-party/sobjectizer"]
 	path = third-party/sobjectizer
 	url = https://github.com/Stiffstream/sobjectizer.git
+[submodule "third-party/ircclient"]
+	path = third-party/ircclient
+	url = https://github.com/IMelker/libircclient.git

@@ -53,6 +53,7 @@ configure_file(${CMAKE_SOURCE_DIR}/config/app.h.in ${CMAKE_BINARY_DIR}/app.h @ON
 configure_file(${CMAKE_SOURCE_DIR}/config/config.toml.in ${CMAKE_BINARY_DIR}/config.toml @ONLY)
 include_directories(${CMAKE_BINARY_DIR})
 
+add_subdirectory(irc2)
 
 # executable configuration
 message("\n[executable]")
@@ -67,6 +68,11 @@ add_executable(chatcontroller
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
         ChatMessage.h
+        common/network/Socket.h common/network/Socket.cpp
+        common/network/UDPSocket.h common/network/UDPSocket.cpp
+        common/network/TCPSocket.h common/network/TCPSocket.cpp
+        common/network/TCPListener.h common/network/TCPListener.cpp
+        common/network/Selector.h common/network/Selector.cpp
         common/SysSignal.h common/SysSignal.cpp
         common/Options.h common/Options.cpp
         common/Config.h common/Config.cpp
@@ -102,6 +108,7 @@ target_link_libraries(chatcontroller
         pthread
         ssl
         crypto
+        ircclient
         sobjectizer::StaticLib
         httpserver httpclient ${Boost_LIBRARIES}
         nlohmann_json
