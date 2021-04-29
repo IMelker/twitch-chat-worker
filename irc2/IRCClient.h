@@ -23,8 +23,9 @@ class IRCClient : public IRCSessionInterface
 
     void createSession();
 
-    void joinChannel();
-    void joinChannels();
+    void joinChannel(const std::string &channel);
+    void joinChannels(const std::vector<std::string> &channels);
+    std::string gatherStatsAndDump();
 
     // IRCSessionInterface implementation
     bool sendQuit(const std::string &reason) override;
@@ -45,6 +46,7 @@ class IRCClient : public IRCSessionInterface
     bool sendUserMode(const std::string &mode) override;
     bool sendNick(const std::string &newnick) override;
     bool sendWhois(const std::string &nick) override;
+    bool sendPing(const std::string& host) override;
     bool sendRaw(const std::string &raw) override;
 
   private:
@@ -53,6 +55,7 @@ class IRCClient : public IRCSessionInterface
 
     IRCSelectorPool *pool;
 
+    unsigned int curSessionRoundRobin = 0;
     std::vector<std::shared_ptr<IRCSession>> sessions;
 };
 

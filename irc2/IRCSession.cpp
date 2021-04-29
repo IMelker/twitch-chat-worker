@@ -22,6 +22,10 @@ IRCSession::~IRCSession() {
     irc_destroy_session(session);
 }
 
+const IRCStatistic & IRCSession::statistic() const {
+    return stats;
+}
+
 bool IRCSession::connect() {
     // IRCClient thread
     if (irc_connect(session,
@@ -122,10 +126,13 @@ bool IRCSession::sendWhois(const std::string &nick) {
     return internalIrcSend(irc_cmd_nick, nick.c_str());
 }
 
+bool IRCSession::sendPing(const std::string &host) {
+    return internalIrcSend(irc_cmd_ping, host.c_str());
+}
+
 bool IRCSession::sendRaw(const std::string &raw) {
     return internalIrcSend(irc_send_raw, raw.c_str());
 }
-
 
 void IRCSession::onLog(const char *msg, int len) {
     // IRCWorker thread
@@ -274,6 +281,12 @@ void IRCSession::onCtcpAction(std::string_view event,
     // IRCWorker thread
     internaIrcRecv(event, origin);
 }
+
+void IRCSession::onPong(std::string_view event, std::string_view host) {
+    // IRCWorker thread
+    internaIrcRecv(event, host);
+}
+
 
 void IRCSession::onUnknown(std::string_view event,
                            std::string_view origin,

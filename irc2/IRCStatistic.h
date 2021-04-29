@@ -10,12 +10,13 @@
 #define DUMP_VAR_TO(arg, res) res.append(#arg " = ").append(std::to_string(relx_get(arg))).append(", ")
 
 namespace {
-template<typename T> T relx_get(std::atomic<T> &var) { var.load(std::memory_order_relaxed); }
+template<typename T> auto relx_get(const std::atomic<T> &var) { return var.load(std::memory_order_relaxed); }
 template<typename T> void relx_set(std::atomic<T> &var, const T& other) { var.store(other, std::memory_order_relaxed); }
 template<typename T> void relx_add(std::atomic<T> &var, const T& other) { atomic_fetch_add_explicit(&var, other, std::memory_order_relaxed); }
 template<typename T> void relx_sub(std::atomic<T> &var, const T& other) { atomic_fetch_sub_explicit(&var, other, std::memory_order_relaxed); }
 template<typename T> void relx_inc(std::atomic<T> &var) { relx_add(var, 1); }
 template<typename T> void relx_dec(std::atomic<T> &var) { relx_sub(var, 1); }
+#define relx_easy_add(rhs, field) relx_add(field, relx_get(rhs.field))
 }
 
 class IRCStatistic
@@ -50,6 +51,24 @@ class IRCStatistic
     void commandsInCountInc() { relx_inc(commands.in.count); }
     void commandsOutBytesAdd(unsigned long long count) { relx_add(commands.out.bytes, count); }
     void commandsOutCountInc() { relx_inc(commands.out.count); }
+
+    inline IRCStatistic& operator+(const IRCStatistic& rhs) noexcept {
+        relx_easy_add(rhs, connects.updated);
+        relx_easy_add(rhs, connects.success);
+        relx_easy_add(rhs, connects.failed);
+        relx_easy_add(rhs, connects.loggedin);
+        relx_easy_add(rhs, connects.disconnected);
+        relx_easy_add(rhs, channels.count);
+        relx_easy_add(rhs, commands.in.bytes);
+        relx_easy_add(rhs, commands.in.count);
+        relx_easy_add(rhs, commands.out.bytes);
+        relx_easy_add(rhs, commands.out.count);
+        return *this;
+    }
+    inline IRCStatistic& operator+=(const IRCStatistic & rhs) {
+        return operator+(rhs);
+    }
+
   private:
     struct {
         std::atomic_ullong updated = 0;

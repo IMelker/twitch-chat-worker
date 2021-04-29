@@ -92,6 +92,9 @@ static void on_ctcp_rep(irc_session_t *session, const char *event, const char *o
 static void on_ctcp_action(irc_session_t *session, const char *event, const char *origin, const char **params, unsigned int count) {
     irc_event_callback_to_cxx(onCtcpAction);
 }
+static void on_pong(irc_session_t *session, const char *event, const char *host) {
+    irc_event_connected_to_cxx(onPong);
+}
 static void on_unknown(irc_session_t *session, const char *event, const char *origin, const char **params, unsigned int count) {
     irc_event_callback_to_cxx(onUnknown);
 }
@@ -128,6 +131,7 @@ IRCSessionCallback::IRCSessionCallback() : irc_callbacks_t{} {
     event_ctcp_req = on_ctcp_req;
     event_ctcp_rep = on_ctcp_rep;
     event_ctcp_action = on_ctcp_action;
+    event_pong = on_pong;
     event_unknown = on_unknown;
     event_numeric = on_numeric;
     event_dcc_chat_req = on_dcc_chat_req;

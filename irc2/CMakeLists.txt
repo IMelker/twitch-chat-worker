@@ -17,7 +17,7 @@ add_executable(irctest
         IRCSessionContext.h
         IRCSession.h IRCSession.cpp
         IRCSessionCallback.h IRCSessionCallback.cpp
-        IRCSelector.h IRCWorker.cpp
+        IRCSelector.h IRCSelector.cpp
         IRCSelectorPool.h IRCSelectorPool.cpp
         ../common/SysSignal.h ../common/SysSignal.cpp
         ../common/Clock.h)

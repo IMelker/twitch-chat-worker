@@ -40,6 +40,7 @@ class IRCSessionCallback : public irc_callbacks_t {
     virtual void onCtcpReq(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) {};
     virtual void onCtcpRep(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) {};
     virtual void onCtcpAction(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) {};
+    virtual void onPong(std::string_view event, std::string_view host) {};
     virtual void onUnknown(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) {};
     virtual void onNumeric(unsigned int event, std::string_view origin, const std::vector<std::string_view>& params) {};
     virtual void onDccChatReq(std::string_view nick, std::string_view addr, unsigned int dccid) {};

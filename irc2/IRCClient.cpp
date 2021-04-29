@@ -8,12 +8,12 @@
 #include "IRCSelectorPool.h"
 #include "IRCClient.h"
 
-#define SESS_COUNT 3
+#define MIN_SESS_COUNT 1
 
 IRCClient::IRCClient(IRCConnectionConfig conConfig, IRCClientConfig cliConfig, IRCSelectorPool *pool)
     : conConfig(std::move(conConfig)), cliConfig(std::move(cliConfig)), pool(pool) {
     assert(pool);
-    for (int i = 0; i < SESS_COUNT; ++i) {
+    for (int i = 0; i < std::max(MIN_SESS_COUNT, this->cliConfig.session_count); ++i) {
         createSession();
     }
 }
@@ -33,6 +33,22 @@ void IRCClient::createSession() {
 
     sessions.push_back(session);
     pool->addSession(session);
+}
+
+void IRCClient::joinChannel(const std::string &channel) {
+    sessions[curSessionRoundRobin++ % sessions.size()]->sendJoin(channel);
+}
+
+void IRCClient::joinChannels(const std::vector<std::string> &channels) {
+    for (auto &channel: channels)
+        sessions[curSessionRoundRobin++ % sessions.size()]->sendJoin(channel);
+}
+
+std::string IRCClient::gatherStatsAndDump() {
+    IRCStatistic stats;
+    for(auto &session: sessions)
+        stats += session->statistic();
+    return stats.dump();
 }
 
 bool IRCClient::sendQuit(const std::string &reason) {
@@ -110,6 +126,15 @@ bool IRCClient::sendWhois(const std::string &nick) {
     return false;
 }
 
+bool IRCClient::sendPing(const std::string &host) {
+    for(auto &session: sessions) {
+        session->sendPing(host);
+    }
+    return true;
+}
+
 bool IRCClient::sendRaw(const std::string &raw) {
     return false;
 }
+
+

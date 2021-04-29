@@ -36,6 +36,7 @@ struct IRCSessionInterface {
     virtual bool sendUserMode(const std::string& mode) = 0;
     virtual bool sendNick(const std::string& newnick) = 0;
     virtual bool sendWhois(const std::string& nick) = 0;
+    virtual bool sendPing(const std::string &host) = 0;
     virtual bool sendRaw(const std::string& raw) = 0;
 };
 
@@ -47,6 +48,8 @@ class IRCSession : public IRCSessionInterface, private IRCSessionCallback
   public:
     IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConfig &cliConfig, IRCClient *client);
     ~IRCSession() override;
+
+    [[nodiscard]] const IRCStatistic & statistic() const;
 
     bool connect();
     bool connected();
@@ -71,6 +74,7 @@ class IRCSession : public IRCSessionInterface, private IRCSessionCallback
     bool sendUserMode(const std::string& mode) override;
     bool sendNick(const std::string& newnick) override;
     bool sendWhois(const std::string& nick) override;
+    bool sendPing(const std::string &host) override;
     bool sendRaw(const std::string& raw) override;
 
     // IRCSessionCallback implementation
@@ -98,6 +102,7 @@ class IRCSession : public IRCSessionInterface, private IRCSessionCallback
     void onCtcpReq(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) override;
     void onCtcpRep(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) override;
     void onCtcpAction(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) override;
+    void onPong(std::string_view event, std::string_view host) override;
     void onUnknown(std::string_view event, std::string_view origin, const std::vector<std::string_view>& params) override;
     void onNumeric(unsigned int event, std::string_view origin, const std::vector<std::string_view>& params) override;
 

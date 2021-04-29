@@ -16,6 +16,7 @@ struct IRCClientConfig {
     int command_per_sec_limit = 20 / 30;
     int whisper_per_sec_limit = 3;
     int auth_per_sec_limit = 2;
+    int session_count = 1;
 };
 
 #endif //CHATCONTROLLER_IRC2_IRCCLIENTCONFIG_H_
