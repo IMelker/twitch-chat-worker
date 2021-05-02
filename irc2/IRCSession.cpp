@@ -5,6 +5,8 @@
 #include "Clock.h"
 #include "IRCSession.h"
 
+#define PING_PONG_TIMEOUT 30000
+
 IRCSession::IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConfig &cliConfig, IRCClient *client)
     : conConfig(conConfig), cliConfig(cliConfig) {
     session = irc_create_session(this);
@@ -16,6 +18,10 @@ IRCSession::IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConf
 
     irc_option_set(session, LIBIRC_OPTION_DEBUG);
     irc_option_set(session, LIBIRC_OPTION_STRIPNICKS);
+
+    auto now = CurrentTime<std::chrono::system_clock>::milliseconds();
+    lastPingTime = now;
+    lastPongTime = now;
 }
 
 IRCSession::~IRCSession() {
@@ -127,6 +133,11 @@ bool IRCSession::sendWhois(const std::string &nick) {
 }
 
 bool IRCSession::sendPing(const std::string &host) {
+    if (lastPingTime - lastPongTime >= PING_PONG_TIMEOUT) {
+        onDisconnected("TIMEOUT", "PING/PONG timeout");
+        return false;
+    }
+    lastPingTime = CurrentTime<std::chrono::system_clock>::milliseconds();
     return internalIrcSend(irc_cmd_ping, host.c_str());
 }
 
@@ -162,18 +173,14 @@ void IRCSession::onSendDataLen(int len) {
 void IRCSession::onRecvDataLen(int len) {
     // IRCWorker thread
     stats.commandsInBytesAdd(len);
-
-    printf("%s\n", stats.dump().c_str());
 }
 
 void IRCSession::onLoggedIn(std::string_view event,
                             std::string_view origin,
                             const std::vector<std::string_view> &params) {
     // IRCWorker thread
-    printf("IRCSession On connect event handler: %s %s\n", event.data(), origin.data());
+    printf("IRCSession On logged in event handler: %s %s\n", event.data(), origin.data());
     stats.connectsLoggedInInc();
-
-    sendJoin("#quickhuntik");
 }
 
 void IRCSession::onNick(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
@@ -283,6 +290,7 @@ void IRCSession::onCtcpAction(std::string_view event,
 }
 
 void IRCSession::onPong(std::string_view event, std::string_view host) {
+    lastPongTime = CurrentTime<std::chrono::system_clock>::milliseconds();
     // IRCWorker thread
     internaIrcRecv(event, host);
 }

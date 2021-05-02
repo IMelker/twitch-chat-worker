@@ -132,6 +132,9 @@ class IRCSession : public IRCSessionInterface, private IRCSessionCallback
     IRCSessionContext ctx;
     IRCStatistic stats;
 
+    long long lastPingTime = 0;
+    long long lastPongTime = 0;
+
     irc_session_t *session;
 };
 
