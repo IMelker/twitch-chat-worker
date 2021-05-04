@@ -2,8 +2,8 @@
 // Created by l2pic on 25.04.2021.
 //
 
-#ifndef CHATCONTROLLER_IRC2_IRCWORKERPOOL_H_
-#define CHATCONTROLLER_IRC2_IRCWORKERPOOL_H_
+#ifndef CHATCONTROLLER_IRC_IRCWORKERPOOL_H_
+#define CHATCONTROLLER_IRC_IRCWORKERPOOL_H_
 
 #include <vector>
 #include <mutex>
@@ -23,10 +23,11 @@ class IRCSelectorPool
     void removeSession(const std::shared_ptr<IRCSession> &session);
 
   private:
-    size_t curPos = 0;
+    IRCSelector *getNextSelectorRoundRobin();
 
     std::mutex mutex;
-    std::vector<std::unique_ptr<IRCSelector>> workers;
+    size_t curSelectorRoundRobin = 0;
+    std::vector<std::unique_ptr<IRCSelector>> selectors;
 };
 
-#endif //CHATCONTROLLER_IRC2_IRCWORKERPOOL_H_
+#endif //CHATCONTROLLER_IRC_IRCWORKERPOOL_H_

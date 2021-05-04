@@ -14,9 +14,12 @@
 
 #include <so_5/agent.hpp>
 
-#include "IRCWorker.h"
+#include "../HttpControllerEvents.h"
+
 #include "IRCEvents.h"
-#include "HttpControllerEvents.h"
+#include "IRCConnectionConfig.h"
+#include "IRCClient.h"
+#include "IRCSelectorPool.h"
 
 class Logger;
 class DBController;
@@ -24,14 +27,14 @@ class ChannelController;
 class IRCController final : public so_5::agent_t
 {
   public:
-    using WorkersByName = std::map<std::string, IRCWorker *, std::less<>>;
-    using WorkersByIds = std::map<int, IRCWorker *>;
+    using IRCClientsByName = std::map<std::string, IRCClient *, std::less<>>;
+    using IRCClientsByIds = std::map<int, IRCClient *>;
 
   public:
     IRCController(const context_t &ctx,
                   so_5::mbox_t processor,
                   so_5::mbox_t http,
-                  const IRCConnectConfig &conConfig,
+                  const IRCConnectionConfig &conConfig,
                   std::shared_ptr<DBController> db,
                   std::shared_ptr<Logger> logger);
     ~IRCController() override;
@@ -42,9 +45,9 @@ class IRCController final : public so_5::agent_t
     void so_evt_finish() override;
 
     // IRCWorker callback
-    void evtWorkerConnected(so_5::mhood_t<Irc::WorkerConnected> evt);
-    void evtWorkerDisconnected(so_5::mhood_t<Irc::WorkerDisconnected> evt);
-    void evtWorkerLogin(so_5::mhood_t<Irc::WorkerLoggedIn> evt);
+    //void evtWorkerConnected(so_5::mhood_t<Irc::WorkerConnected> evt);
+    //void evtWorkerDisconnected(so_5::mhood_t<Irc::WorkerDisconnected> evt);
+    //void evtWorkerLogin(so_5::mhood_t<Irc::WorkerLoggedIn> evt);
 
     // SendMessage from BotEngine
     void evtSendMessage(so_5::mhood_t<Irc::SendMessage> message);
@@ -68,7 +71,7 @@ class IRCController final : public so_5::agent_t
     std::string handleAccounts(const std::string &request, std::string &error);
     std::string handleChannels(const std::string &request, std::string &error);
   private:
-    void addIrcWorker(const IRCClientConfig& config);
+    void addNewIrcClient(const IRCClientConfig& config);
 
     so_5::mbox_t processor;
     so_5::mbox_t http;
@@ -76,11 +79,12 @@ class IRCController final : public so_5::agent_t
     const std::shared_ptr<Logger> logger;
     const std::shared_ptr<DBController> db;
 
-    const IRCConnectConfig config;
+    const IRCConnectionConfig config;
 
-    WorkersByName workersByName;
-    WorkersByIds workersById;
-    ChannelController *channelController;
+    IRCSelectorPool pool;
+
+    IRCClientsByName ircClientsByName;
+    IRCClientsByIds ircClientsById;
 };
 
 #endif //CHATSNIFFER_IRC_IRCWORKERPOOL_H_

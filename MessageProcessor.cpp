@@ -4,9 +4,8 @@
 
 #include <so_5/send_functions.hpp>
 
-#include "common/ThreadPool.h"
-#include "common/Logger.h"
-#include "IRCWorker.h"
+#include "Logger.h"
+
 #include "ChatMessage.h"
 #include "MessageProcessor.h"
 
@@ -45,16 +44,12 @@ void MessageProcessor::evtIrcMessage(const IRCMessage &ircMessage) {
 }
 
 MessageProcessor::MessageHolder MessageProcessor::transform(const IRCMessage &message) {
-    std::string channel = (message.parameters.at(0)[0] == '#') ? message.parameters.at(0).substr(1)
-                                                               : message.parameters.at(0);
-    std::string text = message.parameters.back();
-
     std::string lang = "UNKNOWN";
     if (this->config.languageRecognition)
-        lang = langdetectpp::toShortName(langDetector->detect(text));
+        lang = langdetectpp::toShortName(langDetector->detect(message.text));
 
-    bool valid = !text.empty();
+    bool valid = !message.text.empty();
 
-    return MessageHolder::make(message.prefix.nickname, std::move(channel), std::move(text),
+    return MessageHolder::make(message.nickname, message.channel, message.text,
                                std::move(lang), message.timestamp, valid);
 }

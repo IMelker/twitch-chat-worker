@@ -2,54 +2,34 @@
 // Created by l2pic on 25.04.2021.
 //
 
-#ifndef CHATCONTROLLER_IRC2_IRCSESSION_H_
-#define CHATCONTROLLER_IRC2_IRCSESSION_H_
+#ifndef CHATCONTROLLER_IRC_IRCSESSION_H_
+#define CHATCONTROLLER_IRC_IRCSESSION_H_
 
 #include <libircclient.h>
 
 #include <memory>
 #include <mutex>
 
+#include "Logger.h"
+
 #include "IRCSelector.h"
 #include "IRCConnectionConfig.h"
 #include "IRCClientConfig.h"
 #include "IRCSessionContext.h"
 #include "IRCSessionCallback.h"
+#include "IRCSessionInterface.h"
 #include "IRCStatistic.h"
 
-struct IRCSessionInterface {
-    virtual bool sendQuit(const std::string& reason) = 0;
-    virtual bool sendJoin(const std::string& channel) = 0;
-    virtual bool sendJoin(const std::string& channel, const std::string& key) = 0;
-    virtual bool sendPart(const std::string& channel) = 0;
-    virtual bool sendTopic(const std::string& channel, const std::string& topic) = 0;
-    virtual bool sendNames(const std::string& channel) = 0;
-    virtual bool sendList(const std::string& channel) = 0;
-    virtual bool sendInvite(const std::string &channel, const std::string &nick) = 0;
-    virtual bool sendKick(const std::string &channel, const std::string &nick, const std::string &comment) = 0;
-    virtual bool sendMessage(const std::string& channel, const std::string& text) = 0;
-    virtual bool sendNotice(const std::string& channel, const std::string& text) = 0;
-    virtual bool sendMe(const std::string& channel, const std::string& text) = 0;
-    virtual bool sendChannelMode(const std::string& channel, const std::string& mode) = 0;
-    virtual bool sendCtcpRequest(const std::string& nick, const std::string& reply) = 0;
-    virtual bool sendCtcpReply(const std::string& nick, const std::string& reply) = 0;
-    virtual bool sendUserMode(const std::string& mode) = 0;
-    virtual bool sendNick(const std::string& newnick) = 0;
-    virtual bool sendWhois(const std::string& nick) = 0;
-    virtual bool sendPing(const std::string &host) = 0;
-    virtual bool sendRaw(const std::string& raw) = 0;
-};
-
 class IRCClient;
-class IRCSession : public IRCSessionInterface, private IRCSessionCallback
+struct IRCSessionListener;
+class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, private IRCSessionCallback
 {
   public:
     friend class IRCSelector;
   public:
-    IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConfig &cliConfig, IRCClient *client);
+    IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConfig &cliConfig,
+               IRCSessionListener *listener, IRCClient *parent, Logger* logger);
     ~IRCSession() override;
-
-    [[nodiscard]] const IRCStatistic & statistic() const;
 
     bool connect();
     bool connected();
@@ -110,16 +90,12 @@ class IRCSession : public IRCSessionInterface, private IRCSessionCallback
     void onDccSendReq(std::string_view nick, std::string_view addr, std::string_view filename, unsigned long size, unsigned int dccid) override;
 
   private:
-    void internaIrcRecv(std::string_view event, std::string_view origin) {
-        // IRCWorker thread
-        printf("IRCSession On %s event handler: %s\n", event.data(), origin.data());
-        stats.commandsInCountInc();
-    }
     template<typename Foo, typename ...Args>
     bool internalIrcSend(Foo irc_cmd, Args... args) {
         // IRCClient thread
         if (irc_cmd(session, args...)) {
-            fprintf(stderr, "IRCSession Failed to send %s: %s\n", __FUNCTION__, irc_strerror(irc_errno(session)));
+            logger->logError("IRCSession[{}] Failed to send {}: {}",
+                             fmt::ptr(this), __PRETTY_FUNCTION__, irc_strerror(irc_errno(session)));
             return false;
         }
         stats.commandsOutCountInc();
@@ -130,7 +106,9 @@ class IRCSession : public IRCSessionInterface, private IRCSessionCallback
     const IRCClientConfig& cliConfig;
 
     IRCSessionContext ctx;
-    IRCStatistic stats;
+
+    IRCSessionListener* listener;
+    Logger *logger;
 
     long long lastPingTime = 0;
     long long lastPongTime = 0;
@@ -138,4 +116,4 @@ class IRCSession : public IRCSessionInterface, private IRCSessionCallback
     irc_session_t *session;
 };
 
-#endif //CHATCONTROLLER_IRC2_IRCSESSION_H_
+#endif //CHATCONTROLLER_IRC_IRCSESSION_H_

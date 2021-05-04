@@ -8,10 +8,11 @@
 
 #include <so_5/send_functions.hpp>
 
-#include "../IRCController.h"
-#include "../common/Logger.h"
-#include "../common/Clock.h"
-#include "../common/Timer.h"
+#include "Logger.h"
+#include "Clock.h"
+#include "Timer.h"
+
+#include "../irc/IRCController.h"
 #include "BotEngine.h"
 
 using json = nlohmann::json;

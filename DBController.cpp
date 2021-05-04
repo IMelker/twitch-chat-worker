@@ -55,7 +55,8 @@ DBController::Users DBController::loadUsersNicknames() {
 DBController::Accounts DBController::loadAccounts() {
     static const std::string request = "SELECT id, username, display, oauth, channels_limit, "
                                        "whisper_per_sec_limit, auth_per_sec_limit, "
-                                       "command_per_sec_limit FROM accounts WHERE active = true;";
+                                       "command_per_sec_limit, sessions_count "
+                                       "FROM accounts WHERE active = true;";
 
     DBController::Accounts accounts;
     {
@@ -76,6 +77,7 @@ DBController::Accounts DBController::loadAccounts() {
                 cfg.command_per_sec_limit = toNumber(row[5]);
                 cfg.whisper_per_sec_limit = toNumber(row[6]);
                 cfg.auth_per_sec_limit = toNumber(row[7]);
+                cfg.session_count = toNumber(row[8]);
                 accounts.push_back(std::move(cfg));
             }
         }
@@ -88,7 +90,8 @@ DBController::Accounts DBController::loadAccounts() {
 DBController::Account DBController::loadAccount(int id) {
     const std::string request = fmt::format("SELECT username, display, oauth, channels_limit, "
                                             "whisper_per_sec_limit, auth_per_sec_limit, "
-                                            "command_per_sec_limit FROM accounts WHERE id = {};", id);
+                                            "command_per_sec_limit, sessions_count "
+                                            "FROM accounts WHERE id = {};", id);
 
     DBController::Account account;
     {
@@ -111,6 +114,7 @@ DBController::Account DBController::loadAccount(int id) {
             account.command_per_sec_limit = toNumber(row[4]);
             account.whisper_per_sec_limit = toNumber(row[5]);
             account.auth_per_sec_limit = toNumber(row[6]);
+            account.session_count = toNumber(row[7]);
         }
     }
 
@@ -162,6 +166,26 @@ DBController::Channels DBController::loadChannelsFor(const std::string &user) {
     return channels;
 }
 
+DBController::Channels DBController::loadChannelsFor(int accountId) {
+    const std::string request = fmt::format("SELECT channel.name FROM channel "
+                                            "WHERE account_id = '{}';", accountId);
+
+    DBController::Channels channels;
+    {
+        DBConnectionLock dbl(pg);
+        if (!dbl->ping())
+            return channels;
+
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            std::transform(res.begin(), res.end(), std::back_inserter(channels),
+                           [] (auto &row) -> std::string && { return std::move(row[0]); });
+        }
+    }
+
+    DefaultLogger::logInfo("DBController {} channels loaded for id={}", channels.size(), accountId);
+    return channels;
+}
 
 DBController::BotsConfigurations DBController::loadBotConfigurations() {
     static const std::string request = "SELECT bot.id, bot.user_id, accounts.username, "

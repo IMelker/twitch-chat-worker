@@ -11,9 +11,9 @@
 
 namespace {
 template<typename T> auto relx_get(const std::atomic<T> &var) { return var.load(std::memory_order_relaxed); }
-template<typename T> void relx_set(std::atomic<T> &var, const T& other) { var.store(other, std::memory_order_relaxed); }
-template<typename T> void relx_add(std::atomic<T> &var, const T& other) { atomic_fetch_add_explicit(&var, other, std::memory_order_relaxed); }
-template<typename T> void relx_sub(std::atomic<T> &var, const T& other) { atomic_fetch_sub_explicit(&var, other, std::memory_order_relaxed); }
+template<typename T, typename U> void relx_set(std::atomic<T> &var, const U& other) { var.store(other, std::memory_order_relaxed); }
+template<typename T, typename U> void relx_add(std::atomic<T> &var, const U& other) { atomic_fetch_add_explicit(&var, other, std::memory_order_relaxed); }
+template<typename T, typename U> void relx_sub(std::atomic<T> &var, const U& other) { atomic_fetch_sub_explicit(&var, other, std::memory_order_relaxed); }
 template<typename T> void relx_inc(std::atomic<T> &var) { relx_add(var, 1); }
 template<typename T> void relx_dec(std::atomic<T> &var) { relx_sub(var, 1); }
 #define relx_easy_add(rhs, field) relx_add(field, relx_get(rhs.field))
@@ -35,6 +35,19 @@ class IRCStatistic
         DUMP_VAR_TO(commands.out.bytes, res);
         DUMP_VAR_TO(commands.out.count, res);
         return res;
+    }
+
+    void clear() {
+        relx_set(connects.updated, 0);
+        relx_set(connects.success, 0);
+        relx_set(connects.failed, 0);
+        relx_set(connects.loggedin, 0);
+        relx_set(connects.disconnected, 0);
+        relx_set(channels.count, 0);
+        relx_set(commands.in.bytes, 0);
+        relx_set(commands.in.count, 0);
+        relx_set(commands.out.bytes, 0);
+        relx_set(commands.out.count, 0);
     }
 
     void connectsUpdatedSet(unsigned long long time) { relx_set(connects.updated, time); }
@@ -90,6 +103,18 @@ class IRCStatistic
             std::atomic_int count = 0;
         } out;
     } commands;
+};
+
+class IRCStatisticProvider {
+  public:
+    ~IRCStatisticProvider() = default;
+
+    [[nodiscard]] virtual const IRCStatistic& statistic() {
+        return stats;
+    };
+
+  protected:
+    IRCStatistic stats;
 };
 
 #endif //IRCTEST__IRCSTATISTIC_H_

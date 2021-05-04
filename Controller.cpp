@@ -17,6 +17,7 @@
 #include "common/LoggerFactory.h"
 
 #include "db/DBConnectionLock.h"
+#include "irc/IRCConnectionConfig.h"
 #include "Controller.h"
 
 using json = nlohmann::json;
@@ -59,9 +60,9 @@ void Controller::so_evt_start() {
         storage = makeStorage(coop, listener);
         botsEnvironment = makeBotsEnvironment(coop, listener);
         msgProcessor = makeMessageProcessor(coop, listener /*as publisher*/);
-        ircWorkers = makeIRCController(coop);
+        ircController = makeIRCController(coop);
 
-        botsEnvironment->setMessageSender(ircWorkers->so_direct_mbox());
+        botsEnvironment->setMessageSender(ircController->so_direct_mbox());
         botsEnvironment->setBotLogger(storage->so_direct_mbox());
     });
 
@@ -108,9 +109,10 @@ MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_
 }
 
 IRCController *Controller::makeIRCController(so_5::coop_t &coop) {
-    IRCConnectConfig ircConfig;
+    IRCConnectionConfig ircConfig;
     ircConfig.host = config[IRC]["host"].value_or("irc.chat.twitch.tv");
     ircConfig.port = config[IRC]["port"].value_or(6667);
+    ircConfig.threads = config[IRC]["threads"].value_or(1);
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
     return coop.make_agent<IRCController>(msgProcessor->so_direct_mbox(), http, ircConfig, db, ircLogger);
 }

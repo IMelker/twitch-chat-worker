@@ -2,8 +2,8 @@
 // Created by l2pic on 25.04.2021.
 //
 
-#ifndef CHATCONTROLLER_IRC2_IRCWORKER_H_
-#define CHATCONTROLLER_IRC2_IRCWORKER_H_
+#ifndef CHATCONTROLLER_IRC_IRCWORKER_H_
+#define CHATCONTROLLER_IRC_IRCWORKER_H_
 
 #include <thread>
 #include <mutex>
@@ -36,4 +36,4 @@ class IRCSelector
     std::thread thread;
 };
 
-#endif //CHATCONTROLLER_IRC2_IRCWORKER_H_
+#endif //CHATCONTROLLER_IRC_IRCWORKER_H_

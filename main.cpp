@@ -12,7 +12,6 @@
 #include "common/Config.h"
 #include "common/LoggerFactory.h"
 
-#include "IRCWorker.h"
 #include "db/ch/CHConnectionPool.h"
 #include "db/pg/PGConnectionPool.h"
 

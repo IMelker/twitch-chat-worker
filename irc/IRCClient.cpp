@@ -1,193 +1,305 @@
-#include "app.h"
-#include <iostream>
-#include <algorithm>
+//
+// Created by l2pic on 25.04.2021.
+//
 
-#include <fmt/format.h>
+#include <cassert>
+#include <utility>
 
-#include "../common/Logger.h"
-#include "IRCSocket.h"
+#include <so_5/send_functions.hpp>
+
+#include "Logger.h"
+
+#include "IRCSelectorPool.h"
 #include "IRCClient.h"
-#include "IRCHandler.h"
+#include "IRCSession.h"
 
-IRCClient::IRCClient(IRCMessageListener *listener, std::shared_ptr<Logger> logger)
-  : listener(listener), logger(std::move(logger)) {
-    this->logger->logTrace("IRCClient[{}] Client created", fmt::ptr(this));
+#define MIN_SESS_COUNT 1
+
+IRCClient::IRCClient(const context_t &ctx,
+                     so_5::mbox_t parent,
+                     so_5::mbox_t processor,
+                     IRCConnectionConfig conConfig,
+                     IRCClientConfig cliConfig,
+                     IRCSelectorPool *pool,
+                     std::shared_ptr<Logger> logger,
+                     std::shared_ptr<DBController> db)
+    : so_5::agent_t(ctx),
+      parent(std::move(parent)),
+      processor(std::move(processor)),
+      conConfig(std::move(conConfig)),
+      cliConfig(std::move(cliConfig)),
+      channels(sessions, this->cliConfig, logger, std::move(db)),
+      logger(logger),
+      pool(pool) {
+    assert(pool);
+    logger->logTrace("IRCClient[{}] init client for {}", fmt::ptr(this) , this->cliConfig.nick);
 }
 
-bool IRCClient::connect(const char *host, int port) {
-    std::lock_guard lg(mutex);
-    return this->ircSocket.connect(host, port);
+IRCClient::~IRCClient() {
+    logger->logTrace("IRCClient[{}] end of client", fmt::ptr(this));
 }
 
-void IRCClient::disconnect() {
-    std::lock_guard lg(mutex);
-    this->ircSocket.disconnect();
+void IRCClient::addNewSession() {
+    auto session = std::make_shared<IRCSession>(conConfig, cliConfig, this, this, logger.get());
+
+    sessions.push_back(session);
+    pool->addSession(session);
+
+    logger->logTrace("IRCClient[{}] added new IRC session {}/{}",
+                     fmt::ptr(this), sessions.size(), cliConfig.session_count);
+
+    so_5::send<Connect>(so_direct_mbox(), session.get(), 0);
 }
 
-bool IRCClient::sendIRC(const std::string& data) {
-    this->logger->logTrace("IRCClient[{}] Send \"{}\"", fmt::ptr(this), std::string_view{data.data(), data.size() - 1});
-    std::lock_guard lg(mutex);
-    return this->ircSocket.send(data.c_str(), data.size());
+const std::string &IRCClient::nickname() const {
+    return cliConfig.nick;
 }
 
-bool IRCClient::login(const std::string& nickname, const std::string& username, const std::string& password) {
-    this->nick = nickname;
-    this->user = username;
+const IRCStatistic &IRCClient::statistic() {
+    stats.clear();
+    for(auto &session: sessions) {
+        stats += session->statistic();
+    }
+    return IRCStatisticProvider::statistic();
+}
 
-    std::lock_guard lg(mutex);
-    if (!password.empty() && !sendIRC("PASS " + password + "\n"))
-        return false;
-    if (sendIRC("NICK " + this->nick + "\n")) {
-        /*
-		 * RFC 1459 states that "hostname and servername are normally
-         * ignored by the IRC server when the USER command comes from
-         * a directly connected client (for security reasons)". But,
-         * we actually use it.
-         */
-        if (sendIRC("USER " + this->user + " 8 * :" APP_NAME "-" APP_VERSION "(" APP_AUTHOR_EMAIL ") IRC Client\n"))
-            return true;
+void IRCClient::so_define_agent() {
+    so_subscribe_self().event(&IRCClient::evtShutdown);
+    so_subscribe_self().event(&IRCClient::evtConnect);
+
+    so_subscribe_self().event(&IRCClient::evtReload);
+
+    so_subscribe_self().event(&IRCClient::evtJoinChannels);
+    so_subscribe_self().event(&IRCClient::evtJoinChannel, so_5::thread_safe);
+    so_subscribe_self().event(&IRCClient::evtLeaveChannel, so_5::thread_safe);
+    so_subscribe_self().event(&IRCClient::evtSendMessage, so_5::thread_safe);
+    so_subscribe_self().event(&IRCClient::evtSendIRC, so_5::thread_safe);
+    so_subscribe_self().event(&IRCClient::evtSendPING, so_5::thread_safe);
+}
+
+void IRCClient::so_evt_start() {
+    channels.load();
+
+    int count = std::max(MIN_SESS_COUNT, cliConfig.session_count);
+    for (int i = 0; i < count; ++i) {
+        addNewSession();
     }
 
-    return false;
+    using std::chrono::seconds;
+    pingTimer = so_5::send_periodic<Irc::SendPING>(so_direct_mbox(), seconds(10), seconds(10), "tmi.twitch.tv");
 }
 
-void IRCClient::receive() {
-    int size = this->ircSocket.receive(buffer.getLinearAppendPtr(), static_cast<int>(buffer.getLinearFreeSpace()));
-    if (size <= 0)
-        return;
-    buffer.expandSize(size);
+void IRCClient::so_evt_finish() {
+    for (auto &session: sessions) {
+        pool->removeSession(session);
 
-    const char *buf = buffer.getDataPtr();
-    unsigned int pos = 0;
-    for (unsigned int i = 0; i < buffer.getSize(); ++i) {
-        if (buf[i] == '\r' || buf[i] == '\n') {
-            process(buf + pos, i - pos);
-            pos = i + 1;
-        }
-    }
-
-    if (pos == buffer.getSize())
-        buffer.clear();
-    else
-        buffer.seekData(pos);
-
-    if (buffer.getLinearFreeSpace() < MAX_MESSAGE_LEN)
-        buffer.normilize();
-}
-
-void IRCClient::process(const char* data, size_t len) {
-    if (len == 0)
-        return;
-
-    IRCMessage message{data, len};
-
-    if (message.command == "ERROR") {
-        disconnect();
-        return;
-    }
-    if (message.command == "PING") {
-        sendIRC(fmt::format("PONG :{}\n", message.parameters.at(0)));
-        return;
-    }
-    if (message.command == "PONG") {
-        return;
-    }
-
-    // Default handler
-    int commandIndex = getCommandHandler(message.command);
-    if (commandIndex < NUM_IRC_CMDS) {
-        IRCCommandHandler &cmdHandler = ircCommandTable[commandIndex];
-        (this->*cmdHandler.handler)(message);
-    } else {
-        this->logger->logWarn("IRCClient[{}] Unhandled command: {}", fmt::ptr(this), message);
-        return;
+        session->disconnect();
     }
 }
 
-void IRCClient::handleCTCP(const IRCMessage& message) {
-    // Remove '\001' from start/end of the string
-    auto &text = const_cast<std::string &>(message.parameters.back());
-    text = text.substr(1, text.size() - 2);
-
-    if (text.find("ACTION") == 0) {
-        text = text.substr(sizeof("ACTION"));
-        listener->onMessage(message);
-    }else {
-        this->logger->logWarn("IRCClient[{}] Incoming CTCP: {}", fmt::ptr(this), message);
-    }
-
-    if (auto to = message.parameters[0]; to == nick) {
-        // Respond to CTCP VERSION
-        //if (text == "VERSION") {
-        //    sendIRC(fmt::format("NOTICE {} :\001VERSION " APP_NAME "-" APP_VERSION " \001\n", message.prefix.nickname));
-        //    return;
-        //}
-
-        // CTCP not implemented
-        sendIRC(fmt::format("NOTICE {} :\001ERRMSG {} :Not implemented\001\n", message.prefix.nickname, text));
-    }
+void IRCClient::evtShutdown(so_5::mhood_t<Irc::Shutdown>) {
+    so_deregister_agent_coop_normally();
 }
 
-void IRCClient::handlePrivMsg(const IRCMessage &message) {
-    if (message.parameters.empty())
-        return;
-
-    auto &text = message.parameters.back();
-    // Handle Client-To-Client Protocol
-    if (text.front() == '\001' && text.back() == '\001') {
-        handleCTCP(message);
+void IRCClient::evtConnect(so_5::mhood_t<Connect> evt) {
+    if (evt->session->connect()) {
+        logger->logInfo("IRCClient[{}] IRCSession({}) Successfully connected to {} with username: {}, password: {}",
+                        fmt::ptr(this), fmt::ptr(evt->session), conConfig.host, cliConfig.nick, cliConfig.password);
         return;
     }
 
-    listener->onMessage(message);
+    ++evt->attempt;
+
+    if (evt->attempt == conConfig.connect_attemps_limit) {
+        logger->logWarn("IRCClient[{}] IRCSession({}) Reconnect limit reached, restart attempts",
+                        fmt::ptr(this), fmt::ptr(evt->session));
+        evt->attempt = 0;
+    }
+
+    logger->logWarn("IRCClient[{}] IRCSession({}) Failed to connect. Reconnection after {} seconds",
+                    fmt::ptr(this), fmt::ptr(evt->session), 2 * evt->attempt);
+
+    so_5::send_delayed(so_direct_mbox(), std::chrono::seconds(2 * evt->attempt), evt);
 }
 
-void IRCClient::handleNotice(const IRCMessage& message) {
-    auto text = message.parameters.empty() ? "" : message.parameters.back();
-    if (!text.empty() && text.front() == '\001' && text.back() == '\001') {
-        text = text.substr(1, text.size() - 2);
-
-        if (text.find(' ') == std::string::npos) {
-            this->logger->logError("IRCClient[{}] Invalid notice ctcp reply: {}", fmt::ptr(this), message);
-            return;
-        }
-
-        this->logger->logTrace("IRCClient[{}] Notice reply CTCP: {}", fmt::ptr(this), message);
-    } else{
-        this->logger->logTrace("IRCClient[{}] Notice: {}", fmt::ptr(this), message);
+void IRCClient::evtReload(so_5::mhood_t<Reload> evt) {
+    cliConfig = evt->config;
+    for(auto &session: sessions) {
+        session->disconnect();
+        so_5::send<Connect>(so_direct_mbox(), session.get(), 0);
     }
 }
 
-void IRCClient::handleChannelJoinPart(const IRCMessage&) {
-    /*auto channel = message.parameters.at(0);
-    auto action = (message.command == "JOIN") ? "joins" : "leaves";
-    printf("handleChannelJoinPart: %s %s %s\n", message.prefix.nickname.c_str(), action, channel.c_str());*/
+void IRCClient::evtJoinChannels(so_5::mhood_t<Irc::JoinChannels> evt) {
+    for (auto &name : evt->channels)
+        joinToChannel(name, getNextSessionRoundRobin());
 }
 
-void IRCClient::handleUserNickChange(const IRCMessage& message) {
-    auto newNick = message.parameters.at(0);
-    logger->logTrace("IRCClient[{}] Nickname changed from {} to {}", fmt::ptr(this), message.prefix.nickname, newNick);
-    nick = newNick;
+void IRCClient::evtJoinChannel(so_5::mhood_t<Irc::JoinChannel> evt) {
+    joinToChannel(evt->channel, getNextSessionRoundRobin());
 }
 
-void IRCClient::handleUserQuit(const IRCMessage& message) {
-    logger->logTrace("IRCClient[{}] User quit: {}", fmt::ptr(this), message);
+void IRCClient::evtLeaveChannel(so_5::mhood_t<Irc::LeaveChannel> evt) {
+    leaveFromChannel(evt->channel);
 }
 
-void IRCClient::handleMode(const IRCMessage& message) {
-    logger->logTrace("IRCClient[{}] Mode changed: {}", fmt::ptr(this), message);
+void IRCClient::evtSendMessage(so_5::mhood_t<Irc::SendMessage> message) {
+    assert(message->account == cliConfig.nick);
+
+    if (sendMessage(message->channel, message->text)) {
+        logger->logInfo(R"(IRCClient[{}] {} send to "{}" message: "{}")",
+                        fmt::ptr(this), cliConfig.nick, message->channel, message->text);
+    }
 }
 
-void IRCClient::handleChannelNamesList(const IRCMessage&) {
-    /*auto channel = message.parameters.at(2);
-    auto nicks = message.parameters.at(3);
-    //printf("handleChannelNamesList: [%s] people:\n%s\n", channel.c_str(), nicks.c_str());*/
+void IRCClient::evtSendIRC(so_5::mhood_t<Irc::SendIRC> irc) {
+    if (sendRaw(irc->message)) {
+        logger->logInfo(R"(IRCClient[{}] {} send IRC "{}")", fmt::ptr(this), cliConfig.nick, irc->message);
+    }
 }
 
-void IRCClient::handleNicknameInUse(const IRCMessage&) {
-    //printf("handleNicknameInUse: %s %s\n", message.parameters.at(1).c_str(), message.parameters.at(2).c_str());
+void IRCClient::evtSendPING(so_5::mhood_t<Irc::SendPING> ping) {
+    sendPing(ping->host);
 }
 
-void IRCClient::handleServerMessage(const IRCMessage& message) {
-    logger->logTrace("IRCClient[{}] Server message: {}", fmt::ptr(this), message);
+bool IRCClient::sendQuit(const std::string &reason) {
+    for(auto &session: sessions) {
+        session->sendQuit(reason);
+    }
+    return true;
+}
+
+bool IRCClient::sendJoin(const std::string &channel) {
+    return getNextSessionRoundRobin()->sendJoin(channel);
+}
+
+bool IRCClient::sendJoin(const std::string &channel, const std::string &key) {
+    return getNextSessionRoundRobin()->sendJoin(channel, key);
+}
+
+bool IRCClient::sendPart(const std::string &channel) {
+    for (const auto& session: sessions) {
+        session->sendPart(channel);
+    }
+    return true;
+}
+
+bool IRCClient::sendTopic(const std::string &channel, const std::string &topic) {
+    return getNextSessionRoundRobin()->sendTopic(channel, topic);
+}
+
+bool IRCClient::sendNames(const std::string &channel) {
+    return getNextSessionRoundRobin()->sendNames(channel);
+}
+
+bool IRCClient::sendList(const std::string &channel) {
+    return getNextSessionRoundRobin()->sendList(channel);
+}
+
+bool IRCClient::sendInvite(const std::string &channel, const std::string &nick) {
+    return getNextSessionRoundRobin()->sendInvite(channel, nick);
+}
+
+bool IRCClient::sendKick(const std::string &channel, const std::string &nick, const std::string &comment) {
+    return getNextSessionRoundRobin()->sendKick(channel, nick, comment);
+}
+
+bool IRCClient::sendMessage(const std::string &channel, const std::string &text) {
+    return getNextSessionRoundRobin()->sendMessage(channel, text);
+}
+
+bool IRCClient::sendNotice(const std::string &channel, const std::string &text) {
+    return getNextSessionRoundRobin()->sendNotice(channel, text);
+}
+
+bool IRCClient::sendMe(const std::string &channel, const std::string &text) {
+    return getNextSessionRoundRobin()->sendMe(channel, text);
+}
+
+bool IRCClient::sendChannelMode(const std::string &channel, const std::string &mode) {
+    return getNextSessionRoundRobin()->sendChannelMode(channel, mode);
+}
+
+bool IRCClient::sendCtcpRequest(const std::string &nick, const std::string &reply) {
+    return getNextSessionRoundRobin()->sendCtcpRequest(nick, reply);
+}
+
+bool IRCClient::sendCtcpReply(const std::string &nick, const std::string &reply) {
+    return getNextSessionRoundRobin()->sendCtcpReply(nick, reply);
+}
+
+bool IRCClient::sendUserMode(const std::string &mode) {
+    return getNextSessionRoundRobin()->sendUserMode(mode);
+}
+
+bool IRCClient::sendNick(const std::string &newnick) {
+    return getNextSessionRoundRobin()->sendNick(newnick);
+}
+
+bool IRCClient::sendWhois(const std::string &nick) {
+    return getNextSessionRoundRobin()->sendWhois(nick);
+}
+
+bool IRCClient::sendPing(const std::string &host) {
+    for(auto &session: sessions) {
+        session->sendPing(host);
+    }
+    return true;
+}
+
+bool IRCClient::sendRaw(const std::string &raw) {
+    return getNextSessionRoundRobin()->sendRaw(raw);
+}
+
+void IRCClient::joinToChannel(const std::string &name, IRCSession *session) {
+    if (channels.inList(name))
+        return;
+
+    Channel channel{name};
+    channel.attach(session);
+    if (session->sendJoin(name)) {
+        logger->logInfo("IRCClient[{}] IRCSession({}) {} joining to channel({})",
+                        fmt::ptr(this), fmt::ptr(session), cliConfig.nick, name);
+        channels.addChannel(std::move(channel));
+    } else
+        logger->logError("IRCClient[{}] IRCSession({}) {} failed to join to channel({})",
+                         fmt::ptr(this), fmt::ptr(session), cliConfig.nick, name);
+}
+
+void IRCClient::leaveFromChannel(const std::string &name) {
+    auto channel = channels.extractChannel(name);
+    if (!channel)
+        return;
+    channel->getSession()->sendPart(name);
+}
+
+IRCSession *IRCClient::getNextSessionRoundRobin() {
+    if (sessions.size() == 1)
+        return sessions.front().get();
+
+    unsigned int i = curSessionRoundRobin++;
+    curSessionRoundRobin %= sessions.size();
+    return sessions[i].get();
+}
+
+void IRCClient::onLoggedIn(IRCSession *session) {
+    auto joinList = channels.attachToSession(session);
+    for (auto &channel: joinList) {
+        session->sendJoin(channel);
+    }
+    logger->logInfo("IRCClient[{}] IRCSession({}) logged in. Joining to {} channels",
+                     fmt::ptr(this), fmt::ptr(session), joinList.size());
+}
+
+void IRCClient::onDisconnected(IRCSession *session) {
+    channels.detachFromSession(session);
+
+    logger->logInfo("IRCClient[{}] IRCSession({}) Disconnected. Trying to reconnect",
+                    fmt::ptr(this), fmt::ptr(session));
+
+    so_5::send<Connect>(so_direct_mbox(), session, 0);
+}
+
+void IRCClient::onMessage(IRCMessage &&message) {
+    so_5::send<IRCMessage>(processor, std::move(message));
 }

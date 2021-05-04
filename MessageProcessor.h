@@ -17,7 +17,6 @@
 
 #include "ChatMessage.h"
 
-class IRCWorker;
 class ThreadPool;
 class Logger;
 

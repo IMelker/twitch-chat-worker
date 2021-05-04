@@ -12,16 +12,16 @@
 #include <so_5/agent.hpp>
 #include <so_5/environment.hpp>
 
+#include "Config.h"
+
 #include "http/server/HTTPServer.h"
 #include "db/pg/PGConnectionPool.h"
-#include "DBController.h"
-#include "IRCWorker.h"
-#include "IRCController.h"
-#include "MessageProcessor.h"
+#include "irc/IRCController.h"
 #include "bot/BotsEnvironment.h"
 #include "db/ch/CHConnectionPool.h"
+#include "MessageProcessor.h"
+#include "DBController.h"
 #include "Storage.h"
-#include "common/Config.h"
 
 class Logger;
 class Controller final : public so_5::agent_t
@@ -54,7 +54,7 @@ class Controller final : public so_5::agent_t
     Storage *storage = nullptr;
     BotsEnvironment *botsEnvironment = nullptr;
     MessageProcessor *msgProcessor = nullptr;
-    IRCController *ircWorkers = nullptr;
+    IRCController *ircController = nullptr;
 
     so_5::mbox_t http;
     so_5::timer_id_t shutdownCheckTimer;

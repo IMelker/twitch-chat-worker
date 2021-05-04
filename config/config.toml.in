@@ -36,6 +36,7 @@ log_level = "trace"
 [irc]
 host = "irc.chat.twitch.tv"
 port = 6667
+threads = 1
 log_type = "console"
 #log_type = "rotate"
 log_target = "logs/irc.log"

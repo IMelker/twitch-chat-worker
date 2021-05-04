@@ -1,69 +1,122 @@
-#ifndef _IRCCLIENT_H
-#define _IRCCLIENT_H
+//
+// Created by l2pic on 25.04.2021.
+//
 
-#include <string>
-#include <utility>
-#include <vector>
-#include <functional>
-#include <list>
+#ifndef CHATCONTROLLER_IRC_IRCCLIENT_H_
+#define CHATCONTROLLER_IRC_IRCCLIENT_H_
+
+#include <libircclient.h>
+
 #include <map>
-#include <fstream>
-#include <mutex>
+#include <memory>
 
-#include "absl/strings/str_split.h"
+#include <so_5/agent.hpp>
+#include <so_5/timers.hpp>
 
-#include "../common/BufferStatic.h"
-#include "../common/Utils.h"
-
+#include "IRCEvents.h"
 #include "IRCMessage.h"
-#include "IRCSocket.h"
-
-#define BUFF_SIZE (1024 * 4)
-
-struct IRCMessageListener {
-    virtual void onMessage(const IRCMessage &message) = 0;
-};
+#include "IRCSessionListener.h"
+#include "IRCConnectionConfig.h"
+#include "IRCClientConfig.h"
+#include "IRCChannelList.h"
+#include "IRCStatistic.h"
+#include "IRCSessionInterface.h"
 
 class Logger;
-class IRCClient
+class DBController;
+class IRCSession;
+class IRCSelectorPool;
+class IRCClient final : public so_5::agent_t,
+                        public IRCStatisticProvider,
+                        public IRCSessionInterface,
+                        public IRCSessionListener
 {
   public:
-    explicit IRCClient(IRCMessageListener *listener, std::shared_ptr<Logger>  logger);
-    ~IRCClient() = default;
+    struct Connect { IRCSession *session = nullptr; mutable int attempt = 0; };
+    struct Reload { IRCClientConfig config; };
+  public:
+    IRCClient(const context_t &ctx,
+              so_5::mbox_t parent,
+              so_5::mbox_t processor,
+              IRCConnectionConfig conConfig,
+              IRCClientConfig cliConfig,
+              IRCSelectorPool *pool,
+              std::shared_ptr<Logger> logger,
+              std::shared_ptr<DBController> db);
+    ~IRCClient() override;
 
-    bool connect(const char *host, int port);
-    bool connected() { return this->ircSocket.connected(); };
-    void disconnect();
+    IRCClient(IRCClient&) = delete;
+    IRCClient& operator=(IRCClient&) = delete;
 
-    bool sendIRC(const std::string& data);
+    [[nodiscard]] const std::string& nickname() const;
 
-    bool login(const std::string& nickname, const std::string& username, const std::string& password = std::string());
+    // IRCStatisticProvider implementation
+    [[nodiscard]] const IRCStatistic& statistic() override;
 
-    void receive();
-    void process(const char* data, size_t len);
+    // implementation so_5::agent_t
+    void so_define_agent() override;
+    void so_evt_start() override;
+    void so_evt_finish() override;
 
-    // Default internal handlers
-    void handleCTCP(const IRCMessage& message);
-    void handlePrivMsg(const IRCMessage& message);
-    void handleNotice(const IRCMessage& message);
-    void handleChannelJoinPart(const IRCMessage& message);
-    void handleUserNickChange(const IRCMessage& message);
-    void handleUserQuit(const IRCMessage& message);
-    void handleMode(const IRCMessage& message);
-    void handleChannelNamesList(const IRCMessage& message);
-    void handleNicknameInUse(const IRCMessage& message);
-    void handleServerMessage(const IRCMessage& message);
-private:
-    IRCMessageListener *listener;
-    std::shared_ptr<Logger> logger;
+    // session events
+    void evtConnect(so_5::mhood_t<Connect> evt);
 
-    std::string nick;
-    std::string user;
+    void evtShutdown(so_5::mhood_t<Irc::Shutdown> evt);
+    void evtReload(so_5::mhood_t<Reload> evt);
+    void evtJoinChannels(so_5::mhood_t<Irc::JoinChannels> evt);
+    void evtJoinChannel(so_5::mhood_t<Irc::JoinChannel> evt);
+    void evtLeaveChannel(so_5::mhood_t<Irc::LeaveChannel> evt);
+    void evtSendMessage(so_5::mhood_t<Irc::SendMessage> message);
+    void evtSendIRC(so_5::mhood_t<Irc::SendIRC> irc);
+    void evtSendPING(so_5::mhood_t<Irc::SendPING> ping);
 
-    BufferStatic<BUFF_SIZE> buffer;
+    // IRCSessionInterface implementation
+    bool sendQuit(const std::string &reason) override;
+    bool sendJoin(const std::string &channel) override;
+    bool sendJoin(const std::string &channel, const std::string &key) override;
+    bool sendPart(const std::string &channel) override;
+    bool sendTopic(const std::string &channel, const std::string &topic) override;
+    bool sendNames(const std::string &channel) override;
+    bool sendList(const std::string &channel) override;
+    bool sendInvite(const std::string &channel, const std::string &nick) override;
+    bool sendKick(const std::string &channel, const std::string &nick, const std::string &comment) override;
+    bool sendMessage(const std::string &channel, const std::string &text) override;
+    bool sendNotice(const std::string &channel, const std::string &text) override;
+    bool sendMe(const std::string &channel, const std::string &text) override;
+    bool sendChannelMode(const std::string &channel, const std::string &mode) override;
+    bool sendCtcpRequest(const std::string &nick, const std::string &reply) override;
+    bool sendCtcpReply(const std::string &nick, const std::string &reply) override;
+    bool sendUserMode(const std::string &mode) override;
+    bool sendNick(const std::string &newnick) override;
+    bool sendWhois(const std::string &nick) override;
+    bool sendPing(const std::string& host) override;
+    bool sendRaw(const std::string &raw) override;
 
-    std::recursive_mutex mutex;
-    IRCSocket ircSocket;
+    // implementation IRCSessionListener
+    void onLoggedIn(IRCSession* session) override;
+    void onDisconnected(IRCSession* session) override;
+    void onMessage(IRCMessage &&message) override;
+  private:
+    void addNewSession();
+    void joinToChannel(const std::string &name, IRCSession *session);
+    void leaveFromChannel(const std::string &name);
+    IRCSession * getNextSessionRoundRobin();
+
+    so_5::mbox_t parent;
+    so_5::mbox_t processor;
+
+    const IRCConnectionConfig conConfig;
+    IRCClientConfig cliConfig;
+
+    IRCChannelList channels;
+
+    const std::shared_ptr<Logger> logger;
+    IRCSelectorPool *pool;
+
+    unsigned int curSessionRoundRobin = 0;
+    std::vector<std::shared_ptr<IRCSession>> sessions;
+
+    so_5::timer_id_t pingTimer;
 };
 
-#endif
+#endif //CHATCONTROLLER_IRC_IRCCLIENT_H_

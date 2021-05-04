@@ -51,23 +51,20 @@ add_subdirectory(http)
 
 configure_file(${CMAKE_SOURCE_DIR}/config/app.h.in ${CMAKE_BINARY_DIR}/app.h @ONLY)
 configure_file(${CMAKE_SOURCE_DIR}/config/config.toml.in ${CMAKE_BINARY_DIR}/config.toml @ONLY)
+
 include_directories(${CMAKE_BINARY_DIR})
+include_directories(common)
 
-add_subdirectory(irc2)
-
-# executable configuration
-message("\n[executable]")
-add_executable(chatcontroller
+set(SOURCES
         main.cpp
         HttpController.h HttpController.cpp
         Controller.h Controller.cpp
         DBController.h DBController.cpp
-        IRCController.h IRCController.cpp
-        IRCWorker.h IRCWorker.cpp IRCEvents.h
-        ChannelController.h ChannelController.cpp
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
-        ChatMessage.h
+        ChatMessage.h)
+
+set(COMMON_SOURCES
         common/network/Socket.h common/network/Socket.cpp
         common/network/UDPSocket.h common/network/UDPSocket.cpp
         common/network/TCPSocket.h common/network/TCPSocket.cpp
@@ -81,21 +78,37 @@ add_executable(chatcontroller
         common/Logger.h common/Logger.cpp common/LoggerFactory.h
         common/Utils.h common/Utils.cpp
         common/Timer.h common/Timer.cpp
-        common/Clock.h
+        common/Clock.h)
+
+set(DB_SOURCES
         db/DBConnectionLock.h
         db/DBConnection.h db/DBConnection.cpp
         db/DBConnectionPool.h db/DBConnectionPool.cpp
         db/pg/PGConnection.h db/pg/PGConnection.cpp
         db/pg/PGConnectionPool.h db/pg/PGConnectionPool.cpp
         db/ch/CHConnection.h db/ch/CHConnection.cpp
-        db/ch/CHConnectionPool.h db/ch/CHConnectionPool.cpp
-        irc/IRCSocket.h irc/IRCSocket.cpp
+        db/ch/CHConnectionPool.h db/ch/CHConnectionPool.cpp)
+
+set(IRC_SOURCES
         irc/IRCClient.h irc/IRCClient.cpp
-        irc/IRCHandler.h irc/IRCHandler.cpp
+        irc/IRCSessionInterface.h irc/IRCSession.h irc/IRCSession.cpp
+        irc/IRCSessionContext.h
+        irc/IRCChannelList.cpp irc/IRCChannelList.h
+        irc/IRCSessionCallback.h irc/IRCSessionCallback.cpp
+        irc/IRCSelectorPool.h irc/IRCSelectorPool.cpp
+        irc/IRCSelector.h irc/IRCSelector.cpp
+        irc/IRCController.h irc/IRCController.cpp
+        irc/IRCEvents.h irc/IRCMessage.h irc/IRCSessionListener.h)
+
+set(BOT_SOURCES
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
-        bot/BotConfiguration.h bot/BotEvents.h
-        )
+        bot/BotConfiguration.h
+        bot/BotEvents.h irc/IRCSessionInterface.h)
+
+# executable configuration
+message("\n[executable]")
+add_executable(chatcontroller ${SOURCES} ${COMMON_SOURCES} ${DB_SOURCES} ${IRC_SOURCES} ${BOT_SOURCES})
 
 add_subdirectory(common/tests)
 

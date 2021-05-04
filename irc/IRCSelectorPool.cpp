@@ -10,20 +10,29 @@ IRCSelectorPool::~IRCSelectorPool() = default;
 
 void IRCSelectorPool::init(size_t threads) {
     std::lock_guard lg(mutex);
-    workers.reserve(threads);
+    selectors.reserve(threads);
     for (size_t i = 0; i < threads; ++i) {
-        workers.emplace_back(new IRCSelector(i));
+        selectors.emplace_back(new IRCSelector(i));
     }
 }
 
 void IRCSelectorPool::addSession(const std::shared_ptr<IRCSession> &session) {
     std::lock_guard lg(mutex);
-    workers[curPos++ % workers.size()]->addSession(session);
+    getNextSelectorRoundRobin()->addSession(session);
 }
 
 void IRCSelectorPool::removeSession(const std::shared_ptr<IRCSession> &session) {
     std::lock_guard lg(mutex);
-    for(auto &worker: workers) {
-        worker->removeSession(session);
+    for(auto &selector: selectors) {
+        selector->removeSession(session);
     }
+}
+
+IRCSelector *IRCSelectorPool::getNextSelectorRoundRobin() {
+    if (selectors.size() == 1)
+        return selectors.front().get();
+
+    unsigned int i = curSelectorRoundRobin++;
+    curSelectorRoundRobin %= selectors.size();
+    return selectors[i].get();
 }

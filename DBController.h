@@ -12,7 +12,7 @@
 
 #include "db/pg/PGConnectionPool.h"
 #include "bot/BotConfiguration.h"
-#include "IRCWorker.h"
+#include "irc/IRCClientConfig.h"
 
 class Logger;
 class DBController
@@ -36,6 +36,7 @@ class DBController
     Account loadAccount(int id);
     Channels loadChannels();
     Channels loadChannelsFor(const std::string& user);
+    Channels loadChannelsFor(int accountId);
     UpdatedChannels loadChannels(long long &timestamp);
     BotsConfigurations loadBotConfigurations();
     BotConfiguration loadBotConfiguration(int id);

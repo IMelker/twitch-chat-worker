@@ -5,6 +5,7 @@
 #ifndef CHATSNIFFER_BOT_BOTCONFIGURATION_H_
 #define CHATSNIFFER_BOT_BOTCONFIGURATION_H_
 
+#include <cassert>
 #include <string>
 #include <vector>
 
