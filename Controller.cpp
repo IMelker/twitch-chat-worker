@@ -87,9 +87,13 @@ Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listen
     chCfg.sendRetries = config[CLICKHOUSE]["send_retries"].value_or(5);
     int batchSize = config[CLICKHOUSE]["batch_size"].value_or(1000);
     unsigned int chConns = config[CLICKHOUSE]["connections"].value_or(1);
+    unsigned int botLogFlushDelay = config[CLICKHOUSE]["bot_log_flush_delay"].value_or(1);
+    unsigned int messagesFlushDelay = config[CLICKHOUSE]["messages_flush_delay"].value_or(1);
 
     auto chLogger = LoggerFactory::create(LoggerFactory::config(config, CLICKHOUSE));
-    return coop.make_agent<Storage>(listener, http, std::move(chCfg), chConns, batchSize, chLogger);
+    return coop.make_agent<Storage>(listener, http, std::move(chCfg), chConns,
+                                    batchSize, messagesFlushDelay, botLogFlushDelay,
+                                    chLogger);
 }
 
 BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener) {

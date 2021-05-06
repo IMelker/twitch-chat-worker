@@ -35,6 +35,8 @@ class Storage final : public so_5::agent_t
                      CHConnectionConfig config,
                      int connections,
                      int batchSize,
+                     unsigned int messagesFlushDelay,
+                     unsigned int botLogFlushDelay,
                      std::shared_ptr<Logger> logger);
     ~Storage() override;
 
@@ -74,6 +76,8 @@ class Storage final : public so_5::agent_t
     so_5::timer_id_t chatMessageFlushTimer;
 
     unsigned int batchSize = 1000;
+    unsigned int messagesFlushDelay = 10;
+    unsigned int botLogFlushDelay = 10;
 };
 
 #endif //CHATSNIFFER__STORAGE_H_

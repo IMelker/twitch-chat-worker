@@ -44,11 +44,6 @@ class IRCController final : public so_5::agent_t
     void so_evt_start() override;
     void so_evt_finish() override;
 
-    // IRCWorker callback
-    //void evtWorkerConnected(so_5::mhood_t<Irc::WorkerConnected> evt);
-    //void evtWorkerDisconnected(so_5::mhood_t<Irc::WorkerDisconnected> evt);
-    //void evtWorkerLogin(so_5::mhood_t<Irc::WorkerLoggedIn> evt);
-
     // SendMessage from BotEngine
     void evtSendMessage(so_5::mhood_t<Irc::SendMessage> message);
 
@@ -66,10 +61,6 @@ class IRCController final : public so_5::agent_t
     void evtHttpAccountRemove(so_5::mhood_t<hreq::irc::account::remove> evt);
     void evtHttpAccountReload(so_5::mhood_t<hreq::irc::account::reload> evt);
     void evtHttpAccountStats(so_5::mhood_t<hreq::irc::account::stats> evt);
-
-    // http handlers
-    std::string handleAccounts(const std::string &request, std::string &error);
-    std::string handleChannels(const std::string &request, std::string &error);
   private:
     void addNewIrcClient(const IRCClientConfig& config);
 

@@ -14,8 +14,8 @@ set(CXX_STANDARD_REQUIRED ON)
 # app info
 set(APP_NAME "TLuaBot")
 set(APP_VERSION_MAJOR 0)
-set(APP_VERSION_MINOR 0)
-set(APP_VERSION_PATCH 2)
+set(APP_VERSION_MINOR 1)
+set(APP_VERSION_PATCH 0)
 set(APP_VERSION ${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH})
 set(APP_AUTHOR_EMAIL "twitch.luabot@gmail.com")
 execute_process(COMMAND git rev-parse --verify HEAD OUTPUT_VARIABLE APP_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -104,7 +104,7 @@ set(BOT_SOURCES
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
         bot/BotConfiguration.h
-        bot/BotEvents.h irc/IRCSessionInterface.h)
+        bot/BotEvents.h irc/IRCSessionInterface.h common/ThreadName.h)
 
 # executable configuration
 message("\n[executable]")

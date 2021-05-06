@@ -11,6 +11,7 @@
 
 #include "../DBController.h"
 #include "IRCController.h"
+#include "IRCStatistic.h"
 
 #define resp(str) json{{"result", str}}.dump()
 
@@ -23,18 +24,13 @@ IRCController::IRCController(const context_t &ctx,
                              std::shared_ptr<DBController> db,
                              std::shared_ptr<Logger> logger)
   : so_5::agent_t(ctx), processor(std::move(processor)), http(std::move(http)),
-    logger(std::move(logger)), db(std::move(db)), config(conConfig) {
+    logger(logger), db(std::move(db)), config(conConfig), pool(logger) {
 
 }
 
 IRCController::~IRCController() = default;
 
 void IRCController::so_define_agent() {
-    // IRCWorker callback
-    //so_subscribe_self().event(&IRCController::evtWorkerConnected);
-    //so_subscribe_self().event(&IRCController::evtWorkerDisconnected);
-    //so_subscribe_self().event(&IRCController::evtWorkerLogin);
-
     // from BotEngine
     so_subscribe_self().event(&IRCController::evtSendMessage);
 
@@ -63,7 +59,6 @@ void IRCController::so_evt_start() {
 }
 
 void IRCController::so_evt_finish() {
-
 }
 
 void IRCController::addNewIrcClient(const IRCClientConfig& cliConfig) {
@@ -74,18 +69,6 @@ void IRCController::addNewIrcClient(const IRCClientConfig& cliConfig) {
     ircClientsByName.emplace(cliConfig.nick, ircClient);
     ircClientsById.emplace(cliConfig.id, ircClient);
 }
-
-/*void IRCController::evtWorkerConnected(so_5::mhood_t<Irc::WorkerConnected> evt) {
-    logger->logTrace("IRCWorkerPool::IRCWorker[{}] on connected", fmt::ptr(evt->worker));
-}
-
-void IRCController::evtWorkerDisconnected(so_5::mhood_t<Irc::WorkerDisconnected> evt) {
-    logger->logTrace("IRCWorkerPool::IRCWorker[{}] on disconnected", fmt::ptr(evt->worker));
-}
-
-void IRCController::evtWorkerLogin(so_5::mhood_t<Irc::WorkerLoggedIn> evt) {
-    logger->logTrace("IRCWorkerPool::IRCWorker[{}] on logged in", fmt::ptr(evt->worker));
-}*/
 
 void IRCController::evtSendMessage(mhood_t<Irc::SendMessage> message) {
     auto it = ircClientsByName.find(message->account);
@@ -98,11 +81,20 @@ void IRCController::evtSendMessage(mhood_t<Irc::SendMessage> message) {
 
 void IRCController::evtHttpStats(mhood_t<hreq::irc::stats> evt) {
     json body = json::object();
+    for (auto &[name, client]: ircClientsByName) {
+        body[name] = statsToJson(client->statistic());
+    }
     send_http_resp(http, evt, 200, body.dump());
 }
 
 void IRCController::evtHttpReload(mhood_t<hreq::irc::reload> evt) {
     json body = json::object();
+
+    /*for (auto &[name, client]: ircClientsByName) {
+        body[name] = true;
+        so_5::send<IRCClient::Reload>(client->so_direct_mbox());
+    }*/
+
     send_http_resp(http, evt, 200, body.dump());
 }
 
@@ -129,7 +121,8 @@ void IRCController::evtHttpCustom(mhood_t<hreq::irc::custom> evt) {
                 continue;
             }
 
-            logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second), acc, data);
+            logger->logInfo("IRCController[{}] IRCClient({}/{}) HTTP send command: \"{}\"",
+                            fmt::ptr(this), fmt::ptr(it->second), acc, data);
             so_5::send<Irc::SendIRC>(it->second->so_direct_mbox(), data);
             body[acc] = true;
         } else if (account.is_number()) {
@@ -140,7 +133,8 @@ void IRCController::evtHttpCustom(mhood_t<hreq::irc::custom> evt) {
                 continue;
             }
 
-            logger->logInfo(R"(IRCWorker[{}] {} send command: "{}")", fmt::ptr(it->second), id, data);
+            logger->logInfo("IRCController[{}] IRCClient({}/{}) HTTP send command: \"{}\"",
+                            fmt::ptr(this), fmt::ptr(it->second), it->second->nickname(), data);
             so_5::send<Irc::SendIRC>(it->second->so_direct_mbox(), data);
             body[id] = true;
         }
@@ -181,7 +175,7 @@ void IRCController::evtHttpChannelJoin(mhood_t<hreq::irc::channel::join> evt) {
                 continue;
 
             auto chan = channel.get<std::string>();
-            //so_5::send<Irc::JoinChannelOnAccount>(channelController->so_direct_mbox(), chan, worker);
+            so_5::send<Irc::JoinChannel>(client->so_direct_mbox(), chan);
             body[chan] = {{"joined", true}};
         }
     }
@@ -203,7 +197,9 @@ void IRCController::evtHttpChannelLeave(mhood_t<hreq::irc::channel::leave> evt) 
         if (!channel.is_string())
             continue;
         auto chan = channel.get<std::string>();
-        //so_5::send<Irc::LeaveChannel>(channelController->so_direct_mbox(), chan);
+        for (auto &[name, client]: ircClientsByName) {
+            so_5::send<Irc::LeaveChannel>(client->so_direct_mbox(), chan);
+        }
         body[chan] = {{"leaved", true}};
     }
 
@@ -351,91 +347,4 @@ void IRCController::evtHttpAccountStats(mhood_t<hreq::irc::account::stats> evt) 
 
 
     send_http_resp(http, evt, 200, body.dump());
-}
-
-std::string IRCController::handleAccounts(const std::string &request, std::string &error) {
-    /*auto fillAccount = [] (json& account, const auto& stats) {
-        account["reconnects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
-                                 {"count", stats.connects.attempts.load(std::memory_order_relaxed)}};
-        account["channels"] = {{"updated", stats.channels.updated.load(std::memory_order_relaxed)},
-                               {"count", stats.channels.count.load(std::memory_order_relaxed)}};
-        account["messages"]["in"] = {{"updated", stats.messages.in.updated.load(std::memory_order_relaxed)},
-                                     {"count", stats.messages.in.count.load(std::memory_order_relaxed)}};
-        account["messages"]["out"] = {{"updated", stats.messages.out.updated.load(std::memory_order_relaxed)},
-                                      {"count", stats.messages.out.count.load(std::memory_order_relaxed)}};
-    };
-
-    json body = json::object();
-    if (request.empty()) {
-        for (auto &[nick, worker]: workersByName)
-            fillAccount(body[nick], worker->getStats());
-    } else {
-        json req = json::parse(request, nullptr, false, true);
-        if (req.is_discarded()) {
-            error = "Failed to parse JSON";
-            return "";
-        }
-
-        const auto& accounts = req["accounts"];
-        switch (accounts.type()) {
-            case json::value_t::array:
-                for (const auto &account: accounts) {
-                    if (!account.is_string())
-                        continue;
-
-                    auto it = workersByName.find(account.get<std::string_view>());
-                    if (it != workersByName.end())
-                        fillAccount(body[it->first], it->second->getStats());
-                }
-                break;
-            case json::value_t::string: {
-                auto it = workersByName.find(accounts.get<std::string_view>());
-                if (it != workersByName.end())
-                    fillAccount(body[it->first], it->second->getStats());
-                break;
-            }
-            default:
-                break;
-        }
-    }*/
-    json body = json::object();
-    return body.dump();
-}
-
-std::string IRCController::handleChannels(const std::string &request, std::string &error) {
-    /*json body = json::object();
-    if (request.empty()) {
-        for (auto &[nick, worker]: workersByName)
-            body[nick] = json(worker->getJoinedChannels());
-    } else {
-        json req = json::parse(request, nullptr, false, true);
-        if (req.is_discarded()) {
-            error = "Failed to parse JSON";
-            return "";
-        }
-
-        const auto& accounts = req["accounts"];
-        switch (accounts.type()) {
-            case json::value_t::array:
-                for (const auto &account: accounts) {
-                    if (!account.is_string())
-                        continue;
-
-                    auto it = workersByName.find(account.get<std::string_view>());
-                    if (it != workersByName.end())
-                        body[it->first] = json(it->second->getJoinedChannels());
-                }
-                break;
-            case json::value_t::string:{
-                auto it = workersByName.find(accounts.get<std::string_view>());
-                if (it != workersByName.end())
-                    body[it->first] = json(it->second->getJoinedChannels());
-                break;
-            }
-            default:
-                break;
-        }
-    }*/
-    json body = json::object();
-    return body.dump();
 }

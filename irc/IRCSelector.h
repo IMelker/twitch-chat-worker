@@ -10,13 +10,14 @@
 #include <vector>
 #include <algorithm>
 
-#include "../common/SysSignal.h"
+#include "SysSignal.h"
 
+class Logger;
 class IRCSession;
 class IRCSelector
 {
   public:
-    explicit IRCSelector(size_t id);
+    explicit IRCSelector(size_t id, Logger *logger);
     ~IRCSelector();
 
     void addSession(const std::shared_ptr<IRCSession> &session);
@@ -26,6 +27,9 @@ class IRCSelector
     void run();
 
     size_t id = 0;
+
+    Logger *logger;
+    std::string loggerTag;
 
     std::mutex mutex;
     std::vector<std::shared_ptr<IRCSession>> sessions;

@@ -3,17 +3,23 @@
 //
 
 #include <cstring>
+#include <string>
 #include <chrono>
 
 #include <libircclient.h>
+
+#include "Logger.h"
+#include "ThreadName.h"
 
 #include "IRCSession.h"
 #include "IRCSelector.h"
 
 #define SELECT_DELAY 1000
 
-IRCSelector::IRCSelector(size_t id) : id(id) {
+IRCSelector::IRCSelector(size_t id, Logger *logger) : id(id), logger(logger) {
     thread = std::thread(&IRCSelector::run, this);
+    set_thread_name(thread, "irc_selector_" + std::to_string(id));
+    loggerTag = fmt::format("IRCSelector[{}/{}]", fmt::ptr(this), id);
 }
 
 IRCSelector::~IRCSelector() {
@@ -59,8 +65,8 @@ void IRCSelector::run() {
                 continue;
 
             if (irc_add_select_descriptors(session->session, &in_set, &out_set, &maxfd)) {
-                //fprintf(stderr, "IRCWorker Failed to add session to select list: %s\n",
-                //        irc_strerror(irc_errno(session->session)));
+                logger->logError("{} Failed to add session to select list: {}",
+                                 loggerTag, irc_strerror(irc_errno(session->session)));
             }
         }
 
@@ -70,14 +76,14 @@ void IRCSelector::run() {
         }
 
         int count = select(maxfd + 1, &in_set, &out_set, nullptr, &tv);
-        if (count < 0 && count != EINTR) {
-            fprintf(stderr, "Failed to select: %d: %s\n", errno, strerror(errno));
+        if (count < 0 && errno != EINTR) {
+            logger->logError("{} Failed to select: {} {}", loggerTag, errno, strerror(errno));
         }
 
         for (auto &session : threadSafeCopy) {
             if (irc_process_select_descriptors(session->session, &in_set, &out_set)) {
-                //fprintf(stderr, "IRCWorker Failed to process select list: %s\n",
-                //        irc_strerror(irc_errno(session->session)));
+                logger->logError("{} Failed to process select list: {}",
+                                 loggerTag, irc_strerror(irc_errno(session->session)));
             }
         }
     }

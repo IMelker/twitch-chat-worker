@@ -7,6 +7,10 @@
 
 #include <atomic>
 
+#include "nlohmann/json.hpp"
+
+using json = nlohmann::json;
+
 #define DUMP_VAR_TO(arg, res) res.append(#arg " = ").append(std::to_string(relx_get(arg))).append(", ")
 
 namespace {
@@ -21,6 +25,9 @@ template<typename T> void relx_dec(std::atomic<T> &var) { relx_sub(var, 1); }
 
 class IRCStatistic
 {
+  public:
+    friend json statsToJson(const IRCStatistic& stats);
+
   public:
     std::string dump() {
         std::string res;
@@ -103,6 +110,31 @@ class IRCStatistic
             std::atomic_int count = 0;
         } out;
     } commands;
+};
+
+inline json statsToJson(const IRCStatistic& stats) {
+    json res = json::object();
+    res["connects"] = {
+        {"updated", relx_get(stats.connects.updated)},
+        {"success", relx_get(stats.connects.success)},
+        {"failed", relx_get(stats.connects.failed)},
+        {"loggedin", relx_get(stats.connects.loggedin)},
+        {"disconnected", relx_get(stats.connects.disconnected)}
+    };
+    res["channels"] = {{"count", relx_get(stats.channels.count)}};
+    res["commands"] = {
+        { "in", {
+            {"bytes", relx_get(stats.commands.in.bytes)},
+            {"count", relx_get(stats.commands.in.count)}
+        }
+        },
+        { "out", {
+            {"bytes", relx_get(stats.commands.out.bytes)},
+            {"count", relx_get(stats.commands.out.count)}
+        }
+        }
+    };
+    return res;
 };
 
 class IRCStatisticProvider {

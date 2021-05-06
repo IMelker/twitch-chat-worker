@@ -12,8 +12,7 @@
 #include "db/ch/CHConnectionPool.h"
 #include "Storage.h"
 
-#define FLUSH_BOT_LOG_PERIOD std::chrono::seconds{3}, std::chrono::seconds{3}
-#define FLUSH_CHAT_MSG_PERIOD std::chrono::seconds{10}, std::chrono::seconds{10}
+#define FLUSH_TIMER(time) std::chrono::seconds{time}, std::chrono::seconds{time}
 
 Storage::Storage(const context_t &ctx,
                  so_5::mbox_t publisher,
@@ -21,8 +20,16 @@ Storage::Storage(const context_t &ctx,
                  CHConnectionConfig config,
                  int connections,
                  int batchSize,
+                 unsigned int messagesFlushDelay,
+                 unsigned int botLogFlushDelay,
                  std::shared_ptr<Logger> logger)
-  : so_5::agent_t(ctx), publisher(std::move(publisher)), http(std::move(http)), logger(std::move(logger)), batchSize(batchSize) {
+  : so_5::agent_t(ctx),
+    publisher(std::move(publisher)),
+    http(std::move(http)),
+    logger(std::move(logger)),
+    batchSize(batchSize),
+    messagesFlushDelay(messagesFlushDelay),
+    botLogFlushDelay(botLogFlushDelay) {
     msgBatch.reserve(batchSize);
     logBatch.reserve(batchSize);
 
@@ -46,8 +53,8 @@ void Storage::so_define_agent() {
 }
 
 void Storage::so_evt_start() {
-    botLogFlushTimer = so_5::send_periodic<Storage::FlushBotLogMessages>(*this, FLUSH_BOT_LOG_PERIOD);
-    chatMessageFlushTimer = so_5::send_periodic<Storage::FlushChatMessages>(*this, FLUSH_CHAT_MSG_PERIOD);
+    botLogFlushTimer = so_5::send_periodic<Storage::FlushBotLogMessages>(*this, FLUSH_TIMER(botLogFlushDelay));
+    chatMessageFlushTimer = so_5::send_periodic<Storage::FlushChatMessages>(*this, FLUSH_TIMER(messagesFlushDelay));
 }
 
 void Storage::so_evt_finish() {

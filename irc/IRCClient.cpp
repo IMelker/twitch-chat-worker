@@ -14,6 +14,9 @@
 #include "IRCSession.h"
 
 #define MIN_SESS_COUNT 1
+#define LOGIN_TIMEOUT 3000
+#define PING_DELAY_MS 2000
+#define PING_TIMER(time) std::chrono::milliseconds{time}, std::chrono::milliseconds{time}
 
 IRCClient::IRCClient(const context_t &ctx,
                      so_5::mbox_t parent,
@@ -29,14 +32,15 @@ IRCClient::IRCClient(const context_t &ctx,
       conConfig(std::move(conConfig)),
       cliConfig(std::move(cliConfig)),
       channels(sessions, this->cliConfig, logger, std::move(db)),
-      logger(logger),
-      pool(pool) {
+      pool(pool),
+      logger(std::move(logger)) {
     assert(pool);
-    logger->logTrace("IRCClient[{}] init client for {}", fmt::ptr(this) , this->cliConfig.nick);
+    loggerTag = fmt::format("IRCClient[{}/{}]", fmt::ptr(this) , this->cliConfig.nick);
+    this->logger->logTrace("{} Client init", loggerTag);
 }
 
 IRCClient::~IRCClient() {
-    logger->logTrace("IRCClient[{}] end of client", fmt::ptr(this));
+    logger->logTrace("{} Client destruction", loggerTag);
 }
 
 void IRCClient::addNewSession() {
@@ -45,8 +49,8 @@ void IRCClient::addNewSession() {
     sessions.push_back(session);
     pool->addSession(session);
 
-    logger->logTrace("IRCClient[{}] added new IRC session {}/{}",
-                     fmt::ptr(this), sessions.size(), cliConfig.session_count);
+    logger->logTrace("{} added new IRC session {}/{}",
+                     loggerTag, sessions.size(), cliConfig.session_count);
 
     so_5::send<Connect>(so_direct_mbox(), session.get(), 0);
 }
@@ -66,7 +70,6 @@ const IRCStatistic &IRCClient::statistic() {
 void IRCClient::so_define_agent() {
     so_subscribe_self().event(&IRCClient::evtShutdown);
     so_subscribe_self().event(&IRCClient::evtConnect);
-
     so_subscribe_self().event(&IRCClient::evtReload);
 
     so_subscribe_self().event(&IRCClient::evtJoinChannels);
@@ -75,6 +78,7 @@ void IRCClient::so_define_agent() {
     so_subscribe_self().event(&IRCClient::evtSendMessage, so_5::thread_safe);
     so_subscribe_self().event(&IRCClient::evtSendIRC, so_5::thread_safe);
     so_subscribe_self().event(&IRCClient::evtSendPING, so_5::thread_safe);
+    so_subscribe_self().event(&IRCClient::evtLoggedInCheck, so_5::thread_safe);
 }
 
 void IRCClient::so_evt_start() {
@@ -84,9 +88,6 @@ void IRCClient::so_evt_start() {
     for (int i = 0; i < count; ++i) {
         addNewSession();
     }
-
-    using std::chrono::seconds;
-    pingTimer = so_5::send_periodic<Irc::SendPING>(so_direct_mbox(), seconds(10), seconds(10), "tmi.twitch.tv");
 }
 
 void IRCClient::so_evt_finish() {
@@ -103,30 +104,49 @@ void IRCClient::evtShutdown(so_5::mhood_t<Irc::Shutdown>) {
 
 void IRCClient::evtConnect(so_5::mhood_t<Connect> evt) {
     if (evt->session->connect()) {
-        logger->logInfo("IRCClient[{}] IRCSession({}) Successfully connected to {} with username: {}, password: {}",
-                        fmt::ptr(this), fmt::ptr(evt->session), conConfig.host, cliConfig.nick, cliConfig.password);
+        logger->logInfo("{} IRCSession({}) Successfully connected to {} with username: {}, password: {}",
+                        loggerTag, fmt::ptr(evt->session), conConfig.host, cliConfig.nick, cliConfig.password);
+        so_5::send_delayed<LoggedInCheck>(so_direct_mbox(), std::chrono::milliseconds(LOGIN_TIMEOUT), evt->session);
         return;
     }
 
     ++evt->attempt;
 
     if (evt->attempt == conConfig.connect_attemps_limit) {
-        logger->logWarn("IRCClient[{}] IRCSession({}) Reconnect limit reached, restart attempts",
-                        fmt::ptr(this), fmt::ptr(evt->session));
+        logger->logWarn("{} IRCSession({}) Reconnect limit reached, restart attempts",
+                        loggerTag, fmt::ptr(evt->session));
         evt->attempt = 0;
     }
 
-    logger->logWarn("IRCClient[{}] IRCSession({}) Failed to connect. Reconnection after {} seconds",
-                    fmt::ptr(this), fmt::ptr(evt->session), 2 * evt->attempt);
+    logger->logWarn("{} IRCSession({}) Failed to connect. Reconnection after {} seconds",
+                    loggerTag, fmt::ptr(evt->session), 2 * evt->attempt);
 
     so_5::send_delayed(so_direct_mbox(), std::chrono::seconds(2 * evt->attempt), evt);
 }
 
 void IRCClient::evtReload(so_5::mhood_t<Reload> evt) {
     cliConfig = evt->config;
-    for(auto &session: sessions) {
+    loggerTag = fmt::format("IRCClient[{}/{}]", fmt::ptr(this) , cliConfig.nick);
+
+    // clear current sessions
+    for (auto &session: sessions) {
+        pool->removeSession(session);
         session->disconnect();
-        so_5::send<Connect>(so_direct_mbox(), session.get(), 0);
+    }
+
+    // reload channels list
+    channels.load();
+
+    // start as new sessions
+    int count = std::max(MIN_SESS_COUNT, cliConfig.session_count);
+    for (int i = 0; i < count; ++i) {
+        addNewSession();
+    }
+}
+
+void IRCClient::evtLoggedInCheck(so_5::mhood_t<LoggedInCheck> evt) {
+    if (!evt->session->loggedIn()) {
+        evt->session->onDisconnected("LOGIN_TIMEOUT", fmt::format("Login timeout: {}ms", LOGIN_TIMEOUT));
     }
 }
 
@@ -147,19 +167,24 @@ void IRCClient::evtSendMessage(so_5::mhood_t<Irc::SendMessage> message) {
     assert(message->account == cliConfig.nick);
 
     if (sendMessage(message->channel, message->text)) {
-        logger->logInfo(R"(IRCClient[{}] {} send to "{}" message: "{}")",
-                        fmt::ptr(this), cliConfig.nick, message->channel, message->text);
+        logger->logInfo("{} Send to \"{}\" message: \"{}\"",
+                        loggerTag, message->channel, message->text);
+    } else {
+        logger->logError("{} Failed to send to \"{}\" message: \"{}\"",
+                        loggerTag, message->channel, message->text);
     }
 }
 
 void IRCClient::evtSendIRC(so_5::mhood_t<Irc::SendIRC> irc) {
     if (sendRaw(irc->message)) {
-        logger->logInfo(R"(IRCClient[{}] {} send IRC "{}")", fmt::ptr(this), cliConfig.nick, irc->message);
+        logger->logInfo("{} Send IRC \"{}\"", loggerTag, irc->message);
+    } else {
+        logger->logError("{} Failed to send IRC \"{}\"", loggerTag, irc->message);
     }
 }
 
-void IRCClient::evtSendPING(so_5::mhood_t<Irc::SendPING> ping) {
-    sendPing(ping->host);
+void IRCClient::evtSendPING(so_5::mhood_t<SendPING> ping) {
+    ping->session->sendPing(ping->host);
 }
 
 bool IRCClient::sendQuit(const std::string &reason) {
@@ -258,12 +283,12 @@ void IRCClient::joinToChannel(const std::string &name, IRCSession *session) {
     Channel channel{name};
     channel.attach(session);
     if (session->sendJoin(name)) {
-        logger->logInfo("IRCClient[{}] IRCSession({}) {} joining to channel({})",
-                        fmt::ptr(this), fmt::ptr(session), cliConfig.nick, name);
+        logger->logInfo("{} IRCSession({}) Joining to channel({})",
+                        loggerTag, fmt::ptr(session), name);
         channels.addChannel(std::move(channel));
     } else
-        logger->logError("IRCClient[{}] IRCSession({}) {} failed to join to channel({})",
-                         fmt::ptr(this), fmt::ptr(session), cliConfig.nick, name);
+        logger->logError("{} IRCSession({}) Failed to join to channel({})",
+                         loggerTag, fmt::ptr(session), name);
 }
 
 void IRCClient::leaveFromChannel(const std::string &name) {
@@ -287,15 +312,19 @@ void IRCClient::onLoggedIn(IRCSession *session) {
     for (auto &channel: joinList) {
         session->sendJoin(channel);
     }
-    logger->logInfo("IRCClient[{}] IRCSession({}) logged in. Joining to {} channels",
-                     fmt::ptr(this), fmt::ptr(session), joinList.size());
+    logger->logInfo("{} IRCSession({}) logged in. Joining to {} channels",
+                    loggerTag, fmt::ptr(session), joinList.size());
+
+    session->setPingTimer(
+        so_5::send_periodic<SendPING>(so_direct_mbox(), PING_TIMER(PING_DELAY_MS), session, "tmi.twitch.tv")
+    );
 }
 
 void IRCClient::onDisconnected(IRCSession *session) {
     channels.detachFromSession(session);
 
-    logger->logInfo("IRCClient[{}] IRCSession({}) Disconnected. Trying to reconnect",
-                    fmt::ptr(this), fmt::ptr(session));
+    logger->logInfo("{} IRCSession({}) Disconnected. Trying to reconnect",
+                    loggerTag, fmt::ptr(session));
 
     so_5::send<Connect>(so_direct_mbox(), session, 0);
 }

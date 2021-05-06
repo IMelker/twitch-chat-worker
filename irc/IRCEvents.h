@@ -48,9 +48,6 @@ struct SendMessage { std::string account; std::string channel; std::string text;
 // Command to send custom IRC message
 struct SendIRC { std::string message; };
 
-// Command to send PING
-struct SendPING { std::string host; };
-
 }
 
 #endif //CHATCONTROLLER__IRCEVENTS_H_

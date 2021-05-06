@@ -48,8 +48,6 @@ class IRCChannelList
     ~IRCChannelList();
 
     void load();
-    void reload();
-    void clear();
 
     bool inList(const std::string& name);
     void addChannel(Channel channel);

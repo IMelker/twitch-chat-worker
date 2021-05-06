@@ -10,9 +10,10 @@
 #include <memory>
 #include <mutex>
 
+#include <so_5/timers.hpp>
+
 #include "Logger.h"
 
-#include "IRCSelector.h"
 #include "IRCConnectionConfig.h"
 #include "IRCClientConfig.h"
 #include "IRCSessionContext.h"
@@ -31,9 +32,14 @@ class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, priv
                IRCSessionListener *listener, IRCClient *parent, Logger* logger);
     ~IRCSession() override;
 
+    void create();
+    void destroy();
     bool connect();
     bool connected();
+    bool loggedIn();
     void disconnect();
+
+    void setPingTimer(so_5::timer_id_t timer);
 
     // IRCSessionCommands
     bool sendQuit(const std::string& reason) override;
@@ -109,7 +115,10 @@ class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, priv
 
     IRCSessionListener* listener;
     Logger *logger;
+    std::string loggerTag;
 
+    std::atomic_bool logged = false;
+    so_5::timer_id_t pingTimer;
     long long lastPingTime = 0;
     long long lastPongTime = 0;
 

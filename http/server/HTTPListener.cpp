@@ -63,9 +63,9 @@ void HTTPListener::onAccept(beast::error_code ec, tcp::socket socket) {
             std::make_shared<HTTPSession>(std::move(socket), ctx, handler, logger)->run();
         else
             std::make_shared<HTTPSession>(std::move(socket), handler, logger)->run();
-    } else {
-        logger->logError("HTTPListener {}", ec.message());
-    }
 
-    accept(); // Accept another connection
+        accept(); // Accept another connection
+    } else {
+        logger->logCritical("HTTPListener {}", ec.message());
+    }
 }

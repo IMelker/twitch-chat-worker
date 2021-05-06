@@ -9,12 +9,13 @@
 #include <mutex>
 #include <memory>
 
+class Logger;
 class IRCSession;
 class IRCSelector;
 class IRCSelectorPool
 {
   public:
-    IRCSelectorPool();
+    explicit IRCSelectorPool(std::shared_ptr<Logger> logger);
     ~IRCSelectorPool();
 
     void init(size_t threads);
@@ -24,6 +25,8 @@ class IRCSelectorPool
 
   private:
     IRCSelector *getNextSelectorRoundRobin();
+
+    std::shared_ptr<Logger> logger;
 
     std::mutex mutex;
     size_t curSelectorRoundRobin = 0;

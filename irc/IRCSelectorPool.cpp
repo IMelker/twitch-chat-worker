@@ -2,17 +2,22 @@
 // Created by l2pic on 25.04.2021.
 //
 
+#include "Logger.h"
 #include "IRCSelector.h"
 #include "IRCSelectorPool.h"
 
-IRCSelectorPool::IRCSelectorPool() = default;
+IRCSelectorPool::IRCSelectorPool(std::shared_ptr<Logger> logger)
+  : logger(std::move(logger)) {
+
+};
+
 IRCSelectorPool::~IRCSelectorPool() = default;
 
 void IRCSelectorPool::init(size_t threads) {
     std::lock_guard lg(mutex);
     selectors.reserve(threads);
     for (size_t i = 0; i < threads; ++i) {
-        selectors.emplace_back(new IRCSelector(i));
+        selectors.emplace_back(new IRCSelector(i, logger.get()));
     }
 }
 

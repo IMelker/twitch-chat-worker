@@ -22,7 +22,7 @@ IRCChannelList::IRCChannelList(const Sessions &sessions, const IRCClientConfig& 
 IRCChannelList::~IRCChannelList() = default;
 
 void IRCChannelList::load() {
-    logger->logTrace("IRCChannelList[{}] channels load inited for account id={}",
+    logger->logTrace("IRCChannelList[{}] Load channels inited for account id={}",
                      fmt::ptr(this), cliConfig.id);
     auto loadedChannels = db->loadChannelsFor(cliConfig.id);
 
@@ -37,16 +37,6 @@ void IRCChannelList::load() {
 
     std::lock_guard lg(mutex);
     channels.swap(temp);
-}
-
-void IRCChannelList::reload() {
-    logger->logTrace("IRCChannelList[{}] channels reload inited for account id={}",
-                     fmt::ptr(this), cliConfig.id);
-}
-
-void IRCChannelList::clear() {
-    logger->logTrace("IRCChannelList[{}] channels clear inited for account id={}",
-                     fmt::ptr(this), cliConfig.id);
 }
 
 void IRCChannelList::addChannel(Channel channel) {
