@@ -82,6 +82,15 @@ void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPS
     if (path.size() < 2)
         return send(HTTPResponseFactory::BadRequest(req, "Invalid path"));
 
+    if (match(0, stats)) {
+        match_handle2(stats, bot);
+        match_handle2(stats, storage);
+        match_handle2(stats, db);
+        match_handle2(stats, irc);
+        match_handle2(stats, channel);
+        match_handle2(stats, account);
+    }
+    else
     if (match(0, storage)) {
         match_handle2(storage, stats);
     }

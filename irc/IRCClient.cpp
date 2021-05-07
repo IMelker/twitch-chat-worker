@@ -72,7 +72,6 @@ void IRCClient::so_define_agent() {
     so_subscribe_self().event(&IRCClient::evtConnect);
     so_subscribe_self().event(&IRCClient::evtReload);
 
-    so_subscribe_self().event(&IRCClient::evtJoinChannels);
     so_subscribe_self().event(&IRCClient::evtJoinChannel, so_5::thread_safe);
     so_subscribe_self().event(&IRCClient::evtLeaveChannel, so_5::thread_safe);
     so_subscribe_self().event(&IRCClient::evtSendMessage, so_5::thread_safe);
@@ -98,7 +97,7 @@ void IRCClient::so_evt_finish() {
     }
 }
 
-void IRCClient::evtShutdown(so_5::mhood_t<Irc::Shutdown>) {
+void IRCClient::evtShutdown(so_5::mhood_t<Shutdown>) {
     so_deregister_agent_coop_normally();
 }
 
@@ -125,14 +124,18 @@ void IRCClient::evtConnect(so_5::mhood_t<Connect> evt) {
 }
 
 void IRCClient::evtReload(so_5::mhood_t<Reload> evt) {
+    logger->logInfo("{} Reload of {}", loggerTag, cliConfig);
     cliConfig = evt->config;
     loggerTag = fmt::format("IRCClient[{}/{}]", fmt::ptr(this) , cliConfig.nick);
+    logger->logInfo("{} Reload to {}", loggerTag, cliConfig);
 
     // clear current sessions
     for (auto &session: sessions) {
         pool->removeSession(session);
+        session->setPingTimer({});
         session->disconnect();
     }
+    sessions.clear();
 
     // reload channels list
     channels.load();
@@ -150,32 +153,25 @@ void IRCClient::evtLoggedInCheck(so_5::mhood_t<LoggedInCheck> evt) {
     }
 }
 
-void IRCClient::evtJoinChannels(so_5::mhood_t<Irc::JoinChannels> evt) {
-    for (auto &name : evt->channels)
-        joinToChannel(name, getNextSessionRoundRobin());
-}
-
-void IRCClient::evtJoinChannel(so_5::mhood_t<Irc::JoinChannel> evt) {
+void IRCClient::evtJoinChannel(so_5::mhood_t<JoinChannel> evt) {
     joinToChannel(evt->channel, getNextSessionRoundRobin());
 }
 
-void IRCClient::evtLeaveChannel(so_5::mhood_t<Irc::LeaveChannel> evt) {
+void IRCClient::evtLeaveChannel(so_5::mhood_t<LeaveChannel> evt) {
     leaveFromChannel(evt->channel);
 }
 
-void IRCClient::evtSendMessage(so_5::mhood_t<Irc::SendMessage> message) {
-    assert(message->account == cliConfig.nick);
-
+void IRCClient::evtSendMessage(so_5::mhood_t<SendMessage> message) {
     if (sendMessage(message->channel, message->text)) {
-        logger->logInfo("{} Send to \"{}\" message: \"{}\"",
+        logger->logInfo(R"({} Send to "{}" message: "{}")",
                         loggerTag, message->channel, message->text);
     } else {
-        logger->logError("{} Failed to send to \"{}\" message: \"{}\"",
-                        loggerTag, message->channel, message->text);
+        logger->logError(R"({} Failed to send to "{}" message: "{}")",
+                         loggerTag, message->channel, message->text);
     }
 }
 
-void IRCClient::evtSendIRC(so_5::mhood_t<Irc::SendIRC> irc) {
+void IRCClient::evtSendIRC(so_5::mhood_t<SendIRC> irc) {
     if (sendRaw(irc->message)) {
         logger->logInfo("{} Send IRC \"{}\"", loggerTag, irc->message);
     } else {
@@ -293,8 +289,12 @@ void IRCClient::joinToChannel(const std::string &name, IRCSession *session) {
 
 void IRCClient::leaveFromChannel(const std::string &name) {
     auto channel = channels.extractChannel(name);
-    if (!channel)
+    if (!channel) {
+        logger->logWarn("{} Channel({}) to leave not found", loggerTag, name);
         return;
+    }
+
+    logger->logInfo("{} Leaving from channel({})", loggerTag, name);
     channel->getSession()->sendPart(name);
 }
 

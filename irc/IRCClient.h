@@ -13,7 +13,6 @@
 #include <so_5/agent.hpp>
 #include <so_5/timers.hpp>
 
-#include "IRCEvents.h"
 #include "IRCMessage.h"
 #include "IRCSessionListener.h"
 #include "IRCConnectionConfig.h"
@@ -33,9 +32,14 @@ class IRCClient final : public so_5::agent_t,
 {
   public:
     struct Connect { IRCSession *session = nullptr; mutable int attempt = 0; };
-    struct Reload { IRCClientConfig config; };
     struct LoggedInCheck { IRCSession *session = nullptr; };
+    struct Reload { IRCClientConfig config; };
+    struct Shutdown final : so_5::signal_t {};
+    struct JoinChannel { std::string channel; };
+    struct LeaveChannel { std::string channel; };
     struct SendPING { IRCSession *session = nullptr; std::string host; };
+    struct SendMessage { std::string channel; std::string text; };
+    struct SendIRC { std::string message; };
   public:
     IRCClient(const context_t &ctx,
               so_5::mbox_t parent,
@@ -62,14 +66,13 @@ class IRCClient final : public so_5::agent_t,
 
     // session events
     void evtConnect(so_5::mhood_t<Connect> evt);
-    void evtShutdown(so_5::mhood_t<Irc::Shutdown> evt);
+    void evtShutdown(so_5::mhood_t<Shutdown> evt);
     void evtReload(so_5::mhood_t<Reload> evt);
     void evtLoggedInCheck(so_5::mhood_t<LoggedInCheck> evt);
-    void evtJoinChannels(so_5::mhood_t<Irc::JoinChannels> evt);
-    void evtJoinChannel(so_5::mhood_t<Irc::JoinChannel> evt);
-    void evtLeaveChannel(so_5::mhood_t<Irc::LeaveChannel> evt);
-    void evtSendMessage(so_5::mhood_t<Irc::SendMessage> message);
-    void evtSendIRC(so_5::mhood_t<Irc::SendIRC> irc);
+    void evtJoinChannel(so_5::mhood_t<JoinChannel> evt);
+    void evtLeaveChannel(so_5::mhood_t<LeaveChannel> evt);
+    void evtSendMessage(so_5::mhood_t<SendMessage> message);
+    void evtSendIRC(so_5::mhood_t<SendIRC> irc);
     void evtSendPING(so_5::mhood_t<SendPING> ping);
 
     // IRCSessionInterface implementation

@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include <spdlog/fmt/ostr.h>
+
 struct IRCClientConfig {
     int id = 0;
     std::string nick;
@@ -17,6 +19,19 @@ struct IRCClientConfig {
     int whisper_per_sec_limit = 3;
     int auth_per_sec_limit = 2;
     int session_count = 1;
+
+    friend std::ostream& operator<<(std::ostream& os, const IRCClientConfig& c) {
+        return os << "{"
+                  << "id = " << c.id << ", "
+                  << "nick = " << c.nick << ", "
+                  << "user = " << c.user << ", "
+                  << "password = " << c.password << ", "
+                  << "channels_limit = " << c.channels_limit << ", "
+                  << "command_per_sec_limit = " << c.command_per_sec_limit << ", "
+                  << "whisper_per_sec_limit = " << c.whisper_per_sec_limit << ", "
+                  << "auth_per_sec_limit = " << c.auth_per_sec_limit << ", "
+                  << "session_count = " << c.session_count << " }";
+    }
 };
 
 #endif //CHATCONTROLLER_IRC_IRCCLIENTCONFIG_H_

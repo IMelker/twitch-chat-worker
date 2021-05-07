@@ -57,6 +57,8 @@ void Controller::so_define_agent() {
 void Controller::so_evt_start() {
     so_5::introduce_child_coop(*this, [&] (so_5::coop_t &coop) {
         auto listener = so_environment().create_mbox();
+
+        statsCollector = makeStatsCollector(coop, listener);
         storage = makeStorage(coop, listener);
         botsEnvironment = makeBotsEnvironment(coop, listener);
         msgProcessor = makeMessageProcessor(coop, listener /*as publisher*/);
@@ -119,4 +121,8 @@ IRCController *Controller::makeIRCController(so_5::coop_t &coop) {
     ircConfig.threads = config[IRC]["threads"].value_or(1);
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
     return coop.make_agent<IRCController>(msgProcessor->so_direct_mbox(), http, ircConfig, db, ircLogger);
+}
+
+StatsCollector *Controller::makeStatsCollector(so_5::coop_t &coop, const so_5::mbox_t &listener) {
+    return coop.make_agent<StatsCollector>(listener, http, logger);
 }

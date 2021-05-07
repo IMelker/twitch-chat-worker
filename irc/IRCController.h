@@ -15,8 +15,8 @@
 #include <so_5/agent.hpp>
 
 #include "../HttpControllerEvents.h"
+#include "../ChatMessage.h"
 
-#include "IRCEvents.h"
 #include "IRCConnectionConfig.h"
 #include "IRCClient.h"
 #include "IRCSelectorPool.h"
@@ -45,7 +45,7 @@ class IRCController final : public so_5::agent_t
     void so_evt_finish() override;
 
     // SendMessage from BotEngine
-    void evtSendMessage(so_5::mhood_t<Irc::SendMessage> message);
+    void evtSendMessage(so_5::mhood_t<Chat::SendMessage> message);
 
     // http events
     void evtHttpStats(so_5::mhood_t<hreq::irc::stats> evt);
@@ -62,6 +62,8 @@ class IRCController final : public so_5::agent_t
     void evtHttpAccountReload(so_5::mhood_t<hreq::irc::account::reload> evt);
     void evtHttpAccountStats(so_5::mhood_t<hreq::irc::account::stats> evt);
   private:
+    IRCClient * getIrcClientMbox(const std::string& name);
+    IRCClient * getIrcClientMbox(int id);
     void addNewIrcClient(const IRCClientConfig& config);
 
     so_5::mbox_t processor;
@@ -74,6 +76,7 @@ class IRCController final : public so_5::agent_t
 
     IRCSelectorPool pool;
 
+    std::mutex ircClientsMutex;
     IRCClientsByName ircClientsByName;
     IRCClientsByIds ircClientsById;
 };

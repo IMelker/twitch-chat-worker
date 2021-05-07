@@ -9,7 +9,7 @@
 #include "IRCSessionListener.h"
 #include "IRCSession.h"
 
-#define PING_PONG_TIMEOUT_MS 10000
+#define PING_PONG_TIMEOUT_MS 10500
 
 IRCSession::IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConfig &cliConfig,
                        IRCSessionListener *listener, IRCClient *parent, Logger* logger)
@@ -65,6 +65,7 @@ bool IRCSession::connect() {
 
     stats.connectsSuccessInc();
     stats.connectsUpdatedSet(now);
+    stats.channelsCountSet(0);
     return true;
 }
 

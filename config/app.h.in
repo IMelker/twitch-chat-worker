@@ -1,8 +1,10 @@
 #cmakedefine APP_NAME "@APP_NAME@"
 #cmakedefine APP_VERSION "@APP_VERSION@"
 #cmakedefine APP_AUTHOR_EMAIL "@APP_AUTHOR_EMAIL@"
+#cmakedefine APP_BIN_NAME "@APP_BIN_NAME@"
 #cmakedefine APP_GIT_HASH "@APP_GIT_HASH@"
 #cmakedefine APP_GIT_DATE "@APP_GIT_DATE@"
+#cmakedefine APP_PID_PATH "@APP_PID_PATH@"
 
 #define APP "app"
 #define HTTP_CONTROL "control"

@@ -1,0 +1,6 @@
+#!/bin/sh
+
+PID=`cat @APP_PID_PATH@`
+
+kill $PID
+tail --pid=$PID -f /dev/null

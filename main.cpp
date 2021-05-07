@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
 
     Options options{APP_NAME};
     options.addOption<std::string>("config", "c", "Config filepath", "config.toml");
-    options.addOption<std::string>("pid-file-name", "p", "Filepath for process ID output", "/var/run/chatcontroller.pid");
+    options.addOption<std::string>("pid-file-name", "p", "Filepath for process ID output", APP_PID_PATH);
     options.addOption<bool>("daemon", "d", "Daemon mode", "false");
     options.addOption<bool>("version", "v", "App version", "false");
     options.addOption<bool>("trace-exit-code", "t", "Trace exit code for daemon mode", "false");
@@ -107,32 +107,27 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
-    // 1. TODO HTTPServer to IRCController
-    // 2. TODO choose dispatchers/threadpools
-    // 3. TODO add logging
+    // 1. TODO choose dispatchers/threadpools
+    // 2. TODO add logging
+    // 3. TODO remake statistics to StastCollector
 
-    // TODO add so_5::state for IRCWorker, refactorings
+    // 4. TODO add connected state for IRCClient and send only to active, not RoundRobbin
 
-    // TODO fix options, remove useless and add controlls
+    // 5. TODO fix options, remove useless and add controlls
 
     // BotEngine
+    // TODO change architecture with interraptable scripting(courutines)
     // TODO BotEngine timer events
     // TODO add timer and timer event to bot
     // TODO move language detect to BOTEngine (?) // to decrease cpu usage
 
-    // IRCWorkersPool
-    // TODO change channel join behavior
-    // TODO accounts update
-    // TODO TCP selector for socket for multiple sockets
-    // TODO IRCMessage to string_view, or something like that
-
     // Global
     // TODO Review accounts, channels, bots logic
     // TODO add tags support
-    // TODO add key value storage
     // TODO add HTTPClient
     // TODO add TwitchAPI
     // TODO add smileys detection for messages
+    // TODO add key value storage
 
     // Blockings and users
     // TODO blocked date for bot

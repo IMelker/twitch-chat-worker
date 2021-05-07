@@ -20,6 +20,7 @@
 #include "bot/BotsEnvironment.h"
 #include "db/ch/CHConnectionPool.h"
 #include "MessageProcessor.h"
+#include "StatsCollector.h"
 #include "DBController.h"
 #include "Storage.h"
 
@@ -40,6 +41,7 @@ class Controller final : public so_5::agent_t
     void so_evt_start() override;
     void so_evt_finish() override;
 
+    StatsCollector *makeStatsCollector(so_5::coop_t &coop, const so_5::mbox_t& listener);
     Storage *makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listener);
     BotsEnvironment *makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener);
     MessageProcessor *makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher);
@@ -51,6 +53,7 @@ class Controller final : public so_5::agent_t
     const std::shared_ptr<Logger> logger;
     const std::shared_ptr<DBController> db;
 
+    StatsCollector *statsCollector = nullptr;
     Storage *storage = nullptr;
     BotsEnvironment *botsEnvironment = nullptr;
     MessageProcessor *msgProcessor = nullptr;

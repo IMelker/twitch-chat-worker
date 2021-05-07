@@ -122,7 +122,7 @@ class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, priv
     long long lastPingTime = 0;
     long long lastPongTime = 0;
 
-    irc_session_t *session;
+    irc_session_t *session = nullptr;
 };
 
 #endif //CHATCONTROLLER_IRC_IRCSESSION_H_

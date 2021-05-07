@@ -1,0 +1,6 @@
+#!/bin/sh
+
+ulimit -c unlimited
+ulimit -n 10240
+
+./chatcontroller -d -p @APP_PID_PATH@ >> app.out 2>&1 &

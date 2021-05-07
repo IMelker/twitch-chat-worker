@@ -5,10 +5,17 @@
 #ifndef CHATCONTROLLER__HTTPCONTROLLEREVENTS_H_
 #define CHATCONTROLLER__HTTPCONTROLLEREVENTS_H_
 
-#include "http/server/HTTPSession.h"
+#include <string>
+
+#include <nlohmann/json.hpp>
+
 #include <so_5/mbox.hpp>
 #include <so_5/message.hpp>
 #include <so_5/send_functions.hpp>
+
+#include "http/server/HTTPSession.h"
+
+using json = nlohmann::json;
 
 #define DEFINE_EVT(space, name) namespace hreq::space { struct name : public base {}; }
 #define DEFINE_EVT_SUB(space, subspace, name) namespace hreq::space::subspace { struct name : public base {}; }
@@ -28,6 +35,11 @@ struct resp : public base {
 }
 
 template<typename T>
+inline std::string resp(T&& result) {
+    return json{{"result", std::forward<T>(result)}}.dump();
+}
+
+template<typename T>
 void send_http_resp(const so_5::mbox_t& http, T&& msg, int code, std::string body) {
     so_5::send<hreq::resp>(http, std::move(msg->req), std::move(msg->send), code, std::move(body));
 };
@@ -41,6 +53,14 @@ DEFINE_EVT(bot, add)                  // add bot by id from environment
 DEFINE_EVT(bot, remove)               // remove bot from environment
 DEFINE_EVT(bot, reload)               // reload bot configs
 DEFINE_EVT(bot, reloadall)            // update configs, add new bots
+
+// handled by StatsCollector
+DEFINE_EVT(stats, bot)                // bots stats
+DEFINE_EVT(stats, storage)            // storage stats
+DEFINE_EVT(stats, db)                 // db stats
+DEFINE_EVT(stats, irc)                // irc stats
+DEFINE_EVT(stats, channel)            // channels stats
+DEFINE_EVT(stats, account)            // accounts stats
 
 // handled by Storage
 DEFINE_EVT(storage, stats)            // storage stats

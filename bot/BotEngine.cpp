@@ -111,7 +111,7 @@ void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
                                        CurrentTime<std::chrono::system_clock>::milliseconds(), text);
     });
     engine.set_function("send", [this, &account = config.account, &channel = config.channel] (const std::string& text) {
-        so_5::send<Irc::SendMessage>(msgSender, account, channel, text);
+        so_5::send<Chat::SendMessage>(msgSender, account, channel, text);
     });
 
     for (auto &[script, id, additional]: config.onMessage) {

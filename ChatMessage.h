@@ -6,11 +6,9 @@
 #define CHATSNIFFER__MESSAGE_H_
 
 #include <string>
-#include <string_view>
 #include <utility>
-#include "common/Utils.h"
 
-#include "spdlog/fmt/ostr.h" // must be included
+#include "common/Utils.h"
 
 namespace Chat {
 
@@ -29,6 +27,8 @@ struct Message {
     const long long timestamp;
     const bool valid;
 };
+
+struct SendMessage { std::string account; mutable std::string channel; mutable std::string text; };
 
 }
 

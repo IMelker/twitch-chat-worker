@@ -1,0 +1,15 @@
+[Unit]
+Description=@APP_NAME@ @APP_VERSION@
+After=network.target syslog.target
+
+[Service]
+User=tluabot
+Group=tluabot
+Type=forking
+ExecStart=/bin/bash /local/twitch/chat/start.sh
+ExecStop=/bin/bash /local/twitch/chat/stop.sh
+PIDFile=@APP_PID_PATH@
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

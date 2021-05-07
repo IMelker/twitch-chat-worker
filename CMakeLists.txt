@@ -13,11 +13,13 @@ set(CXX_STANDARD_REQUIRED ON)
 
 # app info
 set(APP_NAME "TLuaBot")
+set(APP_BIN_NAME "chatcontroller")
 set(APP_VERSION_MAJOR 0)
 set(APP_VERSION_MINOR 1)
 set(APP_VERSION_PATCH 0)
 set(APP_VERSION ${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH})
 set(APP_AUTHOR_EMAIL "twitch.luabot@gmail.com")
+set(APP_PID_PATH "/var/run/chatcontroller.pid")
 execute_process(COMMAND git rev-parse --verify HEAD OUTPUT_VARIABLE APP_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE)
 execute_process(COMMAND git log -1 --pretty=format:%ad HEAD OUTPUT_VARIABLE APP_GIT_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
 message("-- App: ${APP_NAME}.${APP_VERSION}.${APP_GIT_HASH} ${APP_GIT_DATE}")
@@ -51,6 +53,9 @@ add_subdirectory(http)
 
 configure_file(${CMAKE_SOURCE_DIR}/config/app.h.in ${CMAKE_BINARY_DIR}/app.h @ONLY)
 configure_file(${CMAKE_SOURCE_DIR}/config/config.toml.in ${CMAKE_BINARY_DIR}/config.toml @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/config/start.sh.in ${CMAKE_BINARY_DIR}/start.sh @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/config/stop.sh.in ${CMAKE_BINARY_DIR}/stop.sh @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/config/app.service.in ${CMAKE_BINARY_DIR}/${APP_BIN_NAME}.service @ONLY)
 
 include_directories(${CMAKE_BINARY_DIR})
 include_directories(common)
@@ -62,6 +67,7 @@ set(SOURCES
         DBController.h DBController.cpp
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
+        StatsCollector.cpp StatsCollector.h
         ChatMessage.h)
 
 set(COMMON_SOURCES
@@ -98,7 +104,7 @@ set(IRC_SOURCES
         irc/IRCSelectorPool.h irc/IRCSelectorPool.cpp
         irc/IRCSelector.h irc/IRCSelector.cpp
         irc/IRCController.h irc/IRCController.cpp
-        irc/IRCEvents.h irc/IRCMessage.h irc/IRCSessionListener.h)
+        irc/IRCMessage.h irc/IRCSessionListener.h)
 
 set(BOT_SOURCES
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
@@ -108,7 +114,7 @@ set(BOT_SOURCES
 
 # executable configuration
 message("\n[executable]")
-add_executable(chatcontroller ${SOURCES} ${COMMON_SOURCES} ${DB_SOURCES} ${IRC_SOURCES} ${BOT_SOURCES})
+add_executable(${APP_BIN_NAME} ${SOURCES} ${COMMON_SOURCES} ${DB_SOURCES} ${IRC_SOURCES} ${BOT_SOURCES})
 
 add_subdirectory(common/tests)
 
@@ -116,7 +122,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_definitions(-fstack-protector-all)
 endif()
 
-target_link_libraries(chatcontroller
+target_link_libraries(${APP_BIN_NAME}
         stdc++fs
         pthread
         ssl

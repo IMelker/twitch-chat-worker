@@ -13,8 +13,6 @@
 #include "IRCController.h"
 #include "IRCStatistic.h"
 
-#define resp(str) json{{"result", str}}.dump()
-
 using json = nlohmann::json;
 
 IRCController::IRCController(const context_t &ctx,
@@ -55,6 +53,7 @@ void IRCController::so_evt_start() {
     for (auto &account : accounts)
         addNewIrcClient(account);
 
+    std::lock_guard lg(ircClientsMutex);
     this->logger->logInfo("IRCController {} clients inited", ircClientsByName.size());
 }
 
@@ -66,23 +65,48 @@ void IRCController::addNewIrcClient(const IRCClientConfig& cliConfig) {
         return coop.make_agent<IRCClient>(so_direct_mbox(), processor, config, cliConfig, &pool, logger, db);
     });
 
+    std::lock_guard lg(ircClientsMutex);
     ircClientsByName.emplace(cliConfig.nick, ircClient);
     ircClientsById.emplace(cliConfig.id, ircClient);
 }
 
-void IRCController::evtSendMessage(mhood_t<Irc::SendMessage> message) {
-    auto it = ircClientsByName.find(message->account);
-    if (it != ircClientsByName.end()) {
-        so_5::send(it->second->so_direct_mbox(), message);
-    } else {
-        logger->logWarn("Failed to find IRC worker for account: ", message->account);
+IRCClient * IRCController::getIrcClientMbox(const std::string& name) {
+    IRCClient * client = nullptr;
+    {
+        std::lock_guard lg(ircClientsMutex);
+        if (auto it = ircClientsByName.find(name); it != ircClientsByName.end())
+            client = it->second;
     }
+    return client;
+}
+
+IRCClient * IRCController::getIrcClientMbox(int id) {
+    IRCClient * client = nullptr;
+    {
+        std::lock_guard lg(ircClientsMutex);
+        if (auto it = ircClientsById.find(id); it != ircClientsById.end())
+            client = it->second;
+    }
+    return client;
+}
+
+void IRCController::evtSendMessage(mhood_t<Chat::SendMessage> message) {
+    auto *client = getIrcClientMbox(message->account);
+    if (!client) {
+        logger->logWarn("Failed to find IRC worker for account: {}", message->account);
+        return;
+    }
+    so_5::send<IRCClient::SendMessage>(client->so_direct_mbox(),
+                                       std::move(message->channel), std::move(message->text));
 }
 
 void IRCController::evtHttpStats(mhood_t<hreq::irc::stats> evt) {
     json body = json::object();
-    for (auto &[name, client]: ircClientsByName) {
-        body[name] = statsToJson(client->statistic());
+    {
+        std::lock_guard lg(ircClientsMutex);
+        for (auto &[name, client]: ircClientsByName) {
+            body[name] = statsToJson(client->statistic());
+        }
     }
     send_http_resp(http, evt, 200, body.dump());
 }
@@ -90,10 +114,11 @@ void IRCController::evtHttpStats(mhood_t<hreq::irc::stats> evt) {
 void IRCController::evtHttpReload(mhood_t<hreq::irc::reload> evt) {
     json body = json::object();
 
-    /*for (auto &[name, client]: ircClientsByName) {
-        body[name] = true;
-        so_5::send<IRCClient::Reload>(client->so_direct_mbox());
-    }*/
+    for (auto &[id, client]: ircClientsById) {
+        auto account = db->loadAccount(id);
+        body[account.nick] = true;
+        so_5::send<IRCClient::Reload>(client->so_direct_mbox(), std::move(account));
+    }
 
     send_http_resp(http, evt, 200, body.dump());
 }
@@ -115,28 +140,28 @@ void IRCController::evtHttpCustom(mhood_t<hreq::irc::custom> evt) {
     for (const auto &account: accounts) {
         if (account.is_string()) {
             const auto& acc = account.get<std::string>();
-            auto it = ircClientsByName.find(acc);
-            if (it == ircClientsByName.end()) {
+            auto *client = getIrcClientMbox(acc);
+            if (!client) {
                 body[acc] = false;
                 continue;
             }
 
             logger->logInfo("IRCController[{}] IRCClient({}/{}) HTTP send command: \"{}\"",
-                            fmt::ptr(this), fmt::ptr(it->second), acc, data);
-            so_5::send<Irc::SendIRC>(it->second->so_direct_mbox(), data);
+                            fmt::ptr(this), fmt::ptr(client), acc, data);
+            so_5::send<IRCClient::SendIRC>(client->so_direct_mbox(), data);
             body[acc] = true;
         } else if (account.is_number()) {
             int id = account.get<int>();
-            auto it = ircClientsById.find(id);
-            if (it == ircClientsById.end()) {
-                body[id] = false;
+            auto *client = getIrcClientMbox(id);
+            if (!client) {
+                body[std::to_string(id)] = false;
                 continue;
             }
 
             logger->logInfo("IRCController[{}] IRCClient({}/{}) HTTP send command: \"{}\"",
-                            fmt::ptr(this), fmt::ptr(it->second), it->second->nickname(), data);
-            so_5::send<Irc::SendIRC>(it->second->so_direct_mbox(), data);
-            body[id] = true;
+                            fmt::ptr(this), fmt::ptr(client), client->nickname(), data);
+            so_5::send<IRCClient::SendIRC>(client->so_direct_mbox(), data);
+            body[std::to_string(id)] = true;
         }
     }
 
@@ -151,35 +176,30 @@ void IRCController::evtHttpChannelJoin(mhood_t<hreq::irc::channel::join> evt) {
     IRCClient *client = nullptr;
     const auto& account = req["account"];
     if (account.is_string()) {
-        auto it = ircClientsByName.find(account.get<std::string_view>());
-        if (it == ircClientsByName.end())
+        client = getIrcClientMbox(account.get<std::string>());
+        if (!client)
             return send_http_resp(http, evt, 404, resp("Account not found"));
-        client = it->second;
     } else if (account.is_number()) {
-        auto it = ircClientsById.find(account.get<int>());
-        if (it == ircClientsById.end())
+        client = getIrcClientMbox(account.get<int>());
+        if (!client)
             return send_http_resp(http, evt, 404, resp("Account not found"));
-        client = it->second;
     } else {
         return send_http_resp(http, evt, 400, resp("Invalid accounts type"));
     }
 
     json body = json::object();
-    if (client) {
-        const auto &channels = req["channels"];
-        if (!channels.is_array())
-            return send_http_resp(http, evt, 400, resp("Invalid channels type"));
+    const auto &channels = req["channels"];
+    if (!channels.is_array())
+        return send_http_resp(http, evt, 400, resp("Invalid channels type"));
 
-        for (const auto &channel: channels) {
-            if (!channel.is_string())
-                continue;
+    for (const auto &channel: channels) {
+        if (!channel.is_string())
+            continue;
 
-            auto chan = channel.get<std::string>();
-            so_5::send<Irc::JoinChannel>(client->so_direct_mbox(), chan);
-            body[chan] = {{"joined", true}};
-        }
+        auto chan = channel.get<std::string>();
+        so_5::send<IRCClient::JoinChannel>(client->so_direct_mbox(), chan);
+        body[chan] = {{"joined", true}};
     }
-
     send_http_resp(http, evt, 200, body.dump());
 }
 
@@ -197,8 +217,11 @@ void IRCController::evtHttpChannelLeave(mhood_t<hreq::irc::channel::leave> evt) 
         if (!channel.is_string())
             continue;
         auto chan = channel.get<std::string>();
-        for (auto &[name, client]: ircClientsByName) {
-            so_5::send<Irc::LeaveChannel>(client->so_direct_mbox(), chan);
+        {
+            std::lock_guard lg(ircClientsMutex);
+            for (auto &[name, client]: ircClientsByName) {
+                so_5::send<IRCClient::LeaveChannel>(client->so_direct_mbox(), chan);
+            }
         }
         body[chan] = {{"leaved", true}};
     }
@@ -227,27 +250,22 @@ void IRCController::evtHttpChannelMessage(mhood_t<hreq::irc::channel::message> e
     for (const auto &account: accounts) {
         IRCClient *client = nullptr;
         if (account.is_string()) {
-            const auto& acc = account.get<std::string>();
-            auto it = ircClientsByName.find(acc);
-            if (it == ircClientsByName.end())
+            client = getIrcClientMbox(account.get<std::string>());
+            if (!client)
                 continue;
-            client = it->second;
         } else if (account.is_number()) {
-            int id = account.get<int>();
-            auto it = ircClientsById.find(id);
-            if (it == ircClientsById.end())
+            client = getIrcClientMbox(account.get<int>());
+            if (!client)
                 continue;
-            client = it->second;
         }
 
         if (client) {
-            auto nick = client->nickname();
             auto msg = text.get<std::string>();
-            auto accountBody = body[nick];
+            auto &accountBody = body[client->nickname()] = json::object();
             for (const auto &channel: channels) {
                 auto chan = channel.get<std::string>();
-                logger->logInfo(R"(IRCWorker[{}] {} send message: "{}")", fmt::ptr(client), chan, msg);
-                so_5::send<Irc::SendMessage>(client->so_direct_mbox(), nick, chan, msg);
+                logger->logInfo(R"(IRCClient[{}] {} send message: "{}")", fmt::ptr(client), chan, msg);
+                so_5::send<IRCClient::SendMessage>(client->so_direct_mbox(), chan, msg);
                 accountBody[chan] = true;
             }
         }
@@ -257,7 +275,21 @@ void IRCController::evtHttpChannelMessage(mhood_t<hreq::irc::channel::message> e
 }
 
 void IRCController::evtHttpChannelStats(mhood_t<hreq::irc::channel::stats> evt) {
+    json req = json::parse(evt->req.body(), nullptr, false, true);
+    if (req.is_discarded())
+        return send_http_resp(http, evt, 400, resp("Failed to parse JSON"));
 
+    /*std::string channelName;
+    ChannelStatistic stats;
+    {
+        std::lock_guard lg(ircClientsMutex);
+        for(auto &[id, client] : ircClientsById) {
+            stats += client->getChannelStatic(channelName);
+        }
+    }*/
+    json body = json::object();
+    //body[channelName] = statsToJson(stats);
+    send_http_resp(http, evt, 200, body.dump());
 }
 
 void IRCController::evtHttpAccountAdd(mhood_t<hreq::irc::account::add> evt) {
@@ -272,8 +304,8 @@ void IRCController::evtHttpAccountAdd(mhood_t<hreq::irc::account::add> evt) {
         return send_http_resp(http, evt, 400, resp("Wrong account id"));
 
     int id = accId.get<int>();
-    auto it = ircClientsById.find(id);
-    if (it != ircClientsById.end())
+    auto *client = getIrcClientMbox(id);
+    if (client)
         return send_http_resp(http, evt, 403, resp("Account already added"));
 
     IRCClientConfig account;
@@ -302,13 +334,16 @@ void IRCController::evtHttpAccountRemove(mhood_t<hreq::irc::account::remove> evt
         return send_http_resp(http, evt, 400, resp("Wrong account id"));
 
     int id = accId.get<int>();
-    auto it = ircClientsById.find(id);
-    if (it == ircClientsById.end())
-        return send_http_resp(http, evt, 404, resp("Account not found"));
+    {
+        std::lock_guard lg(ircClientsMutex);
+        auto it = ircClientsById.find(id);
+        if (it == ircClientsById.end())
+            return send_http_resp(http, evt, 404, resp("Account not found"));
 
-    ircClientsByName.erase(it->second->nickname());
-    so_5::send<Irc::Shutdown>(it->second->so_direct_mbox());
-    ircClientsById.erase(it);
+        ircClientsByName.erase(it->second->nickname());
+        so_5::send<IRCClient::Shutdown>(it->second->so_direct_mbox());
+        ircClientsById.erase(it);
+    }
 
     logger->logTrace("IRCController Remove account(id={})", id);
 
@@ -326,11 +361,11 @@ void IRCController::evtHttpAccountReload(mhood_t<hreq::irc::account::reload> evt
         return send_http_resp(http, evt, 400, resp("Wrong account id"));
 
     int id = accId.get<int>();
-    auto it = ircClientsById.find(id);
-    if (it == ircClientsById.end())
+    auto *client = getIrcClientMbox(id);
+    if (!client)
         return send_http_resp(http, evt, 404, resp("Account not found"));
 
-    so_5::send<IRCClient::Reload>(it->second->so_direct_mbox(), db->loadAccount(id));
+    so_5::send<IRCClient::Reload>(client->so_direct_mbox(), db->loadAccount(id));
 
     logger->logTrace("IRCController Reload account(id={})", id);
 
@@ -343,8 +378,17 @@ void IRCController::evtHttpAccountStats(mhood_t<hreq::irc::account::stats> evt) 
     if (req.is_discarded())
         return send_http_resp(http, evt, 501, resp("Failed to parse JSON"));
 
-    json body = json::object();
+    const auto& accId = req["id"];
+    if (!accId.is_number())
+        return send_http_resp(http, evt, 400, resp("Wrong account id"));
 
+    int id = accId.get<int>();
+    auto *client = getIrcClientMbox(id);
+    if (!client)
+        return send_http_resp(http, evt, 404, resp("Account not found"));
+
+    json body = json::object();
+    body[client->nickname()] = statsToJson(client->statistic());
 
     send_http_resp(http, evt, 200, body.dump());
 }
