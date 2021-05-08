@@ -20,20 +20,26 @@ IRCSelector::IRCSelector(size_t id, Logger *logger) : id(id), logger(logger) {
     thread = std::thread(&IRCSelector::run, this);
     set_thread_name(thread, "irc_selector_" + std::to_string(id));
     loggerTag = fmt::format("IRCSelector[{}/{}]", fmt::ptr(this), id);
+    logger->logTrace("{} IRC selector init", loggerTag);
 }
 
 IRCSelector::~IRCSelector() {
     if (thread.joinable())
         thread.join();
+    logger->logTrace("{} IRC selector destruction", loggerTag);
 }
 
 void IRCSelector::addSession(const std::shared_ptr<IRCSession> &session) {
+    logger->logTrace("{} IRC selector add new session({})", loggerTag, fmt::ptr(session.get()));
+
     std::lock_guard lg(mutex);
     sessions.push_back(session);
     needSync = true;
 }
 
 void IRCSelector::removeSession(const std::shared_ptr<IRCSession> &session) {
+    logger->logTrace("{} IRC selector remove session({})", loggerTag, fmt::ptr(session.get()));
+
     std::lock_guard lg(mutex);
     sessions.erase(std::find(sessions.begin(), sessions.end(), session));
     needSync = true;

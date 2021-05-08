@@ -14,10 +14,10 @@ log_target = "logs/bot.log"
 log_level = "trace"
 
 [control]
-host = "127.0.0.1"
-port = 8081
-#host = "139.162.133.41"
-#port = 8091
+#host = "127.0.0.1"
+#port = 8081
+host = "139.162.133.41"
+port = 8091
 secure = true
 verify = true
 user = "chatcontroller"
@@ -26,7 +26,7 @@ threads = 1
 cert_file = "ssl/https_cert.pem"
 key_file = "ssl/https_key.pem"
 dh_file = "ssl/https_dh.pem"
-log_type = "console"
+log_type = "rotate"
 log_target = "logs/http.log"
 log_level = "trace"
 

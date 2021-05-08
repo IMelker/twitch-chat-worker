@@ -107,15 +107,15 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
-    // 2. TODO add logging
-    // 3. TODO remake statistics to StatsCollector
+
+    // 1. TODO remake statistics to StatsCollector
     //       - IRCStats to 2 threads, to avoid atomics
     //       - Storage stats remove atomic and send to StatsCollector
     //       - DB stats remove atomic and send to StatsCollector
     //       - Create stubs for Bots stats
-    // 4. TODO Create prometheus exporter for app
-    // 5. TODO add connected state for IRCClient and send only to active, not RoundRobbin
-    // 6. TODO fix options, remove useless and add controlls
+    // 2. TODO Create prometheus exporter for app
+    // 3. TODO add connected state for IRCClient and send only to active, not RoundRobbin
+    // 4. TODO fix options, remove useless and add controlls
 
     // BotEngine
     // TODO change architecture with interraptable scripting(courutines)
