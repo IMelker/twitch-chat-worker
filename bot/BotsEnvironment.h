@@ -12,22 +12,24 @@
 
 #include <so_5/agent.hpp>
 #include <so_5/coop_handle.hpp>
+#include <so_5/disp/adv_thread_pool/pub.hpp>
 
 #include "../ChatMessage.h"
 #include "../HttpControllerEvents.h"
 #include "BotConfiguration.h"
 
+using namespace so_5::disp::adv_thread_pool;
+
 class Logger;
-class ThreadPool;
 class DBController;
 class BotEngine;
-
 class BotsEnvironment final : public so_5::agent_t
 {
   public:
     BotsEnvironment(const context_t &ctx,
                     so_5::mbox_t publisher,
                     so_5::mbox_t http,
+                    unsigned int threads,
                     std::shared_ptr<DBController> db,
                     std::shared_ptr<Logger> logger);
     ~BotsEnvironment() override;
@@ -56,8 +58,13 @@ class BotsEnvironment final : public so_5::agent_t
     so_5::mbox_t http;
     so_5::coop_handle_t coop;
 
+    dispatcher_handle_t botEnginePool;
+    bind_params_t botEnginePoolParams;
+
     const std::shared_ptr<DBController> db;
     const std::shared_ptr<Logger> logger;
+
+    unsigned int threads;
 
     std::map<int, BotEngine *> botsById;
     std::map<std::string, so_5::mbox_t> botBoxes;

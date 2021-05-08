@@ -23,7 +23,7 @@ MessageProcessor::~MessageProcessor() {
 }
 
 void MessageProcessor::so_define_agent() {
-    so_subscribe_self().event(&MessageProcessor::evtIrcMessage, so_5::thread_safety_t::safe);
+    so_subscribe_self().event(&MessageProcessor::evtIrcMessage, so_5::thread_safe);
 }
 
 void MessageProcessor::so_evt_start() {

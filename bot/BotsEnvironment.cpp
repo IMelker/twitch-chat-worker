@@ -24,10 +24,11 @@ using json = nlohmann::json;
 BotsEnvironment::BotsEnvironment(const context_t &ctx,
                                  so_5::mbox_t publisher,
                                  so_5::mbox_t http,
+                                 unsigned int threads,
                                  std::shared_ptr<DBController> db,
                                  std::shared_ptr<Logger> logger)
     : so_5::agent_t(ctx), publisher(std::move(publisher)), http(std::move(http)),
-      db(std::move(db)), logger(std::move(logger)) {
+      db(std::move(db)), logger(std::move(logger)), threads(threads) {
     ignoreUsers = this->db->loadUsersNicknames();
 }
 
@@ -52,6 +53,9 @@ void BotsEnvironment::so_define_agent() {
 }
 
 void BotsEnvironment::so_evt_start() {
+    botEnginePool = so_5::disp::adv_thread_pool::make_dispatcher(so_environment(), threads);
+    botEnginePoolParams = {};
+
     auto configs = db->loadBotConfigurations();
     for (auto &[id, config]: configs)
         addBot(config);
@@ -69,7 +73,8 @@ void BotsEnvironment::addBot(const BotConfiguration &config) {
     }
 
     auto *bot = so_5::introduce_child_coop(*this, [&box = it->second, &config, this] (so_5::coop_t &coop) {
-        return coop.make_agent<BotEngine>(box, msgSender, botLogger, config, logger);
+        return coop.make_agent_with_binder<BotEngine>(botEnginePool.binder(botEnginePoolParams),
+                                                      box, msgSender, botLogger, config, logger);
     });
     botsById.emplace(config.botId, bot);
 }

@@ -13,6 +13,7 @@
 #include <string>
 
 #include <so_5/agent.hpp>
+#include <so_5/disp/adv_thread_pool/pub.hpp>
 
 #include "../HttpControllerEvents.h"
 #include "../ChatMessage.h"
@@ -20,6 +21,8 @@
 #include "IRCConnectionConfig.h"
 #include "IRCClient.h"
 #include "IRCSelectorPool.h"
+
+using namespace so_5::disp::adv_thread_pool;
 
 class Logger;
 class DBController;
@@ -62,12 +65,15 @@ class IRCController final : public so_5::agent_t
     void evtHttpAccountReload(so_5::mhood_t<hreq::irc::account::reload> evt);
     void evtHttpAccountStats(so_5::mhood_t<hreq::irc::account::stats> evt);
   private:
-    IRCClient * getIrcClientMbox(const std::string& name);
-    IRCClient * getIrcClientMbox(int id);
+    IRCClient * getIrcClient(const std::string& name);
+    IRCClient * getIrcClient(int id);
     void addNewIrcClient(const IRCClientConfig& config);
 
     so_5::mbox_t processor;
     so_5::mbox_t http;
+
+    dispatcher_handle_t ircSendPool;
+    bind_params_t ircSendPoolParams;
 
     const std::shared_ptr<Logger> logger;
     const std::shared_ptr<DBController> db;
@@ -76,7 +82,6 @@ class IRCController final : public so_5::agent_t
 
     IRCSelectorPool pool;
 
-    std::mutex ircClientsMutex;
     IRCClientsByName ircClientsByName;
     IRCClientsByIds ircClientsById;
 };

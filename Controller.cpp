@@ -7,7 +7,8 @@
 #include <chrono>
 
 #include <so_5/send_functions.hpp>
-#include <so_5/disp/thread_pool/pub.hpp>
+#include <so_5/disp/adv_thread_pool/pub.hpp>
+#include <so_5/disp/active_obj/pub.hpp>
 
 #include "nlohmann/json.hpp"
 
@@ -77,6 +78,12 @@ void Controller::so_evt_finish() {
     // TODO notify about it
 }
 
+StatsCollector *Controller::makeStatsCollector(so_5::coop_t &coop, const so_5::mbox_t &listener) {
+    auto statsDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    return coop.make_agent_with_binder<StatsCollector>(statsDisp.binder(),
+                                                       listener, http, logger);
+}
+
 Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listener) {
     CHConnectionConfig chCfg;
     chCfg.host = config[CLICKHOUSE]["host"].value_or("localhost");
@@ -91,16 +98,21 @@ Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listen
     unsigned int chConns = config[CLICKHOUSE]["connections"].value_or(1);
     unsigned int botLogFlushDelay = config[CLICKHOUSE]["bot_log_flush_delay"].value_or(1);
     unsigned int messagesFlushDelay = config[CLICKHOUSE]["messages_flush_delay"].value_or(1);
-
     auto chLogger = LoggerFactory::create(LoggerFactory::config(config, CLICKHOUSE));
-    return coop.make_agent<Storage>(listener, http, std::move(chCfg), chConns,
-                                    batchSize, messagesFlushDelay, botLogFlushDelay,
-                                    chLogger);
+
+    auto chDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    return coop.make_agent_with_binder<Storage>(chDisp.binder(),
+                                                listener, http, std::move(chCfg), chConns,
+                                                batchSize, messagesFlushDelay, botLogFlushDelay,
+                                                chLogger);
 }
 
 BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener) {
+    unsigned int botThreads = config[BOT]["threads"].value_or(1);
     auto botsLogger = LoggerFactory::create(LoggerFactory::config(config, BOT));
-    return coop.make_agent<BotsEnvironment>(listener, http, db, botsLogger);
+    auto botsDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    return coop.make_agent_with_binder<BotsEnvironment>(botsDisp.binder(),
+                                                        listener, http, botThreads, db, botsLogger);
 }
 
 MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher) {
@@ -108,8 +120,8 @@ MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_
     procCfg.languageRecognition = config[MSG]["language_recognition"].value_or(false);
     unsigned int procThreads = config[MSG]["threads"].value_or(2);
 
-    auto procPool = so_5::disp::thread_pool::make_dispatcher(so_environment(), procThreads);
-    auto procPoolParams = so_5::disp::thread_pool::bind_params_t{};
+    auto procPool = so_5::disp::adv_thread_pool::make_dispatcher(so_environment(), procThreads);
+    auto procPoolParams = so_5::disp::adv_thread_pool::bind_params_t{};
     return coop.make_agent_with_binder<MessageProcessor>(procPool.binder(procPoolParams),
                                                          publisher, std::move(procCfg), this->logger);
 }
@@ -120,9 +132,8 @@ IRCController *Controller::makeIRCController(so_5::coop_t &coop) {
     ircConfig.port = config[IRC]["port"].value_or(6667);
     ircConfig.threads = config[IRC]["threads"].value_or(1);
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
-    return coop.make_agent<IRCController>(msgProcessor->so_direct_mbox(), http, ircConfig, db, ircLogger);
-}
 
-StatsCollector *Controller::makeStatsCollector(so_5::coop_t &coop, const so_5::mbox_t &listener) {
-    return coop.make_agent<StatsCollector>(listener, http, logger);
+    auto ircDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    return coop.make_agent_with_binder<IRCController>(ircDisp.binder(),
+                                          msgProcessor->so_direct_mbox(), http, ircConfig, db, ircLogger);
 }
