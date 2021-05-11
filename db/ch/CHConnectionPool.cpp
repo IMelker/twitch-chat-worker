@@ -2,6 +2,8 @@
 // Created by imelker on 11.03.2021.
 //
 
+#include <algorithm>
+
 #include "nlohmann/json.hpp"
 
 #include "CHConnectionPool.h"
@@ -26,16 +28,11 @@ std::shared_ptr<DBConnection> CHConnectionPool::createConnection() {
     return conn;
 }
 
-std::string CHConnectionPool::httpStats(const std::string &request, std::string &error) {
-    json body = json::object();
-    for(size_t i = 0; i < all.size(); ++i) {
-        const auto &stats = all[i]->getStats();
-        auto &conn = body[std::to_string(i)] = json::object();
-        conn["requests"] = {{"updated", stats.requests.updated.load(std::memory_order_relaxed)},
-                            {"count", stats.requests.count.load(std::memory_order_relaxed)},
-                            {"failed", stats.requests.failed.load(std::memory_order_relaxed)},
-                            {"rtt", stats.requests.rtt.load(std::memory_order_relaxed)}};
-    }
-    return body.dump();
+std::vector<CHConnection::CHStatistics> CHConnectionPool::collectStats() const {
+    std::vector<CHConnection::CHStatistics> stats;
+    stats.reserve(all.size());
+    std::transform(all.begin(), all.end(), std::back_inserter(stats), [](auto& conn) {
+        return conn->getStats();
+    });
+    return stats;
 }
-

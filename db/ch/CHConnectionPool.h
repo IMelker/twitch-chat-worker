@@ -22,7 +22,7 @@ class CHConnectionPool : public DBConnectionPool
     std::shared_ptr<DBConnection> createConnection() override;
 
     // http request handlers
-    std::string httpStats(const std::string &request, std::string &error);
+    std::vector<CHConnection::CHStatistics> collectStats() const;
   private:
     CHConnectionConfig config;
     std::vector<std::shared_ptr<CHConnection>> all;

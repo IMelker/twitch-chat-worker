@@ -23,7 +23,6 @@ class HttpController final : public so_5::agent_t, public HTTPRequestHandler
     HttpController(const context_t &ctx,
                    so_5::mbox_t listeners,
                    Config &config,
-                   std::shared_ptr<DBController> db,
                    std::shared_ptr<Logger> logger);
     ~HttpController() override;
 
@@ -32,15 +31,11 @@ class HttpController final : public so_5::agent_t, public HTTPRequestHandler
     void so_evt_start() override;
     void so_evt_finish() override;
 
-    // event handlers
-    void evtHttpDBControllerStatus(so_5::mhood_t<hreq::db::stats> evt);
-
     // implement HTTPRequestHandler
     void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) override;
   private:
     Config &config;
 
-    const std::shared_ptr<DBController> db;
     const std::shared_ptr<Logger> logger;
     std::shared_ptr<HTTPServer> server;
 

@@ -6,10 +6,12 @@
 #define CHATCONTROLLER_IRC_IRCSESSIONLISTENER_H_
 
 struct IRCMessage;
+struct IRCStatistic;
 class IRCSession;
 struct IRCSessionListener {
     virtual void onLoggedIn(IRCSession* session) = 0;
     virtual void onDisconnected(IRCSession* session) = 0;
+    virtual void onStatistics(IRCSession* session, IRCStatistic&& stats) = 0;
     virtual void onMessage(IRCMessage &&message) = 0;
 };
 

@@ -42,10 +42,10 @@ class Controller final : public so_5::agent_t
     void so_evt_finish() override;
 
     StatsCollector *makeStatsCollector(so_5::coop_t &coop, const so_5::mbox_t& listener);
-    Storage *makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listener);
-    BotsEnvironment *makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener);
-    MessageProcessor *makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher);
-    IRCController *makeIRCController(so_5::coop_t &coop);
+    Storage *makeStorage(so_5::coop_t &coop, const so_5::mbox_t &listener, const so_5::mbox_t &stats);
+    BotsEnvironment *makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t &listener, const so_5::mbox_t &stats);
+    MessageProcessor *makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t &publisher, const so_5::mbox_t &stats);
+    IRCController *makeIRCController(so_5::coop_t &coop, const so_5::mbox_t &stats);
 
   private:
     Config &config;

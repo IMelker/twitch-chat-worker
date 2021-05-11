@@ -28,7 +28,11 @@ struct Message {
     const bool valid;
 };
 
-struct SendMessage { std::string account; mutable std::string channel; mutable std::string text; };
+struct SendMessage {
+    const std::string user;
+    const std::string channel;
+    const std::string text;
+};
 
 }
 

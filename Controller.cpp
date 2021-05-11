@@ -9,6 +9,7 @@
 #include <so_5/send_functions.hpp>
 #include <so_5/disp/adv_thread_pool/pub.hpp>
 #include <so_5/disp/active_obj/pub.hpp>
+#include <so_5/disp/prio_one_thread/strictly_ordered/pub.hpp>
 
 #include "nlohmann/json.hpp"
 
@@ -60,10 +61,10 @@ void Controller::so_evt_start() {
         auto listener = so_environment().create_mbox();
 
         statsCollector = makeStatsCollector(coop, listener);
-        storage = makeStorage(coop, listener);
-        botsEnvironment = makeBotsEnvironment(coop, listener);
-        msgProcessor = makeMessageProcessor(coop, listener /*as publisher*/);
-        ircController = makeIRCController(coop);
+        storage = makeStorage(coop, listener, statsCollector->so_direct_mbox());
+        botsEnvironment = makeBotsEnvironment(coop, listener, statsCollector->so_direct_mbox());
+        msgProcessor = makeMessageProcessor(coop, listener /*as publisher*/, statsCollector->so_direct_mbox());
+        ircController = makeIRCController(coop, statsCollector->so_direct_mbox());
 
         botsEnvironment->setMessageSender(ircController->so_direct_mbox());
         botsEnvironment->setBotLogger(storage->so_direct_mbox());
@@ -79,12 +80,13 @@ void Controller::so_evt_finish() {
 }
 
 StatsCollector *Controller::makeStatsCollector(so_5::coop_t &coop, const so_5::mbox_t &listener) {
-    auto statsDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    //auto statsDisp = so_5::disp::prio_one_thread::strictly_ordered::make_dispatcher(so_environment());
+    auto statsDisp = so_5::disp::active_obj::make_dispatcher(so_environment(), "stats_collector");
     return coop.make_agent_with_binder<StatsCollector>(statsDisp.binder(),
-                                                       listener, http, logger);
+                                                       listener, http, logger, db);
 }
 
-Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listener) {
+Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t &listener, const so_5::mbox_t &stats) {
     CHConnectionConfig chCfg;
     chCfg.host = config[CLICKHOUSE]["host"].value_or("localhost");
     chCfg.port = config[CLICKHOUSE]["port"].value_or(5432);
@@ -100,40 +102,45 @@ Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t& listen
     unsigned int messagesFlushDelay = config[CLICKHOUSE]["messages_flush_delay"].value_or(1);
     auto chLogger = LoggerFactory::create(LoggerFactory::config(config, CLICKHOUSE));
 
-    auto chDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    auto chDisp = so_5::disp::active_obj::make_dispatcher(so_environment(), "storage");
     return coop.make_agent_with_binder<Storage>(chDisp.binder(),
-                                                listener, http, std::move(chCfg), chConns,
+                                                listener, stats, std::move(chCfg), chConns,
                                                 batchSize, messagesFlushDelay, botLogFlushDelay,
                                                 chLogger);
 }
 
-BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop, const so_5::mbox_t& listener) {
+BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop,
+                                                 const so_5::mbox_t &listener,
+                                                 const so_5::mbox_t &stats) {
     unsigned int botThreads = config[BOT]["threads"].value_or(1);
     auto botsLogger = LoggerFactory::create(LoggerFactory::config(config, BOT));
-    auto botsDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    auto botsDisp = so_5::disp::active_obj::make_dispatcher(so_environment(), "bots_environment");
     return coop.make_agent_with_binder<BotsEnvironment>(botsDisp.binder(),
                                                         listener, http, botThreads, db, botsLogger);
 }
 
-MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop, const so_5::mbox_t& publisher) {
+MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop,
+                                                   const so_5::mbox_t &publisher,
+                                                   const so_5::mbox_t &stats) {
     MessageProcessorConfig procCfg;
     procCfg.languageRecognition = config[MSG]["language_recognition"].value_or(false);
     unsigned int procThreads = config[MSG]["threads"].value_or(2);
 
-    auto procPool = so_5::disp::adv_thread_pool::make_dispatcher(so_environment(), procThreads);
+    auto procPool = so_5::disp::adv_thread_pool::make_dispatcher(so_environment(), "message_processor", procThreads);
     auto procPoolParams = so_5::disp::adv_thread_pool::bind_params_t{};
     return coop.make_agent_with_binder<MessageProcessor>(procPool.binder(procPoolParams),
                                                          publisher, std::move(procCfg), this->logger);
 }
 
-IRCController *Controller::makeIRCController(so_5::coop_t &coop) {
+IRCController *Controller::makeIRCController(so_5::coop_t &coop, const so_5::mbox_t &stats) {
     IRCConnectionConfig ircConfig;
     ircConfig.host = config[IRC]["host"].value_or("irc.chat.twitch.tv");
     ircConfig.port = config[IRC]["port"].value_or(6667);
     ircConfig.threads = config[IRC]["threads"].value_or(1);
     auto ircLogger = LoggerFactory::create(LoggerFactory::config(config, IRC));
 
-    auto ircDisp = so_5::disp::active_obj::make_dispatcher(so_environment());
+    auto ircDisp = so_5::disp::active_obj::make_dispatcher(so_environment(), "irc_controller");
     return coop.make_agent_with_binder<IRCController>(ircDisp.binder(),
-                                          msgProcessor->so_direct_mbox(), http, ircConfig, db, ircLogger);
+                                                      msgProcessor->so_direct_mbox(), stats,
+                                                      http, ircConfig, db, ircLogger);
 }

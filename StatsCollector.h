@@ -5,21 +5,39 @@
 #ifndef CHATCONTROLLER__STATSCOLLECTOR_H_
 #define CHATCONTROLLER__STATSCOLLECTOR_H_
 
+#include <string>
+#include <vector>
+#include <map>
+
 #include <so_5/agent.hpp>
 
 #include "HttpControllerEvents.h"
 #include "ChatMessage.h"
+#include "Storage.h"
+#include "irc/IRCStatistic.h"
+
+
+struct ChannelStats {
+    struct {
+        int count = 0;
+    } in;
+    struct {
+        int count = 0;
+    } out;
+    long long updated = 0;
+};
+
 
 class Logger;
+class DBController;
 class StatsCollector final : public so_5::agent_t
 {
-    struct IRCIncomingMetrics { char b; };
-    struct IRCOutgoingMetrics { char c; };
   public:
     StatsCollector(const context_t &ctx,
                   so_5::mbox_t publisher,
                   so_5::mbox_t http,
-                  std::shared_ptr<Logger> logger);
+                  std::shared_ptr<Logger> logger,
+                  std::shared_ptr<DBController> db);
     ~StatsCollector() override;
 
     // so_5::agent_t implementation
@@ -28,9 +46,10 @@ class StatsCollector final : public so_5::agent_t
     void so_evt_finish() override;
 
     // event handlers
-    void evtIRCIncomingMetrics(so_5::mhood_t<IRCIncomingMetrics> evt);
-    void evtIRCOutgoingMetrics(so_5::mhood_t<IRCOutgoingMetrics> evt);
-    void evtMessageMetric(so_5::mhood_t<Chat::Message> evt);
+    void evtIRCMetrics(so_5::mhood_t<Irc::SessionMetrics> evt);
+    void evtRecvMessageMetric(so_5::mhood_t<Chat::Message> evt);
+    void evtSendMessageMetric(so_5::mhood_t<Chat::SendMessage> evt);
+    void evtCHPoolMetric(so_5::mhood_t<Storage::CHPoolMetrics> evt);
 
     // event http
     void evtHttpIrcBots(so_5::mhood_t<hreq::stats::bot> evt);
@@ -38,12 +57,17 @@ class StatsCollector final : public so_5::agent_t
     void evtHttpDbStats(so_5::mhood_t<hreq::stats::db> evt);
     void evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt);
     void evtHttpChannelsStats(so_5::mhood_t<hreq::stats::channel> evt);
-    void evtHttpAccountsStats(so_5::mhood_t<hreq::stats::account> evt);
   private:
     so_5::mbox_t publisher;
     so_5::mbox_t http;
 
     const std::shared_ptr<Logger> logger;
+    const std::shared_ptr<DBController> db;
+
+    IRCStatistic allIrcStats;
+    std::map<std::string, std::vector<IRCStatistic>> ircStats;
+    std::map<std::string, ChannelStats> channelsStats;
+    std::vector<CHConnection::CHStatistics> chPoolStats;
 };
 
 #endif //CHATCONTROLLER__STATSCOLLECTOR_H_

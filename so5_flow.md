@@ -41,7 +41,7 @@ class IRCController {
 +so_5::disp::active_obj
 }
 class IRCClient {
-+so_5::disp::adv_thread_pool
++so_5::disp::thread_pool
 }
 class MessageProcessor {
 +so_5::disp::adv_thread_pool

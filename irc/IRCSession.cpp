@@ -11,15 +11,19 @@
 
 #define PING_PONG_TIMEOUT_MS 10500
 
-IRCSession::IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConfig &cliConfig,
-                       IRCSessionListener *listener, IRCClient *parent, Logger* logger)
-    : conConfig(conConfig), cliConfig(cliConfig), listener(listener), logger(logger) {
+IRCSession::IRCSession(const IRCConnectionConfig &conConfig,
+                       const IRCClientConfig &cliConfig,
+                       unsigned int id,
+                       IRCSessionListener *listener,
+                       IRCClient *parent,
+                       Logger *logger)
+    : conConfig(conConfig), cliConfig(cliConfig), id(id), listener(listener), logger(logger) {
     ctx.callback = this;
     ctx.parent = parent;
 
     create();
 
-    loggerTag = fmt::format("IRCSession[{}/{}]", fmt::ptr(this), cliConfig.nick);
+    loggerTag = fmt::format("IRCSession[{}/{}/{}]", fmt::ptr(this),cliConfig.nick, id);
     logger->logInfo("{} Session init on IRCClient({}) for {}", loggerTag, fmt::ptr(parent), cliConfig.nick);
 
     auto now = CurrentTime<std::chrono::system_clock>::milliseconds();
@@ -29,6 +33,7 @@ IRCSession::IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConf
 
 IRCSession::~IRCSession() {
     destroy();
+
     logger->logTrace("{} Session destroyed", loggerTag);
 }
 
@@ -53,8 +58,8 @@ bool IRCSession::connect() {
     if (irc_connect(session,
                     conConfig.host.c_str(), conConfig.port,
                     cliConfig.password.c_str(), cliConfig.nick.c_str(), cliConfig.user.c_str(), "IRC Client")) {
-        stats.connectsFailedInc();
-        logger->logError("{} Could not connect: %s", loggerTag, irc_strerror(irc_errno(session)));
+        ++statsFromSo5Thread.connects.failed;
+        logger->logError("{} Could not connect: {}", loggerTag, irc_strerror(irc_errno(session)));
         return false;
     }
 
@@ -63,9 +68,7 @@ bool IRCSession::connect() {
     lastPongTime = now;
     logged.store(false, std::memory_order_relaxed);
 
-    stats.connectsSuccessInc();
-    stats.connectsUpdatedSet(now);
-    stats.channelsCountSet(0);
+    ++statsFromSo5Thread.connects.success;
     return true;
 }
 
@@ -83,6 +86,10 @@ void IRCSession::disconnect() {
     irc_disconnect(session);
 }
 
+unsigned int IRCSession::getId() const {
+    return id;
+}
+
 void IRCSession::setPingTimer(so_5::timer_id_t timer) {
     pingTimer = std::move(timer);
 }
@@ -94,19 +101,19 @@ bool IRCSession::sendQuit(const std::string &reason) {
 
 bool IRCSession::sendJoin(const std::string &channel) {
     logger->logTrace("{} Send JOIN: {}", loggerTag, channel);
-    stats.channelsCountInc();
+    ++statsFromSo5Thread.commands.out.join;
     return internalIrcSend(irc_cmd_join, channel.c_str(), nullptr);
 }
 
 bool IRCSession::sendJoin(const std::string &channel, const std::string &key) {
     logger->logTrace("{} Send JOIN: {}:{}", loggerTag, channel, key);
-    stats.channelsCountInc();
+    ++statsFromSo5Thread.commands.out.join;
     return internalIrcSend(irc_cmd_join, channel.c_str(), key.c_str());
 }
 
 bool IRCSession::sendPart(const std::string &channel) {
     logger->logTrace("{} Send PART: {}", loggerTag, channel);
-    stats.channelsCountDec();
+    ++statsFromSo5Thread.commands.out.part;
     return internalIrcSend(irc_cmd_part, channel.c_str());
 }
 
@@ -138,6 +145,7 @@ bool IRCSession::sendKick(const std::string &channel, const std::string &nick, c
 bool IRCSession::sendMessage(const std::string &channel, const std::string &text) {
     logger->logTrace("{} Send PRIMSG from {} to {} : \"{}\"",
                      loggerTag, cliConfig.nick, channel, text);
+    ++statsFromSo5Thread.commands.out.privmsg;
     return internalIrcSend(irc_cmd_msg, channel.c_str(), text.c_str());
 }
 
@@ -181,6 +189,7 @@ bool IRCSession::sendWhois(const std::string &nick) {
 }
 
 bool IRCSession::sendPing(const std::string &host) {
+    sendStats(statsFromSo5Thread);
     if (lastPingTime - lastPongTime >= PING_PONG_TIMEOUT_MS) {
         //logger->logError("{} PING/PONG timeout: {}", loggerTag, lastPingTime - lastPongTime);
         onDisconnected("TIMEOUT", fmt::format("PING/PONG timeout: {}", lastPingTime - lastPongTime));
@@ -214,11 +223,9 @@ void IRCSession::onConnected(std::string_view, std::string_view host) {
 void IRCSession::onDisconnected(std::string_view, std::string_view reason) {
     // IRCSelector thread
     logger->logError("{} Disconnected from server: {}", loggerTag, reason);
-    stats.connectsDisconnectedInc();
 
     // remove current ping timer
     pingTimer = {};
-
     // clear internal session data
     disconnect();
 
@@ -227,12 +234,12 @@ void IRCSession::onDisconnected(std::string_view, std::string_view reason) {
 
 void IRCSession::onSendDataLen(int len) {
     // IRCSelector thread
-    stats.commandsOutBytesAdd(len);
+    statsFromSelectorThread.commands.out.bytes += len;
 }
 
 void IRCSession::onRecvDataLen(int len) {
     // IRCSelector thread
-    stats.commandsInBytesAdd(len);
+    statsFromSelectorThread.commands.in.bytes += len;
 }
 
 void IRCSession::onLoggedIn(std::string_view event,
@@ -240,59 +247,58 @@ void IRCSession::onLoggedIn(std::string_view event,
                             const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logTrace("{} Successfully logged in: {}", loggerTag, origin);
-    stats.connectsLoggedInInc();
+    ++statsFromSelectorThread.connects.loggedin;
 
     logged.store(true, std::memory_order_relaxed);
-
     listener->onLoggedIn(this);
 }
 
 void IRCSession::onNick(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onQuit(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onJoin(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logTrace("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onPart(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logTrace("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onMode(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onUmode(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onTopic(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onKick(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onChannel(std::string_view event,
@@ -300,7 +306,7 @@ void IRCSession::onChannel(std::string_view event,
                            const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logTrace("{} Event {} received from {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 
     if (params.empty()) // invalid channel message
         return;
@@ -315,7 +321,7 @@ void IRCSession::onPrivmsg(std::string_view event,
                            const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onNotice(std::string_view event,
@@ -323,7 +329,7 @@ void IRCSession::onNotice(std::string_view event,
                           const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onChannelNotice(std::string_view event,
@@ -331,7 +337,7 @@ void IRCSession::onChannelNotice(std::string_view event,
                                  const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onInvite(std::string_view event,
@@ -339,7 +345,7 @@ void IRCSession::onInvite(std::string_view event,
                           const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onCtcpReq(std::string_view event,
@@ -347,7 +353,7 @@ void IRCSession::onCtcpReq(std::string_view event,
                            const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onCtcpRep(std::string_view event,
@@ -355,7 +361,7 @@ void IRCSession::onCtcpRep(std::string_view event,
                            const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onCtcpAction(std::string_view event,
@@ -363,7 +369,7 @@ void IRCSession::onCtcpAction(std::string_view event,
                               const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logTrace("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 
     if (params.empty()) // invalid message
         return;
@@ -374,32 +380,35 @@ void IRCSession::onCtcpAction(std::string_view event,
 }
 
 void IRCSession::onPong(std::string_view event, std::string_view host) {
-    lastPongTime = CurrentTime<std::chrono::system_clock>::milliseconds();
     // IRCSelector thread
-    logger->logTrace("{} Event {} received on {}. RTT: {}", loggerTag, event, host, lastPongTime - lastPingTime);
-    stats.commandsInCountInc();
-}
+    lastPongTime = CurrentTime<std::chrono::system_clock>::milliseconds();
+    auto rtt = lastPongTime - lastPingTime;
+    logger->logTrace("{} Event {} received on {}. RTT: {}", loggerTag, event, host, rtt);
+    statsFromSelectorThread.commands.ping_pong.rtt = rtt;
+    ++statsFromSelectorThread.commands.in.count;
 
+    sendStats(statsFromSelectorThread);
+}
 
 void IRCSession::onUnknown(std::string_view event,
                            std::string_view origin,
                            const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logWarn("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onNumeric(unsigned int event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logTrace("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onDccChatReq(std::string_view nick, std::string_view addr, unsigned int dccid) {
     // IRCSelector thread
     //internalIrcRecv("DCC_CHAT", nick);
     logger->logWarn("{} Event DCC_CHAT received from {} on {}(dccid={})", loggerTag, nick, addr, dccid);
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
 }
 
 void IRCSession::onDccSendReq(std::string_view nick,
@@ -409,5 +418,11 @@ void IRCSession::onDccSendReq(std::string_view nick,
                               unsigned int dccid) {
     // IRCSelector thread
     logger->logWarn("{} Event DCC_SEND received from {} on {}(dccid={})", loggerTag, nick, addr, dccid);
-    stats.commandsInCountInc();
+    ++statsFromSelectorThread.commands.in.count;
+}
+
+void IRCSession::sendStats(IRCStatistic &stats) {
+    IRCStatistic temp{};
+    std::swap(temp, stats);
+    this->listener->onStatistics(this, std::move(temp));
 }

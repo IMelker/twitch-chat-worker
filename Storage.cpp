@@ -14,9 +14,11 @@
 
 #define FLUSH_TIMER(time) std::chrono::seconds{time}, std::chrono::seconds{time}
 
+static constexpr int gatherStatsDelay = 5;
+
 Storage::Storage(const context_t &ctx,
                  so_5::mbox_t publisher,
-                 so_5::mbox_t http,
+                 so_5::mbox_t statsCollector,
                  CHConnectionConfig config,
                  int connections,
                  int batchSize,
@@ -25,7 +27,7 @@ Storage::Storage(const context_t &ctx,
                  std::shared_ptr<Logger> logger)
   : so_5::agent_t(ctx),
     publisher(std::move(publisher)),
-    http(std::move(http)),
+    statsCollector(std::move(statsCollector)),
     logger(std::move(logger)),
     batchSize(batchSize),
     messagesFlushDelay(messagesFlushDelay),
@@ -48,13 +50,13 @@ void Storage::so_define_agent() {
     so_subscribe_self().event(&Storage::evtFlushBotLogMessages, so_5::thread_safe);
     so_subscribe_self().event(&Storage::evtFlushChatMessages, so_5::thread_safe);
     so_subscribe_self().event(&Storage::evtFlushAll, so_5::thread_safe);
-
-    so_subscribe(http).event(&Storage::evtHttpStats, so_5::thread_safe);
+    so_subscribe_self().event(&Storage::evtGatherStats, so_5::thread_safe);
 }
 
 void Storage::so_evt_start() {
     botLogFlushTimer = so_5::send_periodic<Storage::FlushBotLogMessages>(*this, FLUSH_TIMER(botLogFlushDelay));
     chatMessageFlushTimer = so_5::send_periodic<Storage::FlushChatMessages>(*this, FLUSH_TIMER(messagesFlushDelay));
+    gatherStatsTimer = so_5::send_periodic<Storage::GatherStats>(*this, FLUSH_TIMER(gatherStatsDelay));
 }
 
 void Storage::so_evt_finish() {
@@ -221,23 +223,6 @@ void Storage::store(BotLogHolder &&msg) {
     }
 }
 
-void Storage::evtHttpStats(so_5::mhood_t<hreq::storage::stats> evt) {
-    logger->logTrace("Storage Gathering storage stats invoked by http request");
-    int status = 200;
-    std::string err, body;
-    try {
-        body = ch->httpStats(evt->req.body(), err);
-    } catch (const std::exception& e) {
-        err = e.what();
-    } catch (...) {
-        if (err.empty())
-            err = "Unhandled exception";
-    }
-
-    if (!err.empty()) {
-        status = 501;
-        send_http_resp(http, evt, status, err);
-    } else {
-        send_http_resp(http, evt, status, std::move(body));
-    }
+void Storage::evtGatherStats(so_5::mhood_t<GatherStats> evt) {
+    so_5::send<CHPoolMetrics>(statsCollector, ch->collectStats());
 }

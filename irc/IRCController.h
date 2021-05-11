@@ -13,7 +13,7 @@
 #include <string>
 
 #include <so_5/agent.hpp>
-#include <so_5/disp/adv_thread_pool/pub.hpp>
+#include <so_5/disp/thread_pool/pub.hpp>
 
 #include "../HttpControllerEvents.h"
 #include "../ChatMessage.h"
@@ -21,8 +21,6 @@
 #include "IRCConnectionConfig.h"
 #include "IRCClient.h"
 #include "IRCSelectorPool.h"
-
-using namespace so_5::disp::adv_thread_pool;
 
 class Logger;
 class DBController;
@@ -36,6 +34,7 @@ class IRCController final : public so_5::agent_t
   public:
     IRCController(const context_t &ctx,
                   so_5::mbox_t processor,
+                  so_5::mbox_t statsCollector,
                   so_5::mbox_t http,
                   const IRCConnectionConfig &conConfig,
                   std::shared_ptr<DBController> db,
@@ -51,29 +50,27 @@ class IRCController final : public so_5::agent_t
     void evtSendMessage(so_5::mhood_t<Chat::SendMessage> message);
 
     // http events
-    void evtHttpStats(so_5::mhood_t<hreq::irc::stats> evt);
     void evtHttpReload(so_5::mhood_t<hreq::irc::reload> evt);
     void evtHttpCustom(so_5::mhood_t<hreq::irc::custom> evt);
     // channels http handlers
     void evtHttpChannelJoin(so_5::mhood_t<hreq::irc::channel::join> evt);
     void evtHttpChannelLeave(so_5::mhood_t<hreq::irc::channel::leave> evt);
     void evtHttpChannelMessage(so_5::mhood_t<hreq::irc::channel::message> evt);
-    void evtHttpChannelStats(so_5::mhood_t<hreq::irc::channel::stats> evt);
     // accounts http handlers
     void evtHttpAccountAdd(so_5::mhood_t<hreq::irc::account::add> evt);
     void evtHttpAccountRemove(so_5::mhood_t<hreq::irc::account::remove> evt);
     void evtHttpAccountReload(so_5::mhood_t<hreq::irc::account::reload> evt);
-    void evtHttpAccountStats(so_5::mhood_t<hreq::irc::account::stats> evt);
   private:
     IRCClient * getIrcClient(const std::string& name);
     IRCClient * getIrcClient(int id);
     void addNewIrcClient(const IRCClientConfig& config);
 
     so_5::mbox_t processor;
+    so_5::mbox_t statsCollector;
     so_5::mbox_t http;
 
-    dispatcher_handle_t ircSendPool;
-    bind_params_t ircSendPoolParams;
+    so_5::disp::thread_pool::dispatcher_handle_t ircSendPool;
+    so_5::disp::thread_pool::bind_params_t ircSendPoolParams;
 
     const std::shared_ptr<Logger> logger;
     const std::shared_ptr<DBController> db;

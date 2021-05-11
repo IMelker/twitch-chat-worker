@@ -19,7 +19,7 @@
 #define PING_TIMER(time) std::chrono::milliseconds{time}, std::chrono::milliseconds{time}
 
 IRCClient::IRCClient(const context_t &ctx,
-                     so_5::mbox_t parent,
+                     so_5::mbox_t statsCollector,
                      so_5::mbox_t processor,
                      IRCConnectionConfig conConfig,
                      IRCClientConfig cliConfig,
@@ -27,7 +27,7 @@ IRCClient::IRCClient(const context_t &ctx,
                      std::shared_ptr<Logger> logger,
                      std::shared_ptr<DBController> db)
     : so_5::agent_t(ctx),
-      parent(std::move(parent)),
+      statsCollector(std::move(statsCollector)),
       processor(std::move(processor)),
       conConfig(std::move(conConfig)),
       cliConfig(std::move(cliConfig)),
@@ -44,7 +44,7 @@ IRCClient::~IRCClient() {
 }
 
 void IRCClient::addNewSession() {
-    auto session = std::make_shared<IRCSession>(conConfig, cliConfig, this, this, logger.get());
+    auto session = std::make_shared<IRCSession>(conConfig, cliConfig, sessions.size(), this, this, logger.get());
 
     sessions.push_back(session);
     pool->addSession(session);
@@ -59,25 +59,16 @@ const std::string &IRCClient::nickname() const {
     return cliConfig.nick;
 }
 
-const IRCStatistic &IRCClient::statistic() {
-    stats.clear();
-    for(auto &session: sessions) {
-        stats += session->statistic();
-    }
-    return IRCStatisticProvider::statistic();
-}
-
 void IRCClient::so_define_agent() {
     so_subscribe_self().event(&IRCClient::evtShutdown);
-    so_subscribe_self().event(&IRCClient::evtConnect);
     so_subscribe_self().event(&IRCClient::evtReload);
-
-    so_subscribe_self().event(&IRCClient::evtJoinChannel, so_5::thread_safe);
-    so_subscribe_self().event(&IRCClient::evtLeaveChannel, so_5::thread_safe);
-    so_subscribe_self().event(&IRCClient::evtSendMessage, so_5::thread_safe);
-    so_subscribe_self().event(&IRCClient::evtSendIRC, so_5::thread_safe);
-    so_subscribe_self().event(&IRCClient::evtSendPING, so_5::thread_safe);
-    so_subscribe_self().event(&IRCClient::evtLoggedInCheck, so_5::thread_safe);
+    so_subscribe_self().event(&IRCClient::evtConnect);
+    so_subscribe_self().event(&IRCClient::evtJoinChannel);
+    so_subscribe_self().event(&IRCClient::evtLeaveChannel);
+    so_subscribe_self().event(&IRCClient::evtSendMessage);
+    so_subscribe_self().event(&IRCClient::evtSendIRC);
+    so_subscribe_self().event(&IRCClient::evtSendPING);
+    so_subscribe_self().event(&IRCClient::evtLoggedInCheck);
 }
 
 void IRCClient::so_evt_start() {
@@ -154,7 +145,7 @@ void IRCClient::evtLoggedInCheck(so_5::mhood_t<LoggedInCheck> evt) {
 }
 
 void IRCClient::evtJoinChannel(so_5::mhood_t<JoinChannel> evt) {
-    joinToChannel(evt->channel, getNextSessionRoundRobin());
+    joinToChannel(evt->channel, getNextConnectedSessionRoundRobin());
 }
 
 void IRCClient::evtLeaveChannel(so_5::mhood_t<LeaveChannel> evt) {
@@ -191,11 +182,11 @@ bool IRCClient::sendQuit(const std::string &reason) {
 }
 
 bool IRCClient::sendJoin(const std::string &channel) {
-    return getNextSessionRoundRobin()->sendJoin(channel);
+    return getNextConnectedSessionRoundRobin()->sendJoin(channel);
 }
 
 bool IRCClient::sendJoin(const std::string &channel, const std::string &key) {
-    return getNextSessionRoundRobin()->sendJoin(channel, key);
+    return getNextConnectedSessionRoundRobin()->sendJoin(channel, key);
 }
 
 bool IRCClient::sendPart(const std::string &channel) {
@@ -206,59 +197,59 @@ bool IRCClient::sendPart(const std::string &channel) {
 }
 
 bool IRCClient::sendTopic(const std::string &channel, const std::string &topic) {
-    return getNextSessionRoundRobin()->sendTopic(channel, topic);
+    return getNextConnectedSessionRoundRobin()->sendTopic(channel, topic);
 }
 
 bool IRCClient::sendNames(const std::string &channel) {
-    return getNextSessionRoundRobin()->sendNames(channel);
+    return getNextConnectedSessionRoundRobin()->sendNames(channel);
 }
 
 bool IRCClient::sendList(const std::string &channel) {
-    return getNextSessionRoundRobin()->sendList(channel);
+    return getNextConnectedSessionRoundRobin()->sendList(channel);
 }
 
 bool IRCClient::sendInvite(const std::string &channel, const std::string &nick) {
-    return getNextSessionRoundRobin()->sendInvite(channel, nick);
+    return getNextConnectedSessionRoundRobin()->sendInvite(channel, nick);
 }
 
 bool IRCClient::sendKick(const std::string &channel, const std::string &nick, const std::string &comment) {
-    return getNextSessionRoundRobin()->sendKick(channel, nick, comment);
+    return getNextConnectedSessionRoundRobin()->sendKick(channel, nick, comment);
 }
 
 bool IRCClient::sendMessage(const std::string &channel, const std::string &text) {
-    return getNextSessionRoundRobin()->sendMessage(channel, text);
+    return getNextConnectedSessionRoundRobin()->sendMessage(channel, text);
 }
 
 bool IRCClient::sendNotice(const std::string &channel, const std::string &text) {
-    return getNextSessionRoundRobin()->sendNotice(channel, text);
+    return getNextConnectedSessionRoundRobin()->sendNotice(channel, text);
 }
 
 bool IRCClient::sendMe(const std::string &channel, const std::string &text) {
-    return getNextSessionRoundRobin()->sendMe(channel, text);
+    return getNextConnectedSessionRoundRobin()->sendMe(channel, text);
 }
 
 bool IRCClient::sendChannelMode(const std::string &channel, const std::string &mode) {
-    return getNextSessionRoundRobin()->sendChannelMode(channel, mode);
+    return getNextConnectedSessionRoundRobin()->sendChannelMode(channel, mode);
 }
 
 bool IRCClient::sendCtcpRequest(const std::string &nick, const std::string &reply) {
-    return getNextSessionRoundRobin()->sendCtcpRequest(nick, reply);
+    return getNextConnectedSessionRoundRobin()->sendCtcpRequest(nick, reply);
 }
 
 bool IRCClient::sendCtcpReply(const std::string &nick, const std::string &reply) {
-    return getNextSessionRoundRobin()->sendCtcpReply(nick, reply);
+    return getNextConnectedSessionRoundRobin()->sendCtcpReply(nick, reply);
 }
 
 bool IRCClient::sendUserMode(const std::string &mode) {
-    return getNextSessionRoundRobin()->sendUserMode(mode);
+    return getNextConnectedSessionRoundRobin()->sendUserMode(mode);
 }
 
 bool IRCClient::sendNick(const std::string &newnick) {
-    return getNextSessionRoundRobin()->sendNick(newnick);
+    return getNextConnectedSessionRoundRobin()->sendNick(newnick);
 }
 
 bool IRCClient::sendWhois(const std::string &nick) {
-    return getNextSessionRoundRobin()->sendWhois(nick);
+    return getNextConnectedSessionRoundRobin()->sendWhois(nick);
 }
 
 bool IRCClient::sendPing(const std::string &host) {
@@ -269,7 +260,7 @@ bool IRCClient::sendPing(const std::string &host) {
 }
 
 bool IRCClient::sendRaw(const std::string &raw) {
-    return getNextSessionRoundRobin()->sendRaw(raw);
+    return getNextConnectedSessionRoundRobin()->sendRaw(raw);
 }
 
 void IRCClient::joinToChannel(const std::string &name, IRCSession *session) {
@@ -307,6 +298,17 @@ IRCSession *IRCClient::getNextSessionRoundRobin() {
     return sessions[i].get();
 }
 
+IRCSession *IRCClient::getNextConnectedSessionRoundRobin() {
+    IRCSession *session = nullptr;
+    for (size_t i = 0; i < sessions.size(); ++i) {
+        // even if no one connected we will return session
+        session = getNextSessionRoundRobin();
+        if (session->connected())
+            break;
+    }
+    return session;
+}
+
 void IRCClient::onLoggedIn(IRCSession *session) {
     auto joinList = channels.attachToSession(session);
     for (auto &channel: joinList) {
@@ -329,6 +331,11 @@ void IRCClient::onDisconnected(IRCSession *session) {
     so_5::send<Connect>(so_direct_mbox(), session, 0);
 }
 
+void IRCClient::onStatistics(IRCSession *session, IRCStatistic &&stats) {
+    so_5::send<Irc::SessionMetrics>(statsCollector, session->getId(), cliConfig.nick, std::move(stats));
+}
+
 void IRCClient::onMessage(IRCMessage &&message) {
     so_5::send<IRCMessage>(processor, std::move(message));
 }
+

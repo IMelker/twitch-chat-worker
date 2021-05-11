@@ -4,12 +4,11 @@
 #include "app.h"
 
 #include <so_5/send_functions.hpp>
-
-#include "absl/strings/str_split.h"
+#include <absl/strings/str_split.h>
 
 #include "common/SysSignal.h"
+
 #include "http/server/HTTPResponseFactory.h"
-#include "DBController.h"
 #include "HttpController.h"
 
 #define match(num, arg) path[num] == #arg
@@ -19,9 +18,8 @@
 HttpController::HttpController(const context_t &ctx,
                                so_5::mbox_t listeners,
                                Config &config,
-                               std::shared_ptr<DBController> db,
                                std::shared_ptr<Logger> logger)
-    : so_5::agent_t(ctx), config(config), db(std::move(db)),
+    : so_5::agent_t(ctx), config(config),
       logger(std::move(logger)), listeners(std::move(listeners)) {
 }
 
@@ -37,7 +35,6 @@ void HttpController::so_define_agent() {
         resp->send(HTTPResponseFactory::CreateResponse(
             resp->req, static_cast<http::status>(resp->status), std::move(resp->body)));
     }, so_5::thread_safe);
-    so_subscribe(listeners).event(&HttpController::evtHttpDBControllerStatus);
 }
 
 void HttpController::so_evt_start() {
@@ -73,45 +70,29 @@ void HttpController::so_evt_finish() {
         server->stop();
 }
 
-void HttpController::evtHttpDBControllerStatus(so_5::mhood_t<hreq::db::stats> evt) {
-    so_5::send<hreq::resp>(listeners, std::move(evt->req), std::move(evt->send), 200, db->getStats());
-}
-
 void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
     std::vector<std::string_view> path = absl::StrSplit(sv(req.target()), '/', absl::SkipWhitespace());
     if (path.size() < 2)
         return send(HTTPResponseFactory::BadRequest(req, "Invalid path"));
 
     if (match(0, stats)) {
+        match_handle2(stats, irc);
+        match_handle2(stats, channel);
         match_handle2(stats, bot);
         match_handle2(stats, storage);
         match_handle2(stats, db);
-        match_handle2(stats, irc);
-        match_handle2(stats, channel);
-        match_handle2(stats, account);
-    }
-    else
-    if (match(0, storage)) {
-        match_handle2(storage, stats);
-    }
-    else
-    if (match(0, db)) {
-        match_handle2(db, stats);
     }
     else
     if (match(0, irc)) {
         match_handle2(irc, reload);
-        match_handle2(irc, stats);
         match_handle2(irc, custom);
         if (path.size() > 2) {
             if (match(1, channel)) {
-                match_handle3(irc, channel, stats);
                 match_handle3(irc, channel, join);
                 match_handle3(irc, channel, leave);
                 match_handle3(irc, channel, message);
             }
             else if (match(1, account)) {
-                match_handle3(irc, account, stats);
                 match_handle3(irc, account, reload);
                 match_handle3(irc, account, add);
                 match_handle3(irc, account, remove);

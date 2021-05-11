@@ -13,6 +13,7 @@
 
 #include "bot/BotEvents.h"
 
+#include "db/ch/CHConnection.h"
 #include "HttpControllerEvents.h"
 #include "ChatMessage.h"
 
@@ -28,10 +29,12 @@ class Storage final : public so_5::agent_t
     struct Flush final : public so_5::signal_t {};
     struct FlushChatMessages final : public so_5::signal_t {};
     struct FlushBotLogMessages final : public so_5::signal_t {};
+    struct GatherStats final : public so_5::signal_t {};
+    struct CHPoolMetrics { std::vector<CHConnection::CHStatistics> stats; };
   public:
     explicit Storage(const context_t &ctx,
                      so_5::mbox_t publisher,
-                     so_5::mbox_t http,
+                     so_5::mbox_t statsCollector,
                      CHConnectionConfig config,
                      int connections,
                      int batchSize,
@@ -51,8 +54,7 @@ class Storage final : public so_5::agent_t
     void evtFlushBotLogMessages(so_5::mhood_t<FlushBotLogMessages> flush);
     void evtFlushChatMessages(so_5::mhood_t<FlushChatMessages> flush);
     void evtFlushAll(so_5::mhood_t<Flush> flush);
-    // http events
-    void evtHttpStats(so_5::mhood_t<hreq::storage::stats> evt);
+    void evtGatherStats(so_5::mhood_t<GatherStats> evt);
   private:
     void store(BotLogHolder &&msg);
     void store(ChatMessageHolder &&msg);
@@ -62,7 +64,7 @@ class Storage final : public so_5::agent_t
     void flush();
 
     so_5::mbox_t publisher;
-    so_5::mbox_t http;
+    so_5::mbox_t statsCollector;
 
     const std::shared_ptr<Logger> logger;
     std::shared_ptr<CHConnectionPool> ch;
@@ -74,6 +76,8 @@ class Storage final : public so_5::agent_t
     MessageBatch msgBatch;
     std::mutex msgBatchMutex;
     so_5::timer_id_t chatMessageFlushTimer;
+
+    so_5::timer_id_t gatherStatsTimer;
 
     unsigned int batchSize = 1000;
     unsigned int messagesFlushDelay = 10;

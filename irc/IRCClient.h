@@ -26,7 +26,6 @@ class DBController;
 class IRCSession;
 class IRCSelectorPool;
 class IRCClient final : public so_5::agent_t,
-                        public IRCStatisticProvider,
                         public IRCSessionInterface,
                         public IRCSessionListener
 {
@@ -42,7 +41,7 @@ class IRCClient final : public so_5::agent_t,
     struct SendIRC { std::string message; };
   public:
     IRCClient(const context_t &ctx,
-              so_5::mbox_t parent,
+              so_5::mbox_t statsCollector,
               so_5::mbox_t processor,
               IRCConnectionConfig conConfig,
               IRCClientConfig cliConfig,
@@ -55,9 +54,6 @@ class IRCClient final : public so_5::agent_t,
     IRCClient& operator=(IRCClient&) = delete;
 
     [[nodiscard]] const std::string& nickname() const;
-
-    // IRCStatisticProvider implementation
-    [[nodiscard]] const IRCStatistic& statistic() override;
 
     // implementation so_5::agent_t
     void so_define_agent() override;
@@ -100,19 +96,20 @@ class IRCClient final : public so_5::agent_t,
     // implementation IRCSessionListener
     void onLoggedIn(IRCSession* session) override;
     void onDisconnected(IRCSession* session) override;
+    void onStatistics(IRCSession* session, IRCStatistic&& stats) override;
     void onMessage(IRCMessage &&message) override;
   private:
     void addNewSession();
     void joinToChannel(const std::string &name, IRCSession *session);
     void leaveFromChannel(const std::string &name);
     IRCSession * getNextSessionRoundRobin();
+    IRCSession * getNextConnectedSessionRoundRobin();
 
-    so_5::mbox_t parent;
+    so_5::mbox_t statsCollector;
     so_5::mbox_t processor;
 
     const IRCConnectionConfig conConfig;
     IRCClientConfig cliConfig;
-
     IRCChannelList channels;
 
     IRCSelectorPool *pool;

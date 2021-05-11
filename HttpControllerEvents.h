@@ -60,28 +60,18 @@ DEFINE_EVT(stats, storage)            // storage stats
 DEFINE_EVT(stats, db)                 // db stats
 DEFINE_EVT(stats, irc)                // irc stats
 DEFINE_EVT(stats, channel)            // channels stats
-DEFINE_EVT(stats, account)            // accounts stats
-
-// handled by Storage
-DEFINE_EVT(storage, stats)            // storage stats
-
-// handled by HttpController
-DEFINE_EVT(db, stats)                 // database stats
 
 // handled by IRCController
 DEFINE_EVT(irc, reload)               // reload all accounts
-DEFINE_EVT(irc, stats)                // concatenated stats for all messages(rps, and etc.)
 DEFINE_EVT(irc, custom)               // custom irc message
 
 // handled by ChannelController
 DEFINE_EVT_SUB(irc, channel, join)    // join to channel(for random account or exact)
 DEFINE_EVT_SUB(irc, channel, leave)   // leave from channel(for all accounts)
 DEFINE_EVT_SUB(irc, channel, message) // message for channel from account or random
-DEFINE_EVT_SUB(irc, channel, stats)   // stats for channel, all channels
 
 DEFINE_EVT_SUB(irc, account, add)     // add account by id from database
 DEFINE_EVT_SUB(irc, account, remove)  // remove account from controller, with disconnect
 DEFINE_EVT_SUB(irc, account, reload)  // reload account from database, and reconnect
-DEFINE_EVT_SUB(irc, account, stats)   // stats for account, all accounts
 
 #endif //CHATCONTROLLER__HTTPCONTROLLEREVENTS_H_

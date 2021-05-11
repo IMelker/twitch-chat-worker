@@ -18,8 +18,6 @@
 #include "../HttpControllerEvents.h"
 #include "BotConfiguration.h"
 
-using namespace so_5::disp::adv_thread_pool;
-
 class Logger;
 class DBController;
 class BotEngine;
@@ -58,8 +56,8 @@ class BotsEnvironment final : public so_5::agent_t
     so_5::mbox_t http;
     so_5::coop_handle_t coop;
 
-    dispatcher_handle_t botEnginePool;
-    bind_params_t botEnginePoolParams;
+    so_5::disp::adv_thread_pool::dispatcher_handle_t botEnginePool;
+    so_5::disp::adv_thread_pool::bind_params_t botEnginePoolParams;
 
     const std::shared_ptr<DBController> db;
     const std::shared_ptr<Logger> logger;

@@ -53,7 +53,7 @@ void BotsEnvironment::so_define_agent() {
 }
 
 void BotsEnvironment::so_evt_start() {
-    botEnginePool = so_5::disp::adv_thread_pool::make_dispatcher(so_environment(), threads);
+    botEnginePool = so_5::disp::adv_thread_pool::make_dispatcher(so_environment(), "bot_engine", threads);
     botEnginePoolParams = {};
 
     auto configs = db->loadBotConfigurations();

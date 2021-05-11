@@ -23,13 +23,17 @@
 
 class IRCClient;
 struct IRCSessionListener;
-class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, private IRCSessionCallback
+class IRCSession : public IRCSessionInterface, private IRCSessionCallback
 {
   public:
     friend class IRCSelector;
   public:
-    IRCSession(const IRCConnectionConfig &conConfig, const IRCClientConfig &cliConfig,
-               IRCSessionListener *listener, IRCClient *parent, Logger* logger);
+    IRCSession(const IRCConnectionConfig &conConfig,
+               const IRCClientConfig &cliConfig,
+               unsigned int id,
+               IRCSessionListener *listener,
+               IRCClient *parent,
+               Logger *logger);
     ~IRCSession() override;
 
     void create();
@@ -38,6 +42,8 @@ class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, priv
     bool connected();
     bool loggedIn();
     void disconnect();
+
+    [[nodiscard]] unsigned int getId() const;
 
     void setPingTimer(so_5::timer_id_t timer);
 
@@ -96,6 +102,7 @@ class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, priv
     void onDccSendReq(std::string_view nick, std::string_view addr, std::string_view filename, unsigned long size, unsigned int dccid) override;
 
   private:
+    void sendStats(IRCStatistic & stats);
     template<typename Foo, typename ...Args>
     bool internalIrcSend(Foo irc_cmd, Args... args) {
         // IRCClient thread
@@ -104,14 +111,18 @@ class IRCSession : public IRCStatisticProvider, public IRCSessionInterface, priv
                              fmt::ptr(this), __PRETTY_FUNCTION__, irc_strerror(irc_errno(session)));
             return false;
         }
-        stats.commandsOutCountInc();
+        ++statsFromSo5Thread.commands.out.count;
         return true;
     }
 
     const IRCConnectionConfig& conConfig;
     const IRCClientConfig& cliConfig;
 
+    unsigned int id = 0;
     IRCSessionContext ctx;
+
+    IRCStatistic statsFromSo5Thread;
+    IRCStatistic statsFromSelectorThread;
 
     IRCSessionListener* listener;
     Logger *logger;

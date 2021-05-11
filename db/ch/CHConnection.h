@@ -6,7 +6,8 @@
 #define CHATSNIFFER_DB_CH_CHCONNECTION_H_
 
 #include <memory>
-#include <atomic>
+#include <mutex>
+#include <algorithm>
 
 #include <clickhouse/client.h>
 
@@ -27,14 +28,23 @@ struct CHConnectionConfig {
 class Logger;
 class CHConnection : public DBConnection
 {
-    struct {
-        struct {
-            std::atomic<long long> updated{};
-            std::atomic<unsigned int> rtt{};
-            std::atomic<unsigned int> count{};
-            std::atomic<unsigned int> failed{};
-        } requests;
-    } stats;
+  public:
+    struct CHStatistics {
+        long long rtt = 0;
+        unsigned int count = 0;
+        unsigned int failed = 0;
+
+        inline CHStatistics& operator+(const CHStatistics& rhs) noexcept {
+            count += rhs.count;
+            failed += rhs.failed;
+            if (rhs.rtt > 0)
+                rtt = rhs.rtt;
+            return *this;
+        }
+        inline CHStatistics& operator+=(const CHStatistics & rhs) {
+            return operator+(rhs);
+        }
+    };
   public:
     CHConnection(const CHConnectionConfig& config, std::shared_ptr<Logger> logger);
     ~CHConnection() override = default;
@@ -43,19 +53,38 @@ class CHConnection : public DBConnection
 
     void insert(const std::string& table_name, const clickhouse::Block& block) {
         auto first = CurrentTime<std::chrono::system_clock>::milliseconds();
-
-        conn->Insert(table_name, block);
-
-        auto now = CurrentTime<std::chrono::system_clock>::milliseconds();
-
-        stats.requests.updated.store(now, std::memory_order_relaxed);
-        stats.requests.count.fetch_add(1, std::memory_order_relaxed);
-        stats.requests.rtt.store(now - first, std::memory_order_relaxed);
+        try {
+            conn->Insert(table_name, block);
+            auto now = CurrentTime<std::chrono::system_clock>::milliseconds();
+            {
+                std::lock_guard lg(statsMutex);
+                ++stats.count;
+                stats.rtt = now - first;
+            }
+        } catch (const std::exception& e) {
+            fprintf(stderr, "Failed to insert to CH: %s\n", e.what());
+            auto now = CurrentTime<std::chrono::system_clock>::milliseconds();
+            {
+                std::lock_guard lg(statsMutex);
+                ++stats.failed;
+                stats.rtt = now - first;
+            }
+        }
     }
 
-    [[nodiscard]] const decltype(stats)& getStats() const { return stats; };
+    [[nodiscard]] CHStatistics getStats() {
+        CHStatistics temp;
+        {
+            std::lock_guard lg(statsMutex);
+            std::swap(temp, stats);
+        }
+        return temp;
+    };
   private:
     std::shared_ptr<clickhouse::Client> conn;
+
+    std::mutex statsMutex;
+    CHStatistics stats;
 };
 
 #endif //CHATSNIFFER_DB_CH_CHCONNECTION_H_

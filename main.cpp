@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
         so_5::launch([&](so_5::environment_t &env) {
             auto httpBox = env.create_mbox();
             env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, appLogger));
-            env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, db, httpLogger));
+            env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, httpLogger));
         });
     }
     catch (const std::exception &e) {
@@ -107,21 +107,18 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
-
-    // 1. TODO remake statistics to StatsCollector
-    //       - IRCStats to 2 threads, to avoid atomics
-    //       - Storage stats remove atomic and send to StatsCollector
-    //       - DB stats remove atomic and send to StatsCollector
-    //       - Create stubs for Bots stats
-    // 2. TODO Create prometheus exporter for app
-    // 3. TODO add connected state for IRCClient and send only to active, not RoundRobbin
-    // 4. TODO fix options, remove useless and add controlls
+    // 0. ASAN BUILD AND TEST
+    // 1. TODO Create prometheus exporter for app
+    // 2. TODO add ROWS to CHStorge stats
+    // 2. TODO add so_5 unhandled message logger
+    // 3. TODO fix options, remove useless and add controls
 
     // BotEngine
     // TODO change architecture with interraptable scripting(courutines)
     // TODO BotEngine timer events
     // TODO add timer and timer event to bot
     // TODO move language detect to BOTEngine (?) // to decrease cpu usage
+    // TODO add statistics for StatsCollector
 
     // Global
     // TODO Review accounts, channels, bots logic
