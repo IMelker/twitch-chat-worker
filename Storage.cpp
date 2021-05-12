@@ -7,7 +7,9 @@
 
 #include <so_5/send_functions.hpp>
 
-#include "common/Logger.h"
+#include "Logger.h"
+#include "ThreadName.h"
+
 #include "db/DBConnectionLock.h"
 #include "db/ch/CHConnectionPool.h"
 #include "Storage.h"
@@ -44,6 +46,8 @@ Storage::~Storage() {
 }
 
 void Storage::so_define_agent() {
+    set_thread_name("storage");
+
     so_subscribe(publisher).event(&Storage::evtChatMessage, so_5::thread_safe);
 
     so_subscribe_self().event(&Storage::evtBotLogMessage, so_5::thread_safe);

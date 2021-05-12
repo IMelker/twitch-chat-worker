@@ -35,9 +35,6 @@ class BotEngine final : public so_5::agent_t
     void evtShutdown(mhood_t<Bot::Shutdown> message);
     void evtReload(mhood_t<Bot::Reload> message);
     void evtChatMessage(mhood_t<Chat::Message> message);
-
-    void handleInterval(Handler& handler);
-    void handleTimer(Handler& handler);
   private:
     so_5::mbox_t self;
     so_5::mbox_t msgSender;

@@ -32,10 +32,12 @@ class CHConnection : public DBConnection
     struct CHStatistics {
         long long rtt = 0;
         unsigned int count = 0;
+        unsigned int rows = 0;
         unsigned int failed = 0;
 
         inline CHStatistics& operator+(const CHStatistics& rhs) noexcept {
             count += rhs.count;
+            rows += rhs.rows;
             failed += rhs.failed;
             if (rhs.rtt > 0)
                 rtt = rhs.rtt;
@@ -59,6 +61,7 @@ class CHConnection : public DBConnection
             {
                 std::lock_guard lg(statsMutex);
                 ++stats.count;
+                stats.rows += block.GetRowCount();
                 stats.rtt = now - first;
             }
         } catch (const std::exception& e) {

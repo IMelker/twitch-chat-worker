@@ -190,7 +190,7 @@ DBController::Channels DBController::loadChannelsFor(int accountId) {
 DBController::BotsConfigurations DBController::loadBotConfigurations() {
     static const std::string request = "SELECT bot.id, bot.user_id, accounts.username, "
                                        "       channel.name, eh.event_type_id, "
-                                       "       eh.script, eh.id, eh.additional "
+                                       "       eh.id, eh.script, eh.additional "
                                        "FROM bot "
                                        "JOIN bot_account ON bot.id = bot_account.bot_id "
                                        "JOIN accounts ON bot_account.account_id = accounts.id "
@@ -214,8 +214,19 @@ DBController::BotsConfigurations DBController::loadBotConfigurations() {
                 config.userId = toNumber(row[1]);
                 config.account = std::move(row[2]);
                 config.channel = std::move(row[3]);
-                auto &handlers = getHandlers(toNumber(row[4]), config);
-                handlers.emplace_back(std::move(row[5]), toNumber(row[6]), std::move(row[7]));
+                switch (static_cast<BotEventType>(toNumber(row[4]))) {
+                    case BotEventType::Message:
+                        config.onMessage.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
+                        break;
+                    case BotEventType::Interval:
+                        config.onInterval.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
+                        break;
+                    case BotEventType::Timer:
+                        config.onTimer.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
@@ -227,7 +238,7 @@ DBController::BotsConfigurations DBController::loadBotConfigurations() {
 BotConfiguration DBController::loadBotConfiguration(int id) {
     const std::string request = fmt::format("SELECT bot.id, bot.user_id, accounts.username, "
                                             "       channel.name, eh.event_type_id, "
-                                            "       eh.script, eh.id, eh.additional "
+                                            "       eh.id, eh.script, eh.additional "
                                             "FROM bot "
                                             "JOIN bot_account ON bot.id = bot_account.bot_id "
                                             "JOIN accounts ON bot_account.account_id = accounts.id "
@@ -253,8 +264,19 @@ BotConfiguration DBController::loadBotConfiguration(int id) {
             config.account = std::move(res.front()[2]);
             config.channel = std::move(res.front()[3]);
             for(auto &row : res) {
-                auto &handlers = getHandlers(toNumber(row[4]), config);
-                handlers.emplace_back(std::move(row[5]), toNumber(row[6]), std::move(row[7]));
+                switch (static_cast<BotEventType>(toNumber(row[4]))) {
+                    case BotEventType::Message:
+                        config.onMessage.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
+                        break;
+                    case BotEventType::Interval:
+                        config.onInterval.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
+                        break;
+                    case BotEventType::Timer:
+                        config.onTimer.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }

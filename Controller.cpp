@@ -13,10 +13,11 @@
 
 #include "nlohmann/json.hpp"
 
-#include "common/Utils.h"
-#include "common/SysSignal.h"
-#include "common/Logger.h"
-#include "common/LoggerFactory.h"
+#include "Utils.h"
+#include "SysSignal.h"
+#include "ThreadName.h"
+#include "Logger.h"
+#include "LoggerFactory.h"
 
 #include "db/DBConnectionLock.h"
 #include "irc/IRCConnectionConfig.h"
@@ -38,6 +39,8 @@ Controller::~Controller() {
 };
 
 void Controller::so_define_agent() {
+    set_thread_name("controller");
+
     so_subscribe_self().event([this](mhood_t<Controller::ShutdownCheck>) {
         if (SysSignal::serviceTerminated()) {
             so_deregister_agent_coop_normally();

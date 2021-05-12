@@ -6,6 +6,7 @@
 
 #include "Clock.h"
 #include "Logger.h"
+#include "ThreadName.h"
 #include "DBController.h"
 #include "StatsCollector.h"
 
@@ -26,6 +27,8 @@ StatsCollector::StatsCollector(const context_t &ctx,
 StatsCollector::~StatsCollector() = default;
 
 void StatsCollector::so_define_agent() {
+    set_thread_name("stats_collector");
+
     so_subscribe_self().event(&StatsCollector::evtIRCMetrics);
     so_subscribe(publisher).event(&StatsCollector::evtRecvMessageMetric);
     so_subscribe_self().event(&StatsCollector::evtSendMessageMetric);
@@ -100,6 +103,7 @@ void StatsCollector::evtHttpStorageStats(so_5::mhood_t<hreq::stats::storage> evt
     for(size_t i = 0; i < chPoolStats.size(); ++i) {
         const auto &stats = chPoolStats[i];
         body[std::to_string(i)] = {{"count", stats.count},
+                                   {"rows", stats.rows},
                                    {"failed", stats.failed},
                                    {"rtt", stats.rtt}};
     }

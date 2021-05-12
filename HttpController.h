@@ -8,7 +8,8 @@
 #include <so_5/agent.hpp>
 #include <so_5/timers.hpp>
 
-#include "common/Config.h"
+#include "Config.h"
+
 #include "HttpControllerEvents.h"
 #include "http/server/HTTPServer.h"
 #include "http/server/HTTPRequestHandler.h"

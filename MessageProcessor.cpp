@@ -5,6 +5,7 @@
 #include <so_5/send_functions.hpp>
 
 #include "Logger.h"
+#include "ThreadName.h"
 
 #include "ChatMessage.h"
 #include "MessageProcessor.h"
@@ -23,6 +24,7 @@ MessageProcessor::~MessageProcessor() {
 }
 
 void MessageProcessor::so_define_agent() {
+    set_thread_name("msg_processor");
     so_subscribe_self().event(&MessageProcessor::evtIrcMessage, so_5::thread_safe);
 }
 

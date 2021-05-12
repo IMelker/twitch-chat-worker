@@ -41,6 +41,16 @@ std::shared_ptr<DBController> createDBController(Config& config) {
     return std::make_shared<DBController>(std::move(pgCfg), pgConns, pgLogger);
 }
 
+struct So5Logger final : public so_5::error_logger_t
+{
+    explicit So5Logger(std::shared_ptr<Logger> logger) : logger(std::move(logger)) {}
+    void log(const char * file_name, unsigned int line, const std::string & message) override {
+        logger->logError("{}:{} {}", file_name, line, message);
+    }
+  private:
+    std::shared_ptr<Logger> logger;
+};
+
 int main(int argc, char *argv[]) {
     SysSignal::setupSignalHandling();
 
@@ -96,10 +106,13 @@ int main(int argc, char *argv[]) {
 
     try {
         so_5::launch([&](so_5::environment_t &env) {
-            auto httpBox = env.create_mbox();
-            env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, appLogger));
-            env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, httpLogger));
-        });
+                auto httpBox = env.create_mbox();
+                env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, appLogger));
+                env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, httpLogger));
+            },
+            [&]( so_5::environment_params_t & params ) {
+                params.error_logger(std::make_shared<So5Logger>(appLogger));
+            });
     }
     catch (const std::exception &e) {
         appLogger->logCritical("Exception: ", e.what());
@@ -107,11 +120,8 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
-    // 0. ASAN BUILD AND TEST
     // 1. TODO Create prometheus exporter for app
-    // 2. TODO add ROWS to CHStorge stats
-    // 2. TODO add so_5 unhandled message logger
-    // 3. TODO fix options, remove useless and add controls
+    // 2. TODO fix options, remove useless and add controls
 
     // BotEngine
     // TODO change architecture with interraptable scripting(courutines)

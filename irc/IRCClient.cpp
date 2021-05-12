@@ -8,6 +8,7 @@
 #include <so_5/send_functions.hpp>
 
 #include "Logger.h"
+#include "ThreadName.h"
 
 #include "IRCSelectorPool.h"
 #include "IRCClient.h"
@@ -60,6 +61,8 @@ const std::string &IRCClient::nickname() const {
 }
 
 void IRCClient::so_define_agent() {
+    set_thread_name("irc_client");
+
     so_subscribe_self().event(&IRCClient::evtShutdown);
     so_subscribe_self().event(&IRCClient::evtReload);
     so_subscribe_self().event(&IRCClient::evtConnect);

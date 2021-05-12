@@ -7,6 +7,7 @@
 #include <so_5/send_functions.hpp>
 
 #include "Logger.h"
+#include "ThreadName.h"
 
 #include "../DBController.h"
 #include "IRCController.h"
@@ -29,6 +30,8 @@ IRCController::IRCController(const context_t &ctx,
 IRCController::~IRCController() = default;
 
 void IRCController::so_define_agent() {
+    set_thread_name("irc_controller");
+
     // from BotEngine
     so_subscribe_self().event(&IRCController::evtSendMessage, so_5::thread_safe);
 

@@ -8,6 +8,20 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -pthread")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
+if (USE_ASAN)
+    message("- [ASAN]")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -static-libasan")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -static-libasan")
+elseif(USE_LSAN)
+    message("- [LSAN]")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=leak -static-liblsan")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=leak -static-liblsan")
+elseif(USE_TSAN)
+    message("- [TSAN]")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread -static-libtsan")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread -static-libtsan")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CXX_STANDARD_REQUIRED ON)
 
@@ -44,6 +58,10 @@ include_directories(third-party/sol/include)
 message("- [pg]")
 find_package(PostgreSQL REQUIRED)
 include_directories(${PostgreSQL_INCLUDE_DIRS})
+
+# apt-get install libpcre++-dev
+message("- [pcrecpp]")
+find_library(PCRE_LIBRARY pcrecpp REQUIRED)
 
 message("- [lua]")
 find_package(Lua 5.3 EXACT REQUIRED)
@@ -137,4 +155,5 @@ target_link_libraries(${APP_BIN_NAME}
         ${PostgreSQL_LIBRARIES}
         absl::strings
         langdetectpp
+        pcrecpp
         sol2::sol2 ${LUA_LIBRARIES})

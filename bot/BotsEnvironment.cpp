@@ -10,7 +10,9 @@
 #include <so_5/environment.hpp>
 #include <so_5/send_functions.hpp>
 
-#include "../common/Logger.h"
+#include "Logger.h"
+#include "ThreadName.h"
+
 #include "../DBController.h"
 #include "BotConfiguration.h"
 #include "BotsEnvironment.h"
@@ -45,6 +47,8 @@ void BotsEnvironment::setBotLogger(so_5::mbox_t blogger) {
 }
 
 void BotsEnvironment::so_define_agent() {
+    set_thread_name("bot_environment");
+
     so_subscribe(publisher).event(&BotsEnvironment::evtChatMessage, so_5::thread_safe);
     so_subscribe(http).event(&BotsEnvironment::evtHttpAdd);
     so_subscribe(http).event(&BotsEnvironment::evtHttpReload);

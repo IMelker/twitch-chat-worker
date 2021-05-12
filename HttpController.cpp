@@ -6,7 +6,8 @@
 #include <so_5/send_functions.hpp>
 #include <absl/strings/str_split.h>
 
-#include "common/SysSignal.h"
+#include "SysSignal.h"
+#include "ThreadName.h"
 
 #include "http/server/HTTPResponseFactory.h"
 #include "HttpController.h"
@@ -26,6 +27,8 @@ HttpController::HttpController(const context_t &ctx,
 HttpController::~HttpController() = default;
 
 void HttpController::so_define_agent() {
+    set_thread_name("http_controller");
+
     so_subscribe_self().event([this](mhood_t<HttpController::ShutdownCheck>) {
         if (SysSignal::serviceTerminated()) {
             so_deregister_agent_coop_normally();

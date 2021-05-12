@@ -2,15 +2,14 @@
 // Created by imelker on 02.04.2021.
 //
 
+#include <pcrecpp.h>
 #include <sol/sol.hpp>
-
 #include <nlohmann/json.hpp>
-
 #include <so_5/send_functions.hpp>
 
 #include "Logger.h"
+#include "ThreadName.h"
 #include "Clock.h"
-#include "Timer.h"
 
 #include "../irc/IRCController.h"
 #include "BotEngine.h"
@@ -68,9 +67,7 @@ void BotEngine::so_define_agent() {
 }
 
 void BotEngine::so_evt_start() {
-    for (auto &onTimer: config.onTimer) {
-        handleTimer(onTimer);
-    }
+    set_thread_name("bot_engine");
 
     this->logger->logInfo("BotEngine bot(id={}) started", this->config.botId);
 }
@@ -89,76 +86,49 @@ void BotEngine::evtReload(so_5::mhood_t<Bot::Reload> message) {
 }
 
 void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
-    sol::state lua;
-    lua.open_libraries(sol::lib::base, sol::lib::string, sol::lib::utf8, sol::lib::math);
-
-    //lua.set_exception_handler(&my_exception_handler);
-
-    auto message_type = lua.new_usertype<Chat::Message>("message");
-    message_type.set("user", sol::readonly(&Chat::Message::user));
-    message_type.set("channel", sol::readonly(&Chat::Message::channel));
-    message_type.set("text", sol::readonly(&Chat::Message::text));
-    message_type.set("lang", sol::readonly(&Chat::Message::lang));
-    message_type.set("timestamp", sol::readonly(&Chat::Message::timestamp));
-    message_type.set("valid", sol::readonly(&Chat::Message::valid));
-
-    auto engine = lua.create_named_table("engine");
-    engine["message"] = *message;
-
-    engine.set_function("log", [this, &lua, message] (const std::string& text) {
-        so_5::send<Bot::LogMessage>(botLogger, config.userId, config.botId,
-                                       lua.get<int>("_handler_id"), message->uuid.first,
-                                       CurrentTime<std::chrono::system_clock>::milliseconds(), text);
-    });
-    engine.set_function("send", [this, &account = config.account, &channel = config.channel] (const std::string& text) {
-        so_5::send<Chat::SendMessage>(msgSender, account, channel, text);
-    });
-
-    for (auto &[script, id, additional]: config.onMessage) {
-        lua.set("_handler_id", id);
-        sol::protected_function_result pfr = lua.safe_script(script, &sol::script_pass_on_error);
-        if (!pfr.valid()) {
-            sol::error err = pfr;
-            so_5::send<Bot::LogMessage>(botLogger, config.userId, config.botId, id, message->uuid.first,
-                                           CurrentTime<std::chrono::system_clock>::milliseconds(), err.what());
-        }
-    }
-}
-
-void BotEngine::handleInterval(Handler &handler) {
-
-}
-
-void BotEngine::handleTimer(Handler &handler) {
-    /*json additional = json::parse(std::get<2>(handler), nullptr, false, true);
-    if (additional.is_discarded()) {
-        logger->logError("BotEngine Failed to parse timer event additional data");
-        return;
-    }
-
-    auto timestamp = additional["timestamp"].get<long long>();
-    Timer::instance().setTimer([this, script = std::get<0>(handler), id = std::get<1>(handler)] () {
-        // TODO move away from timer thread
-        if (!active.load(std::memory_order_relaxed))
-            return;
-
-        sol::state lua;
+    auto initLuaState = [this, &message] (sol::state& lua) -> bool {
         lua.open_libraries(sol::lib::base, sol::lib::string, sol::lib::utf8, sol::lib::math);
 
+        //lua.set_exception_handler(&my_exception_handler);
+
+        auto message_type = lua.new_usertype<Chat::Message>("message");
+        message_type.set("user", sol::readonly(&Chat::Message::user));
+        message_type.set("channel", sol::readonly(&Chat::Message::channel));
+        message_type.set("text", sol::readonly(&Chat::Message::text));
+        message_type.set("lang", sol::readonly(&Chat::Message::lang));
+        message_type.set("timestamp", sol::readonly(&Chat::Message::timestamp));
+        message_type.set("valid", sol::readonly(&Chat::Message::valid));
+
         auto engine = lua.create_named_table("engine");
-        engine.set_function("log", [this, &lua] (const std::string& text) {
-            so_5::send<Bot::LogMessage>(botLogger,
-                                           config.userId, config.botId, lua.get<int>("_handler_id"),
-                                           CurrentTime<std::chrono::system_clock>::milliseconds(), text);
+        engine["message"] = *message;
+
+        engine.set_function("log", [this, &lua, &message] (const std::string& text) {
+            so_5::send<Bot::LogMessage>(botLogger, config.userId, config.botId,
+                                        lua.get<int>("_handler_id"), message->uuid.first,
+                                        CurrentTime<std::chrono::system_clock>::milliseconds(), text);
         });
         engine.set_function("send", [this, &account = config.account, &channel = config.channel] (const std::string& text) {
-            so_5::send<SendMessage>(msgSender, account, channel, text);
+            so_5::send<Chat::SendMessage>(msgSender, account, channel, text);
         });
+        return true;
+    };
 
-        lua.set("_handler_id", id);
-        auto res = lua.script(script);
-        if (res.status() != sol::call_status::ok) {
-            abort();
+    sol::state lua;
+    bool inited = false;
+    for (const auto& handler: config.onMessage) {
+        if (!handler.match(*message))
+            continue;
+
+        if (!inited) {
+            inited = initLuaState(lua);
         }
-    }, timestamp);*/
+
+        lua.set("_handler_id", handler.getId());
+        sol::protected_function_result pfr = lua.safe_script(handler.getScript(), &sol::script_pass_on_error);
+        if (!pfr.valid()) {
+            sol::error err = pfr;
+            so_5::send<Bot::LogMessage>(botLogger, config.userId, config.botId, handler.getId(), message->uuid.first,
+                                        CurrentTime<std::chrono::system_clock>::milliseconds(), err.what());
+        }
+    }
 }
