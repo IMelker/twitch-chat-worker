@@ -61,8 +61,6 @@ const std::string &IRCClient::nickname() const {
 }
 
 void IRCClient::so_define_agent() {
-    set_thread_name("irc_client");
-
     so_subscribe_self().event(&IRCClient::evtShutdown);
     so_subscribe_self().event(&IRCClient::evtReload);
     so_subscribe_self().event(&IRCClient::evtConnect);
@@ -75,6 +73,8 @@ void IRCClient::so_define_agent() {
 }
 
 void IRCClient::so_evt_start() {
+    set_thread_name("irc_client");
+
     channels.load();
 
     int count = std::max(MIN_SESS_COUNT, cliConfig.session_count);

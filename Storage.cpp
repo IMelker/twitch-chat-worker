@@ -46,8 +46,6 @@ Storage::~Storage() {
 }
 
 void Storage::so_define_agent() {
-    set_thread_name("storage");
-
     so_subscribe(publisher).event(&Storage::evtChatMessage, so_5::thread_safe);
 
     so_subscribe_self().event(&Storage::evtBotLogMessage, so_5::thread_safe);
@@ -58,6 +56,8 @@ void Storage::so_define_agent() {
 }
 
 void Storage::so_evt_start() {
+    set_thread_name("storage");
+
     botLogFlushTimer = so_5::send_periodic<Storage::FlushBotLogMessages>(*this, FLUSH_TIMER(botLogFlushDelay));
     chatMessageFlushTimer = so_5::send_periodic<Storage::FlushChatMessages>(*this, FLUSH_TIMER(messagesFlushDelay));
     gatherStatsTimer = so_5::send_periodic<Storage::GatherStats>(*this, FLUSH_TIMER(gatherStatsDelay));

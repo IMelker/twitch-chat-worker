@@ -27,8 +27,6 @@ HttpController::HttpController(const context_t &ctx,
 HttpController::~HttpController() = default;
 
 void HttpController::so_define_agent() {
-    set_thread_name("http_controller");
-
     so_subscribe_self().event([this](mhood_t<HttpController::ShutdownCheck>) {
         if (SysSignal::serviceTerminated()) {
             so_deregister_agent_coop_normally();
@@ -41,6 +39,8 @@ void HttpController::so_define_agent() {
 }
 
 void HttpController::so_evt_start() {
+    set_thread_name("http_controller");
+
     HTTPControlConfig httpCfg;
     httpCfg.host = config[HTTP_CONTROL]["host"].value_or("localhost");
     httpCfg.port = config[HTTP_CONTROL]["port"].value_or(8080);

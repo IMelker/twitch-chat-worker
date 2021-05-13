@@ -30,8 +30,6 @@ IRCController::IRCController(const context_t &ctx,
 IRCController::~IRCController() = default;
 
 void IRCController::so_define_agent() {
-    set_thread_name("irc_controller");
-
     // from BotEngine
     so_subscribe_self().event(&IRCController::evtSendMessage, so_5::thread_safe);
 
@@ -47,6 +45,8 @@ void IRCController::so_define_agent() {
 }
 
 void IRCController::so_evt_start() {
+    set_thread_name("irc_controller");
+
     pool.init(config.threads);
 
     ircSendPool = so_5::disp::thread_pool::make_dispatcher(so_environment(), "irc_client", config.threads);

@@ -39,8 +39,6 @@ Controller::~Controller() {
 };
 
 void Controller::so_define_agent() {
-    set_thread_name("controller");
-
     so_subscribe_self().event([this](mhood_t<Controller::ShutdownCheck>) {
         if (SysSignal::serviceTerminated()) {
             so_deregister_agent_coop_normally();
@@ -60,6 +58,8 @@ void Controller::so_define_agent() {
 }
 
 void Controller::so_evt_start() {
+    set_thread_name("controller");
+
     so_5::introduce_child_coop(*this, [&] (so_5::coop_t &coop) {
         auto listener = so_environment().create_mbox();
 

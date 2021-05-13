@@ -24,12 +24,11 @@ MessageProcessor::~MessageProcessor() {
 }
 
 void MessageProcessor::so_define_agent() {
-    set_thread_name("msg_processor");
     so_subscribe_self().event(&MessageProcessor::evtIrcMessage, so_5::thread_safe);
 }
 
 void MessageProcessor::so_evt_start() {
-
+    set_thread_name("msg_processor");
 }
 
 void MessageProcessor::so_evt_finish() {

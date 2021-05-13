@@ -47,8 +47,6 @@ void BotsEnvironment::setBotLogger(so_5::mbox_t blogger) {
 }
 
 void BotsEnvironment::so_define_agent() {
-    set_thread_name("bot_environment");
-
     so_subscribe(publisher).event(&BotsEnvironment::evtChatMessage, so_5::thread_safe);
     so_subscribe(http).event(&BotsEnvironment::evtHttpAdd);
     so_subscribe(http).event(&BotsEnvironment::evtHttpReload);
@@ -57,6 +55,8 @@ void BotsEnvironment::so_define_agent() {
 }
 
 void BotsEnvironment::so_evt_start() {
+    set_thread_name("bot_environment");
+
     botEnginePool = so_5::disp::adv_thread_pool::make_dispatcher(so_environment(), "bot_engine", threads);
     botEnginePoolParams = {};
 
