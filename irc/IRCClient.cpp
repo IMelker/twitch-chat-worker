@@ -174,6 +174,8 @@ void IRCClient::evtSendIRC(so_5::mhood_t<SendIRC> irc) {
 }
 
 void IRCClient::evtSendPING(so_5::mhood_t<SendPING> ping) {
+    so_5::send<Irc::ClientChannelsMetrics>(statsCollector, cliConfig.nick, channels.dumpChannelsToSessionId());
+
     ping->session->sendPing(ping->host);
 }
 

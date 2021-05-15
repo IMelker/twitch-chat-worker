@@ -7,10 +7,11 @@
 
 #include <so_5/all.hpp>
 
-#include "common/SysSignal.h"
-#include "common/Options.h"
-#include "common/Config.h"
-#include "common/LoggerFactory.h"
+#include "SysSignal.h"
+#include "Options.h"
+#include "Config.h"
+#include "ThreadName.h"
+#include "LoggerFactory.h"
 
 #include "db/ch/CHConnectionPool.h"
 #include "db/pg/PGConnectionPool.h"
@@ -105,6 +106,7 @@ int main(int argc, char *argv[]) {
     }
 
     try {
+        set_thread_name("main_launch");
         so_5::launch([&](so_5::environment_t &env) {
                 auto httpBox = env.create_mbox();
                 env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, appLogger));
@@ -120,8 +122,11 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
+    // 0. nginx on server, iptables(only throught nginx and ssh), [graphana, prometheus, http_controll] throught nginx
     // 1. TODO Create prometheus exporter for app
     // 2. TODO fix options, remove useless and add controls
+
+    // Lua test app with 2 threads communication
 
     // BotEngine
     // TODO change architecture with interraptable scripting(courutines)

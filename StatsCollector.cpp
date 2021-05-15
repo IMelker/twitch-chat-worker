@@ -28,6 +28,7 @@ StatsCollector::~StatsCollector() = default;
 
 void StatsCollector::so_define_agent() {
     so_subscribe_self().event(&StatsCollector::evtIRCMetrics);
+    so_subscribe_self().event(&StatsCollector::evtIRCClientChannelsMetrics);
     so_subscribe(publisher).event(&StatsCollector::evtRecvMessageMetric);
     so_subscribe_self().event(&StatsCollector::evtSendMessageMetric);
     so_subscribe_self().event(&StatsCollector::evtCHPoolMetric);
@@ -54,6 +55,10 @@ void StatsCollector::evtIRCMetrics(mhood_t<Irc::SessionMetrics> evt) {
         sessionStats.resize(evt->id + 1);
     }
     sessionStats[evt->id] += evt->stats;
+}
+
+void StatsCollector::evtIRCClientChannelsMetrics(so_5::mhood_t<Irc::ClientChannelsMetrics> evt) {
+    ircClientChannels[evt->nick] = std::move(evt->channelsToSession);
 }
 
 void StatsCollector::evtRecvMessageMetric(so_5::mhood_t<Chat::Message> evt) {
@@ -115,11 +120,29 @@ void StatsCollector::evtHttpDbStats(so_5::mhood_t<hreq::stats::db> evt) {
 }
 
 void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
-    auto dumpAccountWithSessions = [](const std::vector<IRCStatistic>& stats) {
+    auto dumpAccountWithSessions = [](const std::vector<IRCStatistic>& stats, const Irc::ChannelsToSessionId& channels) {
         json res = json::object();
+        std::string curId;
+        bool hasUnattached = false;
         for (size_t i = 0; i < stats.size(); ++i) {
-            res[std::to_string(i)] = ircStatisticToJson(stats[i]);
+            auto &session = res[std::to_string(i)] = ircStatisticToJson(stats[i]);
+            auto &joinedTo = session["channels"] = json::array();
+            for (auto &[name, id]: channels) {
+                if (id == i)
+                    joinedTo.push_back(name);
+                if (id == -1u)
+                    hasUnattached = true;
+            }
         }
+
+        if (hasUnattached) {
+            auto& unattached = res["unattached_channels"] = json::array();
+            for (auto &[name, id]: channels) {
+                if (id == -1u)
+                    unattached.push_back(name);
+            }
+        }
+
         return res;
     };
 
@@ -137,15 +160,15 @@ void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
             return send_http_resp(http, evt, 400, resp("Invalid accounts type"));
 
         if (accounts.empty()) {
-            for (auto [nick, account]: ircStats)
-                body[nick] = dumpAccountWithSessions(account);
+            for (auto [nick, stats]: ircStats)
+                body[nick] = dumpAccountWithSessions(stats, ircClientChannels[nick]);
             ircStats.clear();
         } else {
             for (const auto &account: accounts) {
                 auto nick = account.get<std::string>();
                 auto it = ircStats.find(nick);
                 if (it != ircStats.end()) {
-                    body[nick] = dumpAccountWithSessions(it->second);
+                    body[nick] = dumpAccountWithSessions(it->second, ircClientChannels[nick]);
                     ircStats.erase(it);
                 } else {
                     body[nick] = json::object();

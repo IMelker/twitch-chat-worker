@@ -47,6 +47,7 @@ class StatsCollector final : public so_5::agent_t
 
     // event handlers
     void evtIRCMetrics(so_5::mhood_t<Irc::SessionMetrics> evt);
+    void evtIRCClientChannelsMetrics(so_5::mhood_t<Irc::ClientChannelsMetrics> evt);
     void evtRecvMessageMetric(so_5::mhood_t<Chat::Message> evt);
     void evtSendMessageMetric(so_5::mhood_t<Chat::SendMessage> evt);
     void evtCHPoolMetric(so_5::mhood_t<Storage::CHPoolMetrics> evt);
@@ -65,6 +66,7 @@ class StatsCollector final : public so_5::agent_t
     const std::shared_ptr<DBController> db;
 
     IRCStatistic allIrcStats;
+    std::map<std::string, Irc::ChannelsToSessionId> ircClientChannels;
     std::map<std::string, std::vector<IRCStatistic>> ircStats;
     std::map<std::string, ChannelStats> channelsStats;
     std::vector<CHConnection::CHStatistics> chPoolStats;

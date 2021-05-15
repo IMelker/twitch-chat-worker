@@ -5,6 +5,7 @@
 #include "Logger.h"
 #include "../DBController.h"
 #include "IRCChannelList.h"
+#include "IRCSession.h"
 
 inline void fillChannelsMap(const std::shared_ptr<DBController> db, std::map<std::string, Channel>& target) {
     auto list = db->loadChannels();
@@ -91,4 +92,18 @@ void IRCChannelList::detachFromSession(IRCSession *session) {
 bool IRCChannelList::inList(const std::string &name) {
     std::lock_guard lg(mutex);
     return channels.find(name) != channels.end();
+}
+
+IRCChannelList::ChannelsToSessionId IRCChannelList::dumpChannelsToSessionId() {
+    ChannelsToSessionId res;
+    {
+        std::lock_guard lg(mutex);
+        res.reserve(channels.size());
+        std::transform(channels.begin(), channels.end(), std::back_inserter(res), [] (const auto& pair) {
+            const auto &[name, channel] = pair;
+            auto *session = channel.getSession();
+            return std::make_pair(name, session ? session->getId() : -1/*max unsigned int*/);
+        });
+    }
+    return res;
 }

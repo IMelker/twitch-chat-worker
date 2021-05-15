@@ -14,7 +14,7 @@
 #include "IRCSession.h"
 #include "IRCSelector.h"
 
-#define SELECT_DELAY 1000
+#define SELECT_DELAY_MS 100
 
 IRCSelector::IRCSelector(size_t id, Logger *logger) : id(id), logger(logger) {
     thread = std::thread(&IRCSelector::run, this);
@@ -54,8 +54,8 @@ void IRCSelector::run() {
     while (!SysSignal::serviceTerminated()) {
         maxfd = 0;
 
-        tv.tv_sec = SELECT_DELAY / 1000;
-        tv.tv_usec = (SELECT_DELAY % 1000) * 1000;
+        tv.tv_sec = SELECT_DELAY_MS / 1000;
+        tv.tv_usec = (SELECT_DELAY_MS % 1000) * 1000;
 
         // Init sets
         FD_ZERO(&in_set);

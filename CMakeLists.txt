@@ -102,7 +102,7 @@ set(COMMON_SOURCES
         common/Logger.h common/Logger.cpp common/LoggerFactory.h
         common/Utils.h common/Utils.cpp
         common/Timer.h common/Timer.cpp
-        common/Clock.h)
+        common/Clock.h common/ScopeExec.h)
 
 set(DB_SOURCES
         db/DBConnectionLock.h

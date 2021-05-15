@@ -6,6 +6,7 @@
 #define CHATCONTROLLER_COMMON_THREADNAME_H_
 
 #include <cassert>
+#include <cstring>
 #include <thread>
 #include <pthread.h>
 

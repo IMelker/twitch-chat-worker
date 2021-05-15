@@ -3,11 +3,12 @@
 //
 
 #include "ThreadPool.h"
+#include "ThreadName.h"
 
 // the constructor just launches some amount of workers
 ThreadPool::ThreadPool(size_t threads) : stop(false) {
     for (size_t i = 0; i < threads; ++i) {
-        this->workers.emplace_back([this] () {
+        auto &thread = this->workers.emplace_back([this] () {
             for (;;) {
                 std::packaged_task<void()> task;
 
@@ -27,6 +28,7 @@ ThreadPool::ThreadPool(size_t threads) : stop(false) {
                 }
             }
         });
+        set_thread_name(thread, "thread_pool_" + std::to_string(i));
     }
 }
 

@@ -5,6 +5,7 @@
 #include <exception>
 
 #include "../../common/Logger.h"
+#include "../../common/ThreadName.h"
 #include "../details/details.h"
 #include "HTTPServer.h"
 #include "HTTPListener.h"
@@ -67,7 +68,8 @@ bool HTTPServer::start() {
     // Run the I/O service on the requested number of threads
     ioRunners.reserve(config.threads);
     for (unsigned int i = 0; i < config.threads; ++i) {
-        ioRunners.emplace_back([&ioc = this->ioc] { ioc.run(); });
+        auto &thread = ioRunners.emplace_back([&ioc = this->ioc] { ioc.run(); });
+        set_thread_name(thread, "http_runner_" + std::to_string(i));
     }
     logger->logInfo("HTTPServer Started listening on {}:{} on {} threads", config.host, config.port, config.threads);
     return true;

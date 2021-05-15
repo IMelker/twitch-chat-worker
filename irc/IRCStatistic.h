@@ -5,6 +5,8 @@
 #ifndef IRCTEST__IRCSTATISTIC_H_
 #define IRCTEST__IRCSTATISTIC_H_
 
+#include <vector>
+
 #include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
@@ -58,12 +60,18 @@ struct IRCStatistic
 };
 
 namespace Irc {
+using ChannelsToSessionId = std::vector<std::pair<std::string, unsigned int>>;
 struct SessionMetrics {
     unsigned int id = 0;
     std::string nick;
     IRCStatistic stats;
 };
+struct ClientChannelsMetrics {
+    const std::string nick;
+    mutable ChannelsToSessionId channelsToSession;
+};
 }
+
 
 inline json ircStatisticToJson(const IRCStatistic& stats) {
     json res = json::object();

@@ -42,6 +42,7 @@ class IRCChannelList
   public:
     using Channels = std::map<std::string, Channel>;
     using Sessions = std::vector<std::shared_ptr<IRCSession>>;
+    using ChannelsToSessionId = std::vector<std::pair<std::string, unsigned int>>;
 
   public:
     IRCChannelList(const Sessions& sessions, const IRCClientConfig& cliConfig, std::shared_ptr<Logger> logger,  std::shared_ptr<DBController> db);
@@ -56,6 +57,8 @@ class IRCChannelList
 
     void detachFromSession(IRCSession *session);
     std::vector<std::string> attachToSession(IRCSession *session);
+
+    ChannelsToSessionId dumpChannelsToSessionId();
 
   private:
     const Sessions & sessions;

@@ -5,6 +5,7 @@
 #include <chrono>
 
 #include "SysSignal.h"
+#include "ThreadName.h"
 #include "Timer.h"
 #include "Clock.h"
 
@@ -12,6 +13,7 @@
 
 Timer::Timer() : active(true) {
     thread = std::thread(&Timer::run, this);
+    set_thread_name(thread, "timer");
 }
 
 Timer::~Timer() {
