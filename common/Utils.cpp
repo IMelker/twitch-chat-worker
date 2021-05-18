@@ -39,11 +39,6 @@ bool toBool(std::string_view str) {
     return str == "t";
 }
 
-std::string uuid() {
-    static auto generator = boost::uuids::random_generator();
-    return boost::uuids::to_string(generator());
-}
-
 }
 
 namespace Utils::UUIDv4

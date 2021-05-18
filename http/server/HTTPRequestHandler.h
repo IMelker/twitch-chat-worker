@@ -5,11 +5,11 @@
 #ifndef CHATCONTROLLER_HTTP_SERVER_HTTPREQUESTHANDLER_H_
 #define CHATCONTROLLER_HTTP_SERVER_HTTPREQUESTHANDLER_H_
 
-#include "HTTPSession.h"
+#include "HTTPServerSession.h"
 
 struct HTTPRequestHandler
 {
-    virtual void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) = 0;
+    virtual void handleRequest(http::request<http::string_body> &&req, HTTPServerSession::SendLambda &&send) = 0;
 };
 
 #endif //CHATCONTROLLER_HTTP_SERVER_HTTPREQUESTHANDLER_H_

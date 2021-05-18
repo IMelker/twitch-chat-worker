@@ -14,15 +14,18 @@ if (Boost_FOUND)
     include_directories(details)
 
     add_library(httpserver STATIC
-            details/details.h
+            details/Details.h
             server/HTTPServer.cpp server/HTTPServer.h
             server/HTTPListener.cpp server/HTTPListener.h
-            server/HTTPSession.cpp server/HTTPSession.h
-            server/HTTPServerCertificate.h
+            server/HTTPServerSession.cpp server/HTTPServerSession.h
+            details/RootCertificates.h
             server/HTTPRequestHandler.h)
+
     add_library(httpclient STATIC
-            details/details.h
-            client/HTTPClient.cpp client/HTTPClient.h )
+            client/HTTPClient.cpp client/HTTPClient.h
+            client/HTTPClientSession.cpp client/HTTPClientSession.h
+            client/HTTPRequestFactory.h
+            client/HTTPRequest.h)
 
     target_link_libraries(httpserver nlohmann_json ${Boost_LIBRARIES})
     target_link_libraries(httpclient ${Boost_LIBRARIES})

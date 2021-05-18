@@ -10,6 +10,8 @@
 #include "Logger.h"
 #include "ThreadName.h"
 
+#include "../HttpNotifier.h"
+
 #include "IRCSelectorPool.h"
 #include "IRCClient.h"
 #include "IRCSession.h"
@@ -333,6 +335,7 @@ void IRCClient::onDisconnected(IRCSession *session) {
     logger->logInfo("{} IRCSession({}) Disconnected. Trying to reconnect",
                     loggerTag, fmt::ptr(session));
 
+    so_5::send<SlackNotifier::Notify>(GET_NOTIFIER_MBOX(), "error", fmt::format("{} session {} disconnected", loggerTag, session->getId()));
     so_5::send<Connect>(so_direct_mbox(), session, 0);
 }
 

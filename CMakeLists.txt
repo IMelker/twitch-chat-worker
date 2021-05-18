@@ -81,6 +81,7 @@ include_directories(common)
 set(SOURCES
         main.cpp
         HttpController.h HttpController.cpp
+        HttpNotifier.h HttpNotifier.cpp
         Controller.h Controller.cpp
         DBController.h DBController.cpp
         MessageProcessor.h MessageProcessor.cpp
@@ -98,11 +99,15 @@ set(COMMON_SOURCES
         common/Options.h common/Options.cpp
         common/Config.h common/Config.cpp
         common/ThreadPool.h common/ThreadPool.cpp
+        common/ThreadName.h
         common/BufferStatic.h
         common/Logger.h common/Logger.cpp common/LoggerFactory.h
         common/Utils.h common/Utils.cpp
         common/Timer.h common/Timer.cpp
-        common/Clock.h common/ScopeExec.h)
+        common/Clock.h
+        common/ScopeExec.h
+        common/URI.cpp common/URI.h
+        common/Exception.h  common/Exception.cpp)
 
 set(DB_SOURCES
         db/DBConnectionLock.h
@@ -122,13 +127,15 @@ set(IRC_SOURCES
         irc/IRCSelectorPool.h irc/IRCSelectorPool.cpp
         irc/IRCSelector.h irc/IRCSelector.cpp
         irc/IRCController.h irc/IRCController.cpp
-        irc/IRCMessage.h irc/IRCSessionListener.h)
+        irc/IRCMessage.h
+        irc/IRCSessionListener.h
+        irc/IRCSessionInterface.h)
 
 set(BOT_SOURCES
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
         bot/BotConfiguration.h
-        bot/BotEvents.h irc/IRCSessionInterface.h common/ThreadName.h)
+        bot/BotEvents.h)
 
 # executable configuration
 message("\n[executable]")
@@ -150,10 +157,10 @@ target_link_libraries(${APP_BIN_NAME}
         httpserver httpclient ${Boost_LIBRARIES}
         nlohmann_json
         fmt
+        absl::strings
         spdlog
         clickhouse-cpp-lib-static
         ${PostgreSQL_LIBRARIES}
-        absl::strings
         langdetectpp
         pcrecpp
         sol2::sol2 ${LUA_LIBRARIES})

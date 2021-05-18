@@ -23,6 +23,11 @@ inline int set_thread_name(std::thread& th, const std::string& name) {
     return pthread_setname_np(th.native_handle(), name.c_str());
 }
 
+inline int set_thread_name(pthread_t th, const std::string& name) {
+    assert(name.size() <= 16);
+    return pthread_setname_np(th, name.c_str());
+}
+
 inline void set_thread_name(const char * name)
 {
 #ifndef NDEBUG

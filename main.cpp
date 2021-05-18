@@ -17,6 +17,7 @@
 #include "db/pg/PGConnectionPool.h"
 
 #include "HttpController.h"
+#include "HttpNotifier.h"
 #include "DBController.h"
 #include "Controller.h"
 
@@ -93,6 +94,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    DefaultLogger::logInfo(APP_NAME " version: " APP_VERSION " git: "
+                           APP_GIT_HASH " build: " APP_GIT_DATE " gcc-" __VERSION__);
+
     Config config{options.getValue<std::string>("config")};
 
     auto appLogger = LoggerFactory::create(LoggerFactory::config(config, APP));
@@ -111,6 +115,7 @@ int main(int argc, char *argv[]) {
                 auto httpBox = env.create_mbox();
                 env.register_agent_as_coop(env.make_agent<Controller>(httpBox, config, db, appLogger));
                 env.register_agent_as_coop(env.make_agent<HttpController>(httpBox, config, httpLogger));
+                env.register_agent_as_coop(env.make_agent<HttpNotifier>(config, httpLogger));
             },
             [&]( so_5::environment_params_t & params ) {
                 params.error_logger(std::make_shared<So5Logger>(appLogger));
@@ -122,6 +127,7 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
+    // 0. HTTP notifier to slack
     // 0. nginx on server, iptables(only throught nginx and ssh), [graphana, prometheus, http_controll] throught nginx
     // 1. TODO Create prometheus exporter for app
     // 2. TODO fix options, remove useless and add controls

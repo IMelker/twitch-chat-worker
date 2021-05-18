@@ -5,6 +5,7 @@
 #ifndef CHATBOT_COMMON_UTILS_H_
 #define CHATBOT_COMMON_UTILS_H_
 
+#include <cassert>
 #include <vector>
 #include <string>
 #include <string_view>
@@ -12,10 +13,11 @@
 #include <array>
 #include <charconv>
 
-#include "nlohmann/json.hpp"
-
-using json = nlohmann::json;
 using uint128_t = std::pair<uint64_t, uint64_t>;
+
+// helper type for stream visitor
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 namespace Utils::String
 {
@@ -35,7 +37,23 @@ template<typename T = int> T toNumber(std::string_view str) {
 
 bool toBool(std::string_view str);
 
-std::string uuid();
+namespace Number {
+
+inline void appendHex(std::string& str, unsigned value, int width) {
+    assert(width > 0 && width < 64);
+    char buffer[64];
+    std::sprintf(buffer, "%0*X", width, value);
+    str.append(buffer);
+}
+
+inline std::string formatHex(unsigned value, int width)
+{
+    std::string result;
+    appendHex(result, value, width);
+    return result;
+}
+
+}
 
 }
 

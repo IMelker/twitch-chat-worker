@@ -41,7 +41,7 @@ void HttpController::so_define_agent() {
 void HttpController::so_evt_start() {
     set_thread_name("http_controller");
 
-    HTTPControlConfig httpCfg;
+    HTTPServerConfig httpCfg;
     httpCfg.host = config[HTTP_CONTROL]["host"].value_or("localhost");
     httpCfg.port = config[HTTP_CONTROL]["port"].value_or(8080);
     httpCfg.user = config[HTTP_CONTROL]["user"].value_or("admin");
@@ -73,7 +73,7 @@ void HttpController::so_evt_finish() {
         server->stop();
 }
 
-void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
+void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPServerSession::SendLambda &&send) {
     std::vector<std::string_view> path = absl::StrSplit(sv(req.target()), '/', absl::SkipWhitespace());
     if (path.size() < 2)
         return send(HTTPResponseFactory::BadRequest(req, "Invalid path"));

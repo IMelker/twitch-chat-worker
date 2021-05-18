@@ -33,7 +33,7 @@ class HttpController final : public so_5::agent_t, public HTTPRequestHandler
     void so_evt_finish() override;
 
     // implement HTTPRequestHandler
-    void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) override;
+    void handleRequest(http::request<http::string_body> &&req, HTTPServerSession::SendLambda &&send) override;
   private:
     Config &config;
 

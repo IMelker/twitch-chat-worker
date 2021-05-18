@@ -5,9 +5,6 @@
 #ifndef CHATCONTROLLER_COMMON_SCOPEEXEC_H_
 #define CHATCONTROLLER_COMMON_SCOPEEXEC_H_
 
-#ifndef SCOPEEXEC_H_
-#define SCOPEEXEC_H_
-
 #include <type_traits>
 
 template <typename OnCreate, typename OnExit, class Enable = void>
@@ -51,8 +48,5 @@ class ScopeExec<OnCreate, OnExit, typename std::enable_if_t<std::is_void_v<std::
     OnExit onExit;
     bool exitEmitted = false;
 };
-
-#endif // SCOPEEXEC_H_
-
 
 #endif //CHATCONTROLLER_COMMON_SCOPEEXEC_H_

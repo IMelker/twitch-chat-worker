@@ -8,6 +8,8 @@
 
 #define APP "app"
 #define HTTP_CONTROL "control"
+#define HTTP_CLIENT "http_client"
+#define NOTIFIER "notifier"
 #define POSTGRESQL "pg"
 #define CLICKHOUSE "ch"
 #define IRC "irc"

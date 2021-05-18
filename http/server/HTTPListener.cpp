@@ -2,7 +2,7 @@
 // Created by imelker on 21.03.2021.
 //
 
-#include "HTTPSession.h"
+#include "HTTPServerSession.h"
 #include "HTTPListener.h"
 
 HTTPListener::HTTPListener(net::io_context &ioc, tcp::endpoint endpoint,
@@ -60,9 +60,9 @@ void HTTPListener::accept() {
 void HTTPListener::onAccept(beast::error_code ec, tcp::socket socket) {
     if (!ec) { // Create the session and run it
         if (ctx)
-            std::make_shared<HTTPSession>(std::move(socket), ctx, handler, logger)->run();
+            std::make_shared<HTTPServerSession>(std::move(socket), ctx, handler, logger)->run();
         else
-            std::make_shared<HTTPSession>(std::move(socket), handler, logger)->run();
+            std::make_shared<HTTPServerSession>(std::move(socket), handler, logger)->run();
 
         accept(); // Accept another connection
     } else {

@@ -147,7 +147,7 @@ DBController::Channels DBController::loadChannelsFor(const std::string &user) {
                                             "JOIN bot_channel ON bot_account.bot_id = bot_channel.bot_id "
                                             "JOIN accounts ON bot_account.account_id = accounts.id "
                                             "JOIN channel ON bot_channel.channel_id = channel.id "
-                                            "WHERE accounts.username = '{}';", user);
+                                            "WHERE accounts.username = '{}' AND channel.watch = true;", user);
 
     DBController::Channels channels;
     {
@@ -168,7 +168,7 @@ DBController::Channels DBController::loadChannelsFor(const std::string &user) {
 
 DBController::Channels DBController::loadChannelsFor(int accountId) {
     const std::string request = fmt::format("SELECT channel.name FROM channel "
-                                            "WHERE account_id = '{}';", accountId);
+                                            "WHERE account_id = '{}' AND watch = true;", accountId);
 
     DBController::Channels channels;
     {

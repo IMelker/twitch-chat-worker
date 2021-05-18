@@ -30,6 +30,19 @@ log_type = "rotate"
 log_target = "logs/http.log"
 log_level = "trace"
 
+[http_client]
+version = 11
+user_agent = "TLuaBot"
+secure = true
+verify = false
+threads = 1
+cert_file = "ssl/https_cert.pem"
+key_file = "ssl/https_key.pem"
+dh_file = "ssl/https_dh.pem"
+
+[notifier]
+slack_url = "https://hooks.slack.com/services/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"
+
 [irc]
 host = "irc.chat.twitch.tv"
 port = 6667

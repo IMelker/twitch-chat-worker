@@ -13,7 +13,7 @@
 #include <fstream>
 #include <streambuf>
 
-bool readFile(const std::string& filename, std::string& target, std::string& err) {
+inline bool readFile(const std::string& filename, std::string& target, std::string& err) {
     std::ifstream file;
     try {
         file.open(filename);
@@ -45,11 +45,11 @@ bool readFile(const std::string& filename, std::string& target, std::string& err
     depending on your environment Please see the documentation
     accompanying the Beast certificate for more details.
 */
-inline bool loadServerCertificate(boost::asio::ssl::context &ctx,
-                                  std::string &err,
-                                  std::string *certPath = nullptr,
-                                  std::string *keyPath = nullptr,
-                                  std::string *dhPath = nullptr)
+inline bool loadRootCertificates(boost::asio::ssl::context &ctx,
+                                 std::string &err,
+                                 std::string *certPath = nullptr,
+                                 std::string *keyPath = nullptr,
+                                 std::string *dhPath = nullptr)
 {
     // TODO remake readFile cert&pem to boost buffer
 

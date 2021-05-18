@@ -6,13 +6,13 @@
 
 #include "../../common/Logger.h"
 #include "../../common/ThreadName.h"
-#include "../details/details.h"
+#include "../details/Details.h"
+#include "../details/RootCertificates.h"
 #include "HTTPServer.h"
 #include "HTTPListener.h"
-#include "HTTPServerCertificate.h"
 #include "HTTPResponseFactory.h"
 
-HTTPServer::HTTPServer(HTTPControlConfig config, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger)
+HTTPServer::HTTPServer(HTTPServerConfig config, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger)
     : config(std::move(config)),
       logger(std::move(logger)),
       ioc(this->config.threads),
@@ -28,9 +28,9 @@ HTTPServer::HTTPServer(HTTPControlConfig config, HTTPRequestHandler *handler, st
         else
             ctx.set_verify_mode(boost::asio::ssl::verify_none);
 
-        if (std::string err; !loadServerCertificate(ctx, err, &this->config.ssl.cert,
-                                                              &this->config.ssl.key,
-                                                              &this->config.ssl.dh)) {
+        if (std::string err; !loadRootCertificates(ctx, err, &this->config.ssl.cert,
+                                                   &this->config.ssl.key,
+                                                   &this->config.ssl.dh)) {
             this->logger->logCritical("HTTPServer Failed to load SSL certificates: {}", err);
             throw err;
         }
@@ -69,7 +69,7 @@ bool HTTPServer::start() {
     ioRunners.reserve(config.threads);
     for (unsigned int i = 0; i < config.threads; ++i) {
         auto &thread = ioRunners.emplace_back([&ioc = this->ioc] { ioc.run(); });
-        set_thread_name(thread, "http_runner_" + std::to_string(i));
+        set_thread_name(thread, "http_server_" + std::to_string(i));
     }
     logger->logInfo("HTTPServer Started listening on {}:{} on {} threads", config.host, config.port, config.threads);
     return true;
@@ -79,7 +79,7 @@ void HTTPServer::stop() {
     ioc.stop();
 }
 
-void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) {
+void HTTPServer::handleRequest(http::request<http::string_body> &&req, HTTPServerSession::SendLambda &&send) {
     if (!basicAuth.empty()) {
         auto it = req.find("Authorization");
         if (it == req.end()) {

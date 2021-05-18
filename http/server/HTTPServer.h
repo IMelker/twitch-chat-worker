@@ -14,12 +14,12 @@
 #include <boost/beast/ssl.hpp>
 
 #include "HTTPRequestHandler.h"
-#include "HTTPSession.h"
+#include "HTTPServerSession.h"
 
 class Logger;
 class HTTPListener;
 
-struct HTTPControlConfig {
+struct HTTPServerConfig {
     std::string host = "localhost";
     unsigned short port = 8080;
     std::string user;
@@ -37,16 +37,16 @@ struct HTTPControlConfig {
 class HTTPServer : public HTTPRequestHandler
 {
   public:
-    HTTPServer(HTTPControlConfig config, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger);
+    HTTPServer(HTTPServerConfig config, HTTPRequestHandler *handler, std::shared_ptr<Logger> logger);
     ~HTTPServer();
 
     bool start();
     void stop();
 
     // implement HTTPRequestHandler
-    void handleRequest(http::request<http::string_body> &&req, HTTPSession::SendLambda &&send) override;
+    void handleRequest(http::request<http::string_body> &&req, HTTPServerSession::SendLambda &&send) override;
   protected:
-    HTTPControlConfig config;
+    HTTPServerConfig config;
     std::shared_ptr<Logger> logger;
 
     std::string basicAuth;

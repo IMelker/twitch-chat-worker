@@ -13,7 +13,7 @@
 #include <so_5/message.hpp>
 #include <so_5/send_functions.hpp>
 
-#include "http/server/HTTPSession.h"
+#include "http/server/HTTPServerSession.h"
 
 using json = nlohmann::json;
 
@@ -25,7 +25,7 @@ namespace hreq
 struct base
 {
     mutable http::request<http::string_body> req;
-    mutable HTTPSession::SendLambda send;
+    mutable HTTPServerSession::SendLambda send;
 };
 
 struct resp : public base {
