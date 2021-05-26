@@ -95,7 +95,7 @@ class IRCClient final : public so_5::agent_t,
 
     // implementation IRCSessionListener
     void onLoggedIn(IRCSession* session) override;
-    void onDisconnected(IRCSession* session) override;
+    void onDisconnected(IRCSession *session, std::string_view reason) override;
     void onStatistics(IRCSession* session, IRCStatistic&& stats) override;
     void onMessage(IRCMessage &&message) override;
   private:

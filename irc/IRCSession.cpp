@@ -73,7 +73,7 @@ bool IRCSession::connect() {
 }
 
 bool IRCSession::connected() {
-    // IRCSelector thread
+    // IRCSelector && IRCClient thread
     return irc_is_connected(session);
 }
 
@@ -229,7 +229,7 @@ void IRCSession::onDisconnected(std::string_view, std::string_view reason) {
     // clear internal session data
     disconnect();
 
-    listener->onDisconnected(this);
+    listener->onDisconnected(this, reason);
 }
 
 void IRCSession::onSendDataLen(int len) {

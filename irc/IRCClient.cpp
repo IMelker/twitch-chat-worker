@@ -98,6 +98,9 @@ void IRCClient::evtShutdown(so_5::mhood_t<Shutdown>) {
 }
 
 void IRCClient::evtConnect(so_5::mhood_t<Connect> evt) {
+    if (evt->session->connected())
+        return;
+
     if (evt->session->connect()) {
         logger->logInfo("{} IRCSession({}) Successfully connected to {} with username: {}, password: {}",
                         loggerTag, fmt::ptr(evt->session), conConfig.host, cliConfig.nick, cliConfig.password);
@@ -116,7 +119,7 @@ void IRCClient::evtConnect(so_5::mhood_t<Connect> evt) {
     logger->logWarn("{} IRCSession({}) Failed to connect. Reconnection after {} seconds",
                     loggerTag, fmt::ptr(evt->session), 2 * evt->attempt);
 
-    so_5::send_delayed(so_direct_mbox(), std::chrono::seconds(2 * evt->attempt), evt);
+    so_5::send_delayed(so_direct_mbox(), std::chrono::seconds(1 << evt->attempt), evt);
 }
 
 void IRCClient::evtReload(so_5::mhood_t<Reload> evt) {
@@ -329,13 +332,15 @@ void IRCClient::onLoggedIn(IRCSession *session) {
     );
 }
 
-void IRCClient::onDisconnected(IRCSession *session) {
+void IRCClient::onDisconnected(IRCSession *session, std::string_view reason) {
     channels.detachFromSession(session);
 
     logger->logInfo("{} IRCSession({}) Disconnected. Trying to reconnect",
                     loggerTag, fmt::ptr(session));
 
-    so_5::send<SlackNotifier::Notify>(GET_NOTIFIER_MBOX(), "error", fmt::format("{} session {} disconnected", loggerTag, session->getId()));
+    so_5::send<SlackNotifier::Notify>(GET_NOTIFIER_MBOX(), SlackNotifier::Type::Warning,
+                                      fmt::format("IRCClient[{}/{}] Disconnected: {}",
+                                                  cliConfig.nick, session->getId(), reason));
     so_5::send<Connect>(so_direct_mbox(), session, 0);
 }
 

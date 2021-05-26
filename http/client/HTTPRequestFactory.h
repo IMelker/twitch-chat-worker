@@ -7,7 +7,6 @@
 
 #include <string>
 #include <string_view>
-#include <iostream>
 #include <map>
 
 #include <boost/beast.hpp>
@@ -59,8 +58,6 @@ struct HTTPRequestFactory {
             request->body() = body;
             request->content_length(body.size());
         }
-
-        std::cout << request.native() << std::endl;
 
         return request;
     }

@@ -47,7 +47,17 @@ struct So5Logger final : public so_5::error_logger_t
 {
     explicit So5Logger(std::shared_ptr<Logger> logger) : logger(std::move(logger)) {}
     void log(const char * file_name, unsigned int line, const std::string & message) override {
-        logger->logError("{}:{} {}", file_name, line, message);
+        logger->logError("[So5Logger] {}:{} {}", file_name, line, message);
+    }
+  private:
+    std::shared_ptr<Logger> logger;
+};
+
+struct So5MessageTrace : public so_5::msg_tracing::tracer_t {
+  public:
+    explicit So5MessageTrace(std::shared_ptr<Logger> logger) : logger(std::move(logger)) {}
+    void trace(const std::string &what) noexcept override {
+        logger->logWarn("[So5MessageTrace] {}", what);
     }
   private:
     std::shared_ptr<Logger> logger;
@@ -119,6 +129,14 @@ int main(int argc, char *argv[]) {
             },
             [&]( so_5::environment_params_t & params ) {
                 params.error_logger(std::make_shared<So5Logger>(appLogger));
+                params.message_delivery_tracer(std::make_unique<So5MessageTrace>(appLogger));
+
+                // Setup filter which enables only messages with null event_handler_data_ptr.
+                params.message_delivery_tracer_filter(so_5::msg_tracing::make_filter(
+                    [](const so_5::msg_tracing::trace_data_t & td) {
+                        const auto h = td.event_handler_data_ptr();
+                        return h && (nullptr == *h);
+                }));
             });
     }
     catch (const std::exception &e) {
@@ -127,8 +145,7 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
-    // 0. HTTP notifier to slack
-    // 0. nginx on server, iptables(only throught nginx and ssh), [graphana, prometheus, http_controll] throught nginx
+    // 0. iptables(only throught nginx and ssh), [graphana, prometheus, http_controll] throught nginx
     // 1. TODO Create prometheus exporter for app
     // 2. TODO fix options, remove useless and add controls
 
@@ -138,7 +155,6 @@ int main(int argc, char *argv[]) {
     // TODO change architecture with interraptable scripting(courutines)
     // TODO BotEngine timer events
     // TODO add timer and timer event to bot
-    // TODO move language detect to BOTEngine (?) // to decrease cpu usage
     // TODO add statistics for StatsCollector
 
     // Global
@@ -148,6 +164,8 @@ int main(int argc, char *argv[]) {
     // TODO add TwitchAPI
     // TODO add smileys detection for messages
     // TODO add key value storage
+
+    // TODO make web admin
 
     // Blockings and users
     // TODO blocked date for bot

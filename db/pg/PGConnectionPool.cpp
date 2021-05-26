@@ -29,17 +29,18 @@ std::shared_ptr<DBConnection> PGConnectionPool::createConnection() {
 
 std::string PGConnectionPool::statsDump() {
     json body = json::object();
-
+    auto& conns = body["connections"] = json::array();
     for(size_t i = 0; i < all.size(); ++i) {
         const auto &stats = all[i]->getStats();
-        auto &conn = body[std::to_string(i)] = json::object();
+        auto conn = json::object();
+        conn["id"] = i;
         conn["reconnects"] = {{"updated", stats.connects.updated.load(std::memory_order_relaxed)},
                               {"attempts", stats.connects.attempts.load(std::memory_order_relaxed)}};
         conn["requests"] = {{"updated", stats.requests.updated.load(std::memory_order_relaxed)},
                             {"count", stats.requests.count.load(std::memory_order_relaxed)},
                             {"failed", stats.requests.failed.load(std::memory_order_relaxed)},
                             {"rtt", stats.requests.rtt.load(std::memory_order_relaxed)}};
+        conns.push_back(std::move(conn));
     }
-
     return body.dump();
 }

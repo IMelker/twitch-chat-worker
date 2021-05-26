@@ -102,13 +102,15 @@ void StatsCollector::evtHttpIrcBots(so_5::mhood_t<hreq::stats::bot> evt) {
 }
 
 void StatsCollector::evtHttpStorageStats(so_5::mhood_t<hreq::stats::storage> evt) {
-    json body = json::object();
+    auto body = json::object();
+    auto& conns = body["connections"] = json::array();
     for(size_t i = 0; i < chPoolStats.size(); ++i) {
         const auto &stats = chPoolStats[i];
-        body[std::to_string(i)] = {{"count", stats.count},
-                                   {"rows", stats.rows},
-                                   {"failed", stats.failed},
-                                   {"rtt", stats.rtt}};
+        conns.push_back({{"id", i},
+                         {"count", stats.count},
+                         {"rows", stats.rows},
+                         {"failed", stats.failed},
+                         {"rtt", stats.rtt}});
     }
     chPoolStats.clear();
 
@@ -120,12 +122,15 @@ void StatsCollector::evtHttpDbStats(so_5::mhood_t<hreq::stats::db> evt) {
 }
 
 void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
-    auto dumpAccountWithSessions = [](const std::vector<IRCStatistic>& stats, const Irc::ChannelsToSessionId& channels) {
+    auto dumpAccountWithSessions = [this] (const std::vector<IRCStatistic>& stats, const std::string& nick) {
+        const auto& channels = ircClientChannels[nick];
+
         json res = json::object();
-        std::string curId;
+        res["nick"] = nick;
+        auto &sessions = res["sessions"] = json::array();
         bool hasUnattached = false;
         for (size_t i = 0; i < stats.size(); ++i) {
-            auto &session = res[std::to_string(i)] = ircStatisticToJson(stats[i]);
+            auto session = ircStatisticToJson(stats[i]);
             auto &joinedTo = session["channels"] = json::array();
             for (auto &[name, id]: channels) {
                 if (id == i)
@@ -133,6 +138,8 @@ void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
                 if (id == -1u)
                     hasUnattached = true;
             }
+            session["id"] = i;
+            sessions.push_back(std::move(session));
         }
 
         if (hasUnattached) {
@@ -159,19 +166,20 @@ void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
         if (!accounts.is_array())
             return send_http_resp(http, evt, 400, resp("Invalid accounts type"));
 
+        auto& clients = body["accounts"] = json::array();
         if (accounts.empty()) {
-            for (auto [nick, stats]: ircStats)
-                body[nick] = dumpAccountWithSessions(stats, ircClientChannels[nick]);
+            for (auto &[nick, stats]: ircStats)
+                clients.push_back(dumpAccountWithSessions(stats, nick));
             ircStats.clear();
         } else {
             for (const auto &account: accounts) {
                 auto nick = account.get<std::string>();
                 auto it = ircStats.find(nick);
                 if (it != ircStats.end()) {
-                    body[nick] = dumpAccountWithSessions(it->second, ircClientChannels[nick]);
+                    clients.push_back(dumpAccountWithSessions(it->second, nick));
                     ircStats.erase(it);
                 } else {
-                    body[nick] = json::object();
+                    clients.push_back({"nick", nick});
                 }
             }
         }
@@ -181,8 +189,9 @@ void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
 }
 
 void StatsCollector::evtHttpChannelsStats(so_5::mhood_t<hreq::stats::channel> evt) {
-    auto statsToJson = [] (auto&& stats) {
+    auto statsToJson = [] (const std::string& name, auto&& stats) {
         json channel = json::object();
+        channel["name"] = name;
         channel["in"]["count"] = stats.in.count;
         channel["out"]["count"] = stats.out.count;
         channel["updated"] = stats.updated;
@@ -191,27 +200,28 @@ void StatsCollector::evtHttpChannelsStats(so_5::mhood_t<hreq::stats::channel> ev
     };
 
     json body = json::object();
+    auto &channels = body["channels"] = json::array();
     if (evt->req.body().empty()) {
         for(auto &[name, stats]: channelsStats)
-            body[name] = statsToJson(stats);
+            channels.push_back(statsToJson(name, stats));
         channelsStats.clear();
     } else {
         json req = json::parse(evt->req.body(), nullptr, false, true);
         if (req.is_discarded())
             return send_http_resp(http, evt, 400, resp("Failed to parse JSON"));
 
-        const auto &channels = req["channels"];
-        if (!channels.is_array())
+        const auto &list = req["channels"];
+        if (!list.is_array())
             return send_http_resp(http, evt, 400, resp("Invalid channels type"));
 
-        for (const auto &channel: channels) {
+        for (const auto &channel: list) {
             auto chan = channel.get<std::string>();
             auto it = channelsStats.find(chan);
             if (it != channelsStats.end()) {
-                body[chan] = statsToJson(it->second);
+                channels.push_back(statsToJson(chan, it->second));
                 channelsStats.erase(it);
             } else {
-                body[chan] = statsToJson(ChannelStats{});
+                channels.push_back(statsToJson(chan, ChannelStats{}));
             }
         }
     }

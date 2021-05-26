@@ -56,17 +56,22 @@ void HttpNotifier::so_evt_start() {
     shutdownCheckTimer = so_5::send_periodic<HttpNotifier::ShutdownCheck>(so_direct_mbox(),
                                                                           std::chrono::seconds(1),
                                                                           std::chrono::seconds(1));
-    so_5::send<SlackNotifier::Notify>(self, "trace", "Application started: \"" APP_BIN_NAME "\"");
+
+    if (canSendSlack()) client->exec(slack.notify(SlackNotifier::Type::Trace, "Application started: \"" APP_BIN_NAME "\""));
 }
 
 void HttpNotifier::so_evt_finish() {
-    if (client) client->exec(slack.notify("trace", "Application shutdown: \"" APP_BIN_NAME "\""));
+    if (canSendSlack()) client->exec(slack.notify(SlackNotifier::Type::Trace, "Application shutdown: \"" APP_BIN_NAME "\""));
 }
 
 void HttpNotifier::evtSlackText(so_5::mhood_t<SlackNotifier::Text> evt) {
-    if (client) client->exec(slack.text(evt->text));
+    if (canSendSlack()) client->exec(slack.text(evt->text));
 }
 
 void HttpNotifier::evtSlackNotify(so_5::mhood_t<SlackNotifier::Notify> evt) {
-    if (client) client->exec(slack.notify(evt->type, evt->text));
+    if (canSendSlack()) client->exec(slack.notify(evt->type, evt->text));
+}
+
+bool HttpNotifier::canSendSlack() const {
+    return client && slack.valid();
 }
