@@ -145,17 +145,25 @@ int main(int argc, char *argv[]) {
     }
     return UNIT_OK;
 
-    // 0. iptables(only throught nginx and ssh), [graphana, prometheus, http_controll] throught nginx
-    // 1. TODO Create prometheus exporter for app
-    // 2. TODO fix options, remove useless and add controls
-
-    // Lua test app with 2 threads communication
-
     // BotEngine
-    // TODO change architecture with interraptable scripting(courutines)
+    // TODO change architecture for "precompiled" event handlers and lua executables
+    // TODO change architecture with interruptable scripting(courutines)
+    // TODO BotEnvironment add http request event
+    // TODO BotEnvironment custom global event
     // TODO BotEngine timer events
     // TODO add timer and timer event to bot
     // TODO add statistics for StatsCollector
+
+    // TODO Make bot answers faster
+    // 0. TODO add timers for round trip time in chatcontroller
+    // 0. TODO fast multithread mbox find for bot
+    // 1. TODO remove BotEnvrionment from (MessageProcessor->BotEnvrionment->BotEngine) chain
+    // 2. TODO remake ignored for answer nicknames
+    // 3. TODO split IRCSelector for read and write threads (?)
+
+    // TODO fix options, remove useless and add controls
+
+    // TODO fix multiple bots on one channel loop
 
     // Global
     // TODO Review accounts, channels, bots logic

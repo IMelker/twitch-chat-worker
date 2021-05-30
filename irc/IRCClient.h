@@ -39,6 +39,9 @@ class IRCClient final : public so_5::agent_t,
     struct SendPING { IRCSession *session = nullptr; std::string host; };
     struct SendMessage { std::string channel; std::string text; };
     struct SendIRC { std::string message; };
+    struct GatherStats final : so_5::signal_t {};
+    struct ChannelJoined {IRCSession *session = nullptr; std::string channel;};
+    struct CheckJoinedChannels { IRCSession *session = nullptr; std::vector<std::string> channels; };
   public:
     IRCClient(const context_t &ctx,
               so_5::mbox_t statsCollector,
@@ -67,9 +70,13 @@ class IRCClient final : public so_5::agent_t,
     void evtLoggedInCheck(so_5::mhood_t<LoggedInCheck> evt);
     void evtJoinChannel(so_5::mhood_t<JoinChannel> evt);
     void evtLeaveChannel(so_5::mhood_t<LeaveChannel> evt);
-    void evtSendMessage(so_5::mhood_t<SendMessage> message);
-    void evtSendIRC(so_5::mhood_t<SendIRC> irc);
-    void evtSendPING(so_5::mhood_t<SendPING> ping);
+    void evtSendMessage(so_5::mhood_t<SendMessage> evt);
+    void evtSendIRC(so_5::mhood_t<SendIRC> evt);
+    void evtSendPING(so_5::mhood_t<SendPING> evt);
+
+    void evtGatherStats(so_5::mhood_t<GatherStats> evt);
+    void evtChannelJoined(so_5::mhood_t<ChannelJoined> evt);
+    void evtCheckJoinedChannels(so_5::mhood_t<CheckJoinedChannels> evt);
 
     // IRCSessionInterface implementation
     bool sendQuit(const std::string &reason) override;
@@ -94,10 +101,11 @@ class IRCClient final : public so_5::agent_t,
     bool sendRaw(const std::string &raw) override;
 
     // implementation IRCSessionListener
-    void onLoggedIn(IRCSession* session) override;
     void onDisconnected(IRCSession *session, std::string_view reason) override;
-    void onStatistics(IRCSession* session, IRCStatistic&& stats) override;
+    void onLoggedIn(IRCSession* session) override;
     void onMessage(IRCMessage &&message) override;
+    void onJoined(IRCSession *session, std::string_view channel) override;
+    void onStatistics(IRCSession* session, IRCStatistic&& stats) override;
   private:
     void addNewSession();
     void joinToChannel(const std::string &name, IRCSession *session);
@@ -107,6 +115,7 @@ class IRCClient final : public so_5::agent_t,
 
     so_5::mbox_t statsCollector;
     so_5::mbox_t processor;
+    so_5::timer_id_t statsTimer;
 
     const IRCConnectionConfig conConfig;
     IRCClientConfig cliConfig;

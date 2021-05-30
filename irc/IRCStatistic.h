@@ -76,8 +76,8 @@ struct ClientChannelsMetrics {
 inline json ircStatisticToJson(const IRCStatistic& stats) {
     json res = json::object();
     res["connects"] = {
-        {"success", stats.connects.success},
         {"failed", stats.connects.failed},
+        {"success", stats.connects.success},
         {"loggedin", stats.connects.loggedin}
     };
     res["commands"] = {

@@ -24,6 +24,8 @@ class Channel {
 
     Channel(Channel && other) = default;
 
+    void setJoined(bool join = true) { joined = join; };
+
     void attach(IRCSession *irc) { session = irc; }
     void detach() { session = nullptr; }
 
@@ -32,9 +34,11 @@ class Channel {
 
     [[nodiscard]] const std::string& getName() const { return name; }
     [[nodiscard]] IRCSession * getSession() const { return session; }
+    [[nodiscard]] bool getJoined() const { return joined; }
   private:
     std::string name;
     IRCSession *session = nullptr;
+    bool joined = false;
 };
 
 class IRCChannelList
@@ -52,11 +56,13 @@ class IRCChannelList
 
     bool inList(const std::string& name);
     void addChannel(Channel channel);
-    std::optional<Channel> extractChannel(const std::string& name);
     void removeChannel(const std::string& name);
+    void markChannelJoined(const std::string& name);
+    std::vector<std::string> selectNotJoinedChannels(const std::vector<std::string>& checkList);
+    std::optional<Channel> extractChannel(const std::string& name);
 
-    void detachFromSession(IRCSession *session);
-    std::vector<std::string> attachToSession(IRCSession *session);
+    std::vector<std::string> reserveChannelsForSession(IRCSession *session);
+    void detachAndPartFromSession(IRCSession *session);
 
     ChannelsToSessionId dumpChannelsToSessionId();
 

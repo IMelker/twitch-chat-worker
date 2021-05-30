@@ -9,10 +9,11 @@ struct IRCMessage;
 struct IRCStatistic;
 class IRCSession;
 struct IRCSessionListener {
-    virtual void onLoggedIn(IRCSession* session) = 0;
     virtual void onDisconnected(IRCSession *session, std::string_view reason) = 0;
-    virtual void onStatistics(IRCSession* session, IRCStatistic&& stats) = 0;
+    virtual void onLoggedIn(IRCSession* session) = 0;
     virtual void onMessage(IRCMessage &&message) = 0;
+    virtual void onJoined(IRCSession *session, std::string_view channel) = 0;
+    virtual void onStatistics(IRCSession* session, IRCStatistic&& stats) = 0;
 };
 
 #endif //CHATCONTROLLER_IRC_IRCSESSIONLISTENER_H_

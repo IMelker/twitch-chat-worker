@@ -56,12 +56,19 @@ std::optional<Channel> IRCChannelList::extractChannel(const std::string &name) {
     return res;
 }
 
+void IRCChannelList::markChannelJoined(const string &name) {
+    std::lock_guard lg(mutex);
+    auto it = channels.find(name);
+    if (it != channels.end())
+        it->second.setJoined(true);
+}
+
 void IRCChannelList::removeChannel(const std::string &name) {
     std::lock_guard lg(mutex);
     channels.erase(name);
 }
 
-std::vector<std::string> IRCChannelList::attachToSession(IRCSession *session) {
+std::vector<std::string> IRCChannelList::reserveChannelsForSession(IRCSession *session) {
     std::vector<std::string> result;
 
     std::lock_guard lg(mutex);
@@ -82,11 +89,14 @@ std::vector<std::string> IRCChannelList::attachToSession(IRCSession *session) {
     return result;
 }
 
-void IRCChannelList::detachFromSession(IRCSession *session) {
+void IRCChannelList::detachAndPartFromSession(IRCSession *session) {
     std::lock_guard lg(mutex);
-    for (auto &[name, channel]: channels)
-        if (channel.attachedTo(session))
+    for (auto &[name, channel]: channels) {
+        if (channel.attachedTo(session)) {
             channel.detach();
+            channel.setJoined(false);
+        }
+    }
 }
 
 bool IRCChannelList::inList(const std::string &name) {
@@ -106,4 +116,21 @@ IRCChannelList::ChannelsToSessionId IRCChannelList::dumpChannelsToSessionId() {
         });
     }
     return res;
+}
+
+std::vector<std::string> IRCChannelList::selectNotJoinedChannels(const std::vector<std::string> &checkList) {
+    std::vector<std::string> result;
+    auto it = channels.end();
+    {
+        std::lock_guard lg(mutex);
+        for (const auto& channel: checkList) {
+            it = channels.find(channel);
+            if (it != channels.end()) {
+                if (!it->second.getJoined()) {
+                    result.push_back(channel);
+                }
+            }
+        }
+    }
+    return result;
 }

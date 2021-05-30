@@ -80,6 +80,7 @@ void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPS
 
     if (match(0, stats)) {
         match_handle2(stats, irc);
+        match_handle2(stats, account);
         match_handle2(stats, channel);
         match_handle2(stats, bot);
         match_handle2(stats, storage);

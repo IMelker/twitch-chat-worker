@@ -42,13 +42,38 @@ DBController::Users DBController::loadUsersNicknames() {
         std::vector<std::vector<std::string>> res;
         if (dbl->request(request, res)) {
             users.reserve(res.size());
-            std::transform(res.begin(), res.end(), std::back_inserter(users), [] (auto& row) -> std::string&& {
+            std::transform(res.begin(), res.end(), std::inserter(users, users.end()), [] (auto& row) -> std::string&& {
                 return std::move(row[0]);
             });
         }
     }
 
     DefaultLogger::logInfo("DBController {} our users loaded", users.size());
+    return users;
+}
+
+DBController::Users DBController::loadServiceAccountsNicknames() {
+    static const std::string request = "SELECT accounts.username FROM accounts "
+                                       "JOIN account_type ON account_type.id = accounts.account_type_id "
+                                       "WHERE accounts.active = true AND "
+                                       "(account_type.name = 'service' OR account_type.name = 'main');";
+
+    DBController::Users users;
+    {
+        DBConnectionLock dbl(pg);
+        if (!dbl->ping())
+            return users;
+
+        std::vector<std::vector<std::string>> res;
+        if (dbl->request(request, res)) {
+            users.reserve(res.size());
+            std::transform(res.begin(), res.end(), std::inserter(users, users.end()), [] (auto& row) -> std::string&& {
+                return std::move(row[0]);
+            });
+        }
+    }
+
+    DefaultLogger::logInfo("DBController {} service account nicknames loaded", users.size());
     return users;
 }
 

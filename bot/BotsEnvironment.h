@@ -5,10 +5,10 @@
 #ifndef CHATSNIFFER_BOT_BOTENVIRONMENT_H_
 #define CHATSNIFFER_BOT_BOTENVIRONMENT_H_
 
-#include <shared_mutex>
 #include <memory>
 #include <string>
 #include <map>
+#include <unordered_set>
 
 #include <so_5/agent.hpp>
 #include <so_5/coop_handle.hpp>
@@ -40,7 +40,10 @@ class BotsEnvironment final : public so_5::agent_t
     void so_evt_start() override;
     void so_evt_finish() override;
 
+    // bot events
     void evtChatMessage(mhood_t<Chat::Message> msg);
+    //void evtHttpRequest(mhood_t<hreq::api> evt);
+    //void evtCustomGlobal(mhood_t<Bot::Event> evt);
 
     // http events
     void evtHttpAdd(mhood_t<hreq::bot::add> evt);
@@ -54,7 +57,6 @@ class BotsEnvironment final : public so_5::agent_t
     so_5::mbox_t msgSender;
     so_5::mbox_t botLogger;
     so_5::mbox_t http;
-    so_5::coop_handle_t coop;
 
     so_5::disp::adv_thread_pool::dispatcher_handle_t botEnginePool;
     so_5::disp::adv_thread_pool::bind_params_t botEnginePoolParams;
@@ -64,9 +66,10 @@ class BotsEnvironment final : public so_5::agent_t
 
     unsigned int threads;
 
+    // BotEngine's owned by so_5::agent
     std::map<int, BotEngine *> botsById;
     std::map<std::string, so_5::mbox_t> botBoxes;
-    std::vector<std::string> ignoreUsers;
+    std::unordered_set<std::string> ignoreUsers;
 };
 
 #endif //CHATSNIFFER_BOT_BOTENVIRONMENT_H_

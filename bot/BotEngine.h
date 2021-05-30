@@ -9,6 +9,8 @@
 
 #include <so_5/agent.hpp>
 
+#include <sol/sol.hpp>
+
 #include "../ChatMessage.h"
 #include "BotConfiguration.h"
 #include "BotEvents.h"
@@ -36,11 +38,15 @@ class BotEngine final : public so_5::agent_t
     void evtReload(mhood_t<Bot::Reload> message);
     void evtChatMessage(mhood_t<Chat::Message> message);
   private:
+    void initLuaState(sol::state& lua);
+
     so_5::mbox_t self;
     so_5::mbox_t msgSender;
     so_5::mbox_t botLogger;
 
     const std::shared_ptr<Logger> logger;
+
+    sol::state lua;
 
     BotConfiguration config;
 };

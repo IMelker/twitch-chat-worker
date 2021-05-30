@@ -190,6 +190,7 @@ bool IRCSession::sendWhois(const std::string &nick) {
 
 bool IRCSession::sendPing(const std::string &host) {
     sendStats(statsFromSo5Thread);
+
     if (lastPingTime - lastPongTime >= PING_PONG_TIMEOUT_MS) {
         //logger->logError("{} PING/PONG timeout: {}", loggerTag, lastPingTime - lastPongTime);
         onDisconnected("TIMEOUT", fmt::format("PING/PONG timeout: {}", lastPingTime - lastPongTime));
@@ -242,9 +243,9 @@ void IRCSession::onRecvDataLen(int len) {
     statsFromSelectorThread.commands.in.bytes += len;
 }
 
-void IRCSession::onLoggedIn(std::string_view event,
+void IRCSession::onLoggedIn(std::string_view /*event*/,
                             std::string_view origin,
-                            const std::vector<std::string_view> &params) {
+                            const std::vector<std::string_view> &/*params*/) {
     // IRCSelector thread
     logger->logTrace("{} Successfully logged in: {}", loggerTag, origin);
     ++statsFromSelectorThread.connects.loggedin;
@@ -268,6 +269,11 @@ void IRCSession::onQuit(std::string_view event, std::string_view origin, const s
 void IRCSession::onJoin(std::string_view event, std::string_view origin, const std::vector<std::string_view> &params) {
     // IRCSelector thread
     logger->logTrace("{} Event {} received on {}, {{ {} }}", loggerTag, event, origin, absl::StrJoin(params, ", "));
+
+    if (!params.empty()) {
+        listener->onJoined(this, params.front().substr(1/*cut #*/));
+    }
+
     ++statsFromSelectorThread.commands.in.count;
 }
 
@@ -413,8 +419,8 @@ void IRCSession::onDccChatReq(std::string_view nick, std::string_view addr, unsi
 
 void IRCSession::onDccSendReq(std::string_view nick,
                               std::string_view addr,
-                              std::string_view filename,
-                              unsigned long size,
+                              std::string_view /*filename*/,
+                              unsigned long /*size*/,
                               unsigned int dccid) {
     // IRCSelector thread
     logger->logWarn("{} Event DCC_SEND received from {} on {}(dccid={})", loggerTag, nick, addr, dccid);

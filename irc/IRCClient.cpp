@@ -17,9 +17,11 @@
 #include "IRCSession.h"
 
 #define MIN_SESS_COUNT 1
-#define LOGIN_TIMEOUT 3000
-#define PING_DELAY_MS 2000
-#define PING_TIMER(time) std::chrono::milliseconds{time}, std::chrono::milliseconds{time}
+#define LOGIN_TIMEOUT_MS 3000
+#define SESSION_JOIN_TIMEOUT_MS 3000
+#define PING_PERIOD_MS 2000
+#define STATS_PERIOD_MS 5000
+#define PERIODIC_TIMER(time) std::chrono::milliseconds{time}, std::chrono::milliseconds{time}
 
 IRCClient::IRCClient(const context_t &ctx,
                      so_5::mbox_t statsCollector,
@@ -71,7 +73,11 @@ void IRCClient::so_define_agent() {
     so_subscribe_self().event(&IRCClient::evtSendMessage);
     so_subscribe_self().event(&IRCClient::evtSendIRC);
     so_subscribe_self().event(&IRCClient::evtSendPING);
+    so_subscribe_self().event(&IRCClient::evtGatherStats);
     so_subscribe_self().event(&IRCClient::evtLoggedInCheck);
+
+    so_subscribe_self().event(&IRCClient::evtChannelJoined);
+    so_subscribe_self().event(&IRCClient::evtCheckJoinedChannels);
 }
 
 void IRCClient::so_evt_start() {
@@ -83,6 +89,8 @@ void IRCClient::so_evt_start() {
     for (int i = 0; i < count; ++i) {
         addNewSession();
     }
+
+    statsTimer = so_5::send_periodic<GatherStats>(so_direct_mbox(), PERIODIC_TIMER(STATS_PERIOD_MS));
 }
 
 void IRCClient::so_evt_finish() {
@@ -104,7 +112,7 @@ void IRCClient::evtConnect(so_5::mhood_t<Connect> evt) {
     if (evt->session->connect()) {
         logger->logInfo("{} IRCSession({}) Successfully connected to {} with username: {}, password: {}",
                         loggerTag, fmt::ptr(evt->session), conConfig.host, cliConfig.nick, cliConfig.password);
-        so_5::send_delayed<LoggedInCheck>(so_direct_mbox(), std::chrono::milliseconds(LOGIN_TIMEOUT), evt->session);
+        so_5::send_delayed<LoggedInCheck>(so_direct_mbox(), std::chrono::milliseconds(LOGIN_TIMEOUT_MS), evt->session);
         return;
     }
 
@@ -148,7 +156,7 @@ void IRCClient::evtReload(so_5::mhood_t<Reload> evt) {
 
 void IRCClient::evtLoggedInCheck(so_5::mhood_t<LoggedInCheck> evt) {
     if (!evt->session->loggedIn()) {
-        evt->session->onDisconnected("LOGIN_TIMEOUT", fmt::format("Login timeout: {}ms", LOGIN_TIMEOUT));
+        evt->session->onDisconnected("LOGIN_TIMEOUT", fmt::format("Login timeout: {}ms", LOGIN_TIMEOUT_MS));
     }
 }
 
@@ -178,10 +186,36 @@ void IRCClient::evtSendIRC(so_5::mhood_t<SendIRC> irc) {
     }
 }
 
-void IRCClient::evtSendPING(so_5::mhood_t<SendPING> ping) {
-    so_5::send<Irc::ClientChannelsMetrics>(statsCollector, cliConfig.nick, channels.dumpChannelsToSessionId());
+void IRCClient::evtSendPING(so_5::mhood_t<SendPING> evt) {
+    evt->session->sendPing(evt->host);
+}
 
-    ping->session->sendPing(ping->host);
+void IRCClient::evtGatherStats(so_5::mhood_t<GatherStats>) {
+    so_5::send<Irc::ClientChannelsMetrics>(statsCollector, cliConfig.nick, channels.dumpChannelsToSessionId());
+}
+
+void IRCClient::evtChannelJoined(so_5::mhood_t<ChannelJoined> evt) {
+    channels.markChannelJoined(evt->channel);
+}
+
+void IRCClient::evtCheckJoinedChannels(so_5::mhood_t<CheckJoinedChannels> evt) {
+    auto rejoinList = channels.selectNotJoinedChannels(evt->channels);
+    if (rejoinList.empty()) {
+        logger->logInfo("{} IRCSession({}) All {} successfully channels joined",
+                        loggerTag, fmt::ptr(evt->session), evt->channels.size());
+        return;
+    }
+
+    for (auto &channel: rejoinList) {
+        evt->session->sendPart(channel);
+        evt->session->sendJoin(channel);
+    }
+    logger->logWarn("{} IRCSession({}) Some channels failed to join, try to rejoin({})",
+                    loggerTag, fmt::ptr(evt->session), rejoinList.size());
+
+    // init joined channels check
+    so_5::send_delayed<CheckJoinedChannels>(so_direct_mbox(), std::chrono::milliseconds(SESSION_JOIN_TIMEOUT_MS),
+                                            evt->session, std::move(rejoinList));
 }
 
 bool IRCClient::sendQuit(const std::string &reason) {
@@ -320,20 +354,25 @@ IRCSession *IRCClient::getNextConnectedSessionRoundRobin() {
 }
 
 void IRCClient::onLoggedIn(IRCSession *session) {
-    auto joinList = channels.attachToSession(session);
-    for (auto &channel: joinList) {
+    auto reservedChannels = channels.reserveChannelsForSession(session);
+    for (auto &channel: reservedChannels) {
         session->sendJoin(channel);
     }
     logger->logInfo("{} IRCSession({}) logged in. Joining to {} channels",
-                    loggerTag, fmt::ptr(session), joinList.size());
+                    loggerTag, fmt::ptr(session), reservedChannels.size());
 
+    // session is owner of it's send ping timer
     session->setPingTimer(
-        so_5::send_periodic<SendPING>(so_direct_mbox(), PING_TIMER(PING_DELAY_MS), session, "tmi.twitch.tv")
+        so_5::send_periodic<SendPING>(so_direct_mbox(), PERIODIC_TIMER(PING_PERIOD_MS), session, "tmi.twitch.tv")
     );
+
+    // init joined channels check
+    so_5::send_delayed<CheckJoinedChannels>(so_direct_mbox(), std::chrono::milliseconds(SESSION_JOIN_TIMEOUT_MS),
+                                            session, std::move(reservedChannels));
 }
 
 void IRCClient::onDisconnected(IRCSession *session, std::string_view reason) {
-    channels.detachFromSession(session);
+    channels.detachAndPartFromSession(session);
 
     logger->logInfo("{} IRCSession({}) Disconnected. Trying to reconnect",
                     loggerTag, fmt::ptr(session));
@@ -344,11 +383,14 @@ void IRCClient::onDisconnected(IRCSession *session, std::string_view reason) {
     so_5::send<Connect>(so_direct_mbox(), session, 0);
 }
 
-void IRCClient::onStatistics(IRCSession *session, IRCStatistic &&stats) {
-    so_5::send<Irc::SessionMetrics>(statsCollector, session->getId(), cliConfig.nick, std::move(stats));
-}
-
 void IRCClient::onMessage(IRCMessage &&message) {
     so_5::send<IRCMessage>(processor, std::move(message));
 }
 
+void IRCClient::onJoined(IRCSession *session, std::string_view channel) {
+    so_5::send<ChannelJoined>(so_direct_mbox(), session, std::string(channel));
+}
+
+void IRCClient::onStatistics(IRCSession *session, IRCStatistic &&stats) {
+    so_5::send<Irc::SessionMetrics>(statsCollector, session->getId(), cliConfig.nick, std::move(stats));
+}

@@ -57,6 +57,7 @@ class StatsCollector final : public so_5::agent_t
     void evtHttpStorageStats(so_5::mhood_t<hreq::stats::storage> evt);
     void evtHttpDbStats(so_5::mhood_t<hreq::stats::db> evt);
     void evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt);
+    void evtHttpAccountsStats(so_5::mhood_t<hreq::stats::account> evt);
     void evtHttpChannelsStats(so_5::mhood_t<hreq::stats::channel> evt);
   private:
     so_5::mbox_t publisher;

@@ -6,9 +6,10 @@
 #define CHATSNIFFER__DBCONTROLLER_H_
 
 #include <memory>
-#include <vector>
 #include <string>
 #include <map>
+#include <vector>
+#include <unordered_set>
 
 #include "db/pg/PGConnectionPool.h"
 #include "bot/BotConfiguration.h"
@@ -20,7 +21,7 @@ class DBController
   public:
     using Channels = std::vector<std::string>;
     using UpdatedChannels = std::map<std::string, bool>;
-    using Users = std::vector<std::string>;
+    using Users = std::unordered_set<std::string>;
     using Account = IRCClientConfig;
     using Accounts = std::vector<Account>;
     using BotsConfigurations = std::map<int, BotConfiguration>;
@@ -32,6 +33,7 @@ class DBController
     [[nodiscard]] PGConnectionPool *getPGPool() const;
 
     Users loadUsersNicknames();
+    Users loadServiceAccountsNicknames();
     Accounts loadAccounts();
     Account loadAccount(int id);
     Channels loadChannels();

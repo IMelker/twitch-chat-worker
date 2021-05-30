@@ -14,7 +14,6 @@
 #include "ThreadName.h"
 
 #include "../DBController.h"
-#include "BotConfiguration.h"
 #include "BotsEnvironment.h"
 #include "BotEngine.h"
 #include "BotEvents.h"
@@ -31,7 +30,7 @@ BotsEnvironment::BotsEnvironment(const context_t &ctx,
                                  std::shared_ptr<Logger> logger)
     : so_5::agent_t(ctx), publisher(std::move(publisher)), http(std::move(http)),
       db(std::move(db)), logger(std::move(logger)), threads(threads) {
-    ignoreUsers = this->db->loadUsersNicknames();
+    ignoreUsers = this->db->loadServiceAccountsNicknames();
 }
 
 BotsEnvironment::~BotsEnvironment() {
@@ -84,12 +83,16 @@ void BotsEnvironment::addBot(const BotConfiguration &config) {
 }
 
 void BotsEnvironment::evtChatMessage(mhood_t<Chat::Message> msg) {
-    if (!msg->valid || std::find(ignoreUsers.begin(), ignoreUsers.end(), msg->user) != ignoreUsers.end())
+    if (!msg->valid)
+        return;
+
+    // ignore if message user is service account
+    if (ignoreUsers.find(msg->user) != ignoreUsers.end())
         return;
 
     auto it = botBoxes.find(msg->channel);
     if (it != botBoxes.end()) {
-        so_5::send(it->second, msg.make_holder());
+        so_5::send(it->second, msg);
     }
 }
 

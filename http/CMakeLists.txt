@@ -5,7 +5,7 @@ set(Boost_USE_RELEASE_LIBS       ON)  # only find release libs
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 
-find_package(Boost REQUIRED COMPONENTS coroutine system thread)
+find_package(Boost REQUIRED COMPONENTS system thread)
 
 set(BOOST_BEAST_USE_STD_STRING_VIEW ON)
 
@@ -27,6 +27,6 @@ if (Boost_FOUND)
             client/HTTPRequestFactory.h
             client/HTTPRequest.h)
 
-    target_link_libraries(httpserver nlohmann_json ${Boost_LIBRARIES})
-    target_link_libraries(httpclient ${Boost_LIBRARIES})
+    target_link_libraries(httpserver nlohmann_json ${Boost_BEAST_LIBRARY} ${Boost_THREAD_LIBRARY})
+    target_link_libraries(httpclient ${Boost_BEAST_LIBRARY} ${Boost_THREAD_LIBRARY})
 endif()

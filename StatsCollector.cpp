@@ -37,6 +37,7 @@ void StatsCollector::so_define_agent() {
     so_subscribe(http).event(&StatsCollector::evtHttpStorageStats);
     so_subscribe(http).event(&StatsCollector::evtHttpDbStats);
     so_subscribe(http).event(&StatsCollector::evtHttpIrcStats);
+    so_subscribe(http).event(&StatsCollector::evtHttpAccountsStats);
     so_subscribe(http).event(&StatsCollector::evtHttpChannelsStats);
 }
 
@@ -122,11 +123,16 @@ void StatsCollector::evtHttpDbStats(so_5::mhood_t<hreq::stats::db> evt) {
 }
 
 void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
+    json body = ircStatisticToJson(allIrcStats);
+    allIrcStats.clear();
+    send_http_resp(http, evt, 200, body.dump());
+}
+
+void StatsCollector::evtHttpAccountsStats(so_5::mhood_t<hreq::stats::account> evt) {
     auto dumpAccountWithSessions = [this] (const std::vector<IRCStatistic>& stats, const std::string& nick) {
         const auto& channels = ircClientChannels[nick];
 
         json res = json::object();
-        res["nick"] = nick;
         auto &sessions = res["sessions"] = json::array();
         bool hasUnattached = false;
         for (size_t i = 0; i < stats.size(); ++i) {
@@ -138,6 +144,7 @@ void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
                 if (id == -1u)
                     hasUnattached = true;
             }
+            session["nick"] = nick;
             session["id"] = i;
             sessions.push_back(std::move(session));
         }
@@ -155,8 +162,10 @@ void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
 
     json body = json::object();
     if (evt->req.body().empty()) {
-        body = ircStatisticToJson(allIrcStats);
-        allIrcStats.clear();
+        auto& clients = body["accounts"] = json::array();
+        for (auto &[nick, stats]: ircStats)
+            clients.push_back(dumpAccountWithSessions(stats, nick));
+        ircStats.clear();
     } else {
         json req = json::parse(evt->req.body(), nullptr, false, true);
         if (req.is_discarded())
@@ -178,8 +187,6 @@ void StatsCollector::evtHttpIrcStats(so_5::mhood_t<hreq::stats::irc> evt) {
                 if (it != ircStats.end()) {
                     clients.push_back(dumpAccountWithSessions(it->second, nick));
                     ircStats.erase(it);
-                } else {
-                    clients.push_back({"nick", nick});
                 }
             }
         }

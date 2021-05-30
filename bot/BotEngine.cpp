@@ -3,7 +3,6 @@
 //
 
 #include <pcrecpp.h>
-#include <sol/sol.hpp>
 #include <nlohmann/json.hpp>
 #include <so_5/send_functions.hpp>
 
@@ -54,6 +53,8 @@ BotEngine::BotEngine(const context_t &ctx, so_5::mbox_t self, so_5::mbox_t msgSe
 
     this->logger->logInfo("BotEngine bot(id={}) created on user(id={}) for channel: {}",
                            this->config.botId, this->config.userId, this->config.channel);
+
+    initLuaState(lua);
 }
 
 BotEngine::~BotEngine() {
@@ -86,19 +87,11 @@ void BotEngine::evtReload(so_5::mhood_t<Bot::Reload> message) {
 }
 
 void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
-    auto initLuaState = [this, &message] (sol::state& lua) -> bool {
-        lua.open_libraries(sol::lib::base, sol::lib::string, sol::lib::utf8, sol::lib::math);
+    // ignore self messages to avoid looping
+    if (message->user == config.account)
+        return;
 
-        //lua.set_exception_handler(&my_exception_handler);
-
-        auto message_type = lua.new_usertype<Chat::Message>("message");
-        message_type.set("user", sol::readonly(&Chat::Message::user));
-        message_type.set("channel", sol::readonly(&Chat::Message::channel));
-        message_type.set("text", sol::readonly(&Chat::Message::text));
-        message_type.set("lang", sol::readonly(&Chat::Message::lang));
-        message_type.set("timestamp", sol::readonly(&Chat::Message::timestamp));
-        message_type.set("valid", sol::readonly(&Chat::Message::valid));
-
+    auto messageToLua = [this, &message] (sol::state& lua) -> bool {
         auto engine = lua.create_named_table("engine");
         engine["message"] = *message;
 
@@ -113,14 +106,13 @@ void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
         return true;
     };
 
-    sol::state lua;
     bool inited = false;
     for (const auto& handler: config.onMessage) {
         if (!handler.match(*message))
             continue;
 
         if (!inited) {
-            inited = initLuaState(lua);
+            inited = messageToLua(lua);
         }
 
         lua.set("_handler_id", handler.getId());
@@ -131,4 +123,18 @@ void BotEngine::evtChatMessage(mhood_t<Chat::Message> message) {
                                         CurrentTime<std::chrono::system_clock>::milliseconds(), err.what());
         }
     }
+}
+
+void BotEngine::initLuaState(sol::state &lua) {
+    lua.open_libraries(sol::lib::base, sol::lib::string, sol::lib::utf8, sol::lib::math);
+
+    //lua.set_exception_handler(&my_exception_handler);
+
+    auto message_type = lua.new_usertype<Chat::Message>("message");
+    message_type.set("user", sol::readonly(&Chat::Message::user));
+    message_type.set("channel", sol::readonly(&Chat::Message::channel));
+    message_type.set("text", sol::readonly(&Chat::Message::text));
+    message_type.set("lang", sol::readonly(&Chat::Message::lang));
+    message_type.set("timestamp", sol::readonly(&Chat::Message::timestamp));
+    message_type.set("valid", sol::readonly(&Chat::Message::valid));
 }
