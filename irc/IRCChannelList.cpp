@@ -56,7 +56,7 @@ std::optional<Channel> IRCChannelList::extractChannel(const std::string &name) {
     return res;
 }
 
-void IRCChannelList::markChannelJoined(const string &name) {
+void IRCChannelList::markChannelJoined(const std::string &name) {
     std::lock_guard lg(mutex);
     auto it = channels.find(name);
     if (it != channels.end())

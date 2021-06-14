@@ -6,17 +6,18 @@
 #define CHATSNIFFER_BOT_BOTENGINE_H_
 
 #include <atomic>
+#include <vector>
 
 #include <so_5/agent.hpp>
 
-#include <sol/sol.hpp>
-
-#include "../ChatMessage.h"
 #include "BotConfiguration.h"
 #include "BotEvents.h"
 
 class Logger;
 class IRCController;
+
+class BotMessageEvent;
+class BotMessageEventHandler;
 
 class BotEngine final : public so_5::agent_t
 {
@@ -33,12 +34,19 @@ class BotEngine final : public so_5::agent_t
     void so_evt_start() override;
     void so_evt_finish() override;
 
-    // event handlers
+    const BotConfiguration& getConfig() const;
+    const std::shared_ptr<Logger>& getLogger() const;
+    const so_5::mbox_t& getMsgSender() const;
+    const so_5::mbox_t& getBotLogger() const;
+
+    // control event handlers
     void evtShutdown(mhood_t<Bot::Shutdown> message);
     void evtReload(mhood_t<Bot::Reload> message);
-    void evtChatMessage(mhood_t<Chat::Message> message);
+
+    // bot event handlers
+    void evtBotMessage(so_5::mhood_t<BotMessageEvent> evt);
   private:
-    void initLuaState(sol::state& lua);
+    void loadHandlers();
 
     so_5::mbox_t self;
     so_5::mbox_t msgSender;
@@ -46,9 +54,9 @@ class BotEngine final : public so_5::agent_t
 
     const std::shared_ptr<Logger> logger;
 
-    sol::state lua;
-
     BotConfiguration config;
+
+    std::vector<std::unique_ptr<BotMessageEventHandler>> massageHandlers;
 };
 
 #endif //CHATSNIFFER_BOT_BOTENGINE_H_

@@ -41,7 +41,8 @@ void IRCSelector::removeSession(const std::shared_ptr<IRCSession> &session) {
     logger->logTrace("{} IRC selector remove session({})", loggerTag, fmt::ptr(session.get()));
 
     std::lock_guard lg(mutex);
-    sessions.erase(std::find(sessions.begin(), sessions.end(), session));
+    auto it = std::find(sessions.begin(), sessions.end(), session);
+    sessions.erase(it);
     needSync = true;
 }
 

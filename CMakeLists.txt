@@ -87,7 +87,8 @@ set(SOURCES
         MessageProcessor.h MessageProcessor.cpp
         Storage.h Storage.cpp
         StatsCollector.cpp StatsCollector.h
-        ChatMessage.h)
+        ChatMessage.h
+        So5Helpers.h)
 
 set(COMMON_SOURCES
         common/network/Socket.h common/network/Socket.cpp
@@ -135,7 +136,14 @@ set(BOT_SOURCES
         bot/BotsEnvironment.h bot/BotsEnvironment.cpp
         bot/BotEngine.h bot/BotEngine.cpp
         bot/BotConfiguration.h
-        bot/BotEvents.h)
+        bot/BotEvents.h
+        bot/events/BotEvent.h bot/handlers/BotEventHandler.h
+        bot/events/BotTimerEvent.h
+        bot/events/BotRequestEvent.h
+        bot/events/BotMessageEvent.h
+        bot/handlers/BotMessageEventHandler.h
+        bot/handlers/BotMessageEventHandlerCommand.h bot/handlers/BotMessageEventHandlerCommand.cpp
+        bot/handlers/BotMessageEventHandlerLua.h bot/handlers/BotMessageEventHandlerLua.cpp)
 
 # executable configuration
 message("\n[executable]")

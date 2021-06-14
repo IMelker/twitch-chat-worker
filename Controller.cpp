@@ -114,7 +114,7 @@ Storage * Controller::makeStorage(so_5::coop_t &coop, const so_5::mbox_t &listen
 
 BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop,
                                                  const so_5::mbox_t &listener,
-                                                 const so_5::mbox_t &stats) {
+                                                 const so_5::mbox_t &/*stats*/) {
     unsigned int botThreads = config[BOT]["threads"].value_or(1);
     auto botsLogger = LoggerFactory::create(LoggerFactory::config(config, BOT));
     auto botsDisp = so_5::disp::active_obj::make_dispatcher(so_environment(), "bots_environment");
@@ -124,7 +124,7 @@ BotsEnvironment *Controller::makeBotsEnvironment(so_5::coop_t &coop,
 
 MessageProcessor *Controller::makeMessageProcessor(so_5::coop_t &coop,
                                                    const so_5::mbox_t &publisher,
-                                                   const so_5::mbox_t &stats) {
+                                                   const so_5::mbox_t &/*stats*/) {
     MessageProcessorConfig procCfg;
     procCfg.languageRecognition = config[MSG]["language_recognition"].value_or(false);
     unsigned int procThreads = config[MSG]["threads"].value_or(2);

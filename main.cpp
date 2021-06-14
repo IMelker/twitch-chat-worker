@@ -5,7 +5,9 @@
 #include <wait.h>
 #include <thread>
 
-#include <so_5/all.hpp>
+#include <so_5/environment.hpp>
+#include <so_5/wrapped_env.hpp>
+#include <so_5/agent.hpp>
 
 #include "SysSignal.h"
 #include "Options.h"
@@ -16,6 +18,7 @@
 #include "db/ch/CHConnectionPool.h"
 #include "db/pg/PGConnectionPool.h"
 
+#include "So5Helpers.h"
 #include "HttpController.h"
 #include "HttpNotifier.h"
 #include "DBController.h"
@@ -42,26 +45,6 @@ std::shared_ptr<DBController> createDBController(Config& config) {
 
     return std::make_shared<DBController>(std::move(pgCfg), pgConns, pgLogger);
 }
-
-struct So5Logger final : public so_5::error_logger_t
-{
-    explicit So5Logger(std::shared_ptr<Logger> logger) : logger(std::move(logger)) {}
-    void log(const char * file_name, unsigned int line, const std::string & message) override {
-        logger->logError("[So5Logger] {}:{} {}", file_name, line, message);
-    }
-  private:
-    std::shared_ptr<Logger> logger;
-};
-
-struct So5MessageTrace : public so_5::msg_tracing::tracer_t {
-  public:
-    explicit So5MessageTrace(std::shared_ptr<Logger> logger) : logger(std::move(logger)) {}
-    void trace(const std::string &what) noexcept override {
-        logger->logWarn("[So5MessageTrace] {}", what);
-    }
-  private:
-    std::shared_ptr<Logger> logger;
-};
 
 int main(int argc, char *argv[]) {
     SysSignal::setupSignalHandling();

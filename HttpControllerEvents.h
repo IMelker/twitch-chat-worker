@@ -59,8 +59,9 @@ DEFINE_EVT(stats, bot)                // bots stats
 DEFINE_EVT(stats, storage)            // storage stats
 DEFINE_EVT(stats, db)                 // db stats
 DEFINE_EVT(stats, irc)                // irc stats
-DEFINE_EVT(stats, account)                // irc stats
+DEFINE_EVT(stats, account)            // account stats
 DEFINE_EVT(stats, channel)            // channels stats
+DEFINE_EVT(stats, so5disp)            // so5disp stats
 
 // handled by IRCController
 DEFINE_EVT(irc, reload)               // reload all accounts

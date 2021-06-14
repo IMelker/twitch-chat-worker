@@ -10,6 +10,8 @@
 #include <map>
 
 #include <so_5/agent.hpp>
+#include <so_5/stats/messages.hpp>
+#include <so_5/stats/prefix.hpp>
 
 #include "HttpControllerEvents.h"
 #include "ChatMessage.h"
@@ -27,6 +29,9 @@ struct ChannelStats {
     long long updated = 0;
 };
 
+struct So5DispatcherStats {
+    size_t size = 0;
+};
 
 class Logger;
 class DBController;
@@ -46,6 +51,7 @@ class StatsCollector final : public so_5::agent_t
     void so_evt_finish() override;
 
     // event handlers
+    void evtQuantity(const so_5::stats::messages::quantity<std::size_t> &evt);
     void evtIRCMetrics(so_5::mhood_t<Irc::SessionMetrics> evt);
     void evtIRCClientChannelsMetrics(so_5::mhood_t<Irc::ClientChannelsMetrics> evt);
     void evtRecvMessageMetric(so_5::mhood_t<Chat::Message> evt);
@@ -53,6 +59,7 @@ class StatsCollector final : public so_5::agent_t
     void evtCHPoolMetric(so_5::mhood_t<Storage::CHPoolMetrics> evt);
 
     // event http
+    void evtHttpSo5Disp(so_5::mhood_t<hreq::stats::so5disp> evt);
     void evtHttpIrcBots(so_5::mhood_t<hreq::stats::bot> evt);
     void evtHttpStorageStats(so_5::mhood_t<hreq::stats::storage> evt);
     void evtHttpDbStats(so_5::mhood_t<hreq::stats::db> evt);
@@ -71,6 +78,7 @@ class StatsCollector final : public so_5::agent_t
     std::map<std::string, std::vector<IRCStatistic>> ircStats;
     std::map<std::string, ChannelStats> channelsStats;
     std::vector<CHConnection::CHStatistics> chPoolStats;
+    std::map<so_5::stats::prefix_t, So5DispatcherStats> dispStats;
 };
 
 #endif //CHATCONTROLLER__STATSCOLLECTOR_H_

@@ -227,6 +227,6 @@ void Storage::store(BotLogHolder &&msg) {
     }
 }
 
-void Storage::evtGatherStats(so_5::mhood_t<GatherStats> evt) {
+void Storage::evtGatherStats(so_5::mhood_t<GatherStats>) {
     so_5::send<CHPoolMetrics>(statsCollector, ch->collectStats());
 }

@@ -22,14 +22,18 @@ void IRCSelectorPool::init(size_t threads) {
 }
 
 void IRCSelectorPool::addSession(const std::shared_ptr<IRCSession> &session) {
+    std::shared_ptr<IRCSession> tempHolder = session;
+
     std::lock_guard lg(mutex);
-    getNextSelectorRoundRobin()->addSession(session);
+    getNextSelectorRoundRobin()->addSession(tempHolder);
 }
 
 void IRCSelectorPool::removeSession(const std::shared_ptr<IRCSession> &session) {
+    std::shared_ptr<IRCSession> tempHolder = session;
+
     std::lock_guard lg(mutex);
     for(auto &selector: selectors) {
-        selector->removeSession(session);
+        selector->removeSession(tempHolder);
     }
 }
 

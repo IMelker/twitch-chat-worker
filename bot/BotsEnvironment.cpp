@@ -14,6 +14,7 @@
 #include "ThreadName.h"
 
 #include "../DBController.h"
+#include "events/BotMessageEvent.h"
 #include "BotsEnvironment.h"
 #include "BotEngine.h"
 #include "BotEvents.h"
@@ -92,7 +93,7 @@ void BotsEnvironment::evtChatMessage(mhood_t<Chat::Message> msg) {
 
     auto it = botBoxes.find(msg->channel);
     if (it != botBoxes.end()) {
-        so_5::send(it->second, msg);
+        so_5::send<BotMessageEvent>(it->second, msg.make_holder());
     }
 }
 

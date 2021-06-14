@@ -3,6 +3,7 @@
 //
 
 #include <nlohmann/json.hpp>
+#include <so_5/stats/std_names.hpp>
 
 #include "Clock.h"
 #include "Logger.h"
@@ -27,26 +28,42 @@ StatsCollector::StatsCollector(const context_t &ctx,
 StatsCollector::~StatsCollector() = default;
 
 void StatsCollector::so_define_agent() {
+    using namespace so_5::stats;
+
+    so_subscribe(so_environment().stats_controller().mbox()).event(&StatsCollector::evtQuantity);
     so_subscribe_self().event(&StatsCollector::evtIRCMetrics);
     so_subscribe_self().event(&StatsCollector::evtIRCClientChannelsMetrics);
     so_subscribe(publisher).event(&StatsCollector::evtRecvMessageMetric);
     so_subscribe_self().event(&StatsCollector::evtSendMessageMetric);
     so_subscribe_self().event(&StatsCollector::evtCHPoolMetric);
 
+    so_subscribe(http).event(&StatsCollector::evtHttpSo5Disp);
     so_subscribe(http).event(&StatsCollector::evtHttpIrcBots);
     so_subscribe(http).event(&StatsCollector::evtHttpStorageStats);
     so_subscribe(http).event(&StatsCollector::evtHttpDbStats);
     so_subscribe(http).event(&StatsCollector::evtHttpIrcStats);
     so_subscribe(http).event(&StatsCollector::evtHttpAccountsStats);
     so_subscribe(http).event(&StatsCollector::evtHttpChannelsStats);
+
+    so_set_delivery_filter(so_environment().stats_controller().mbox(),
+                           []( const messages::quantity< std::size_t > & msg ) {
+                                return suffixes::work_thread_queue_size() == msg.m_suffix;
+                            });
 }
 
 void StatsCollector::so_evt_start() {
     set_thread_name("stats_collector");
+
+    so_environment().stats_controller().set_distribution_period(std::chrono::seconds(1));
+    so_environment().stats_controller().turn_on();
 }
 
 void StatsCollector::so_evt_finish() {
 
+}
+
+void StatsCollector::evtQuantity(const so_5::stats::messages::quantity<std::size_t> &evt) {
+    dispStats[evt.m_prefix].size = evt.m_value;
 }
 
 void StatsCollector::evtIRCMetrics(mhood_t<Irc::SessionMetrics> evt) {
@@ -81,6 +98,18 @@ void StatsCollector::evtCHPoolMetric(so_5::mhood_t<Storage::CHPoolMetrics> evt) 
             break;
         chPoolStats[i] += evt->stats[i];
     }
+}
+
+void StatsCollector::evtHttpSo5Disp(so_5::mhood_t<hreq::stats::so5disp> evt) {
+    auto res = json::object();
+    auto &dispatchers = res["dispatchers"] = json::array();
+
+    for (auto& [prefix, stats]: dispStats) {
+        dispatchers.push_back({{"name", prefix.c_str()},
+                               {"size", stats.size}});
+    }
+
+    send_http_resp(http, evt, 200, res.dump());
 }
 
 void StatsCollector::evtHttpIrcBots(so_5::mhood_t<hreq::stats::bot> evt) {

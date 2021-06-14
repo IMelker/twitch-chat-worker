@@ -85,6 +85,7 @@ void HttpController::handleRequest(http::request<http::string_body> &&req, HTTPS
         match_handle2(stats, bot);
         match_handle2(stats, storage);
         match_handle2(stats, db);
+        match_handle2(stats, so5disp);
     }
     else
     if (match(0, irc)) {

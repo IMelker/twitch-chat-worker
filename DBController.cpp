@@ -31,7 +31,7 @@ PGConnectionPool *DBController::getPGPool() const {
 }
 
 DBController::Users DBController::loadUsersNicknames() {
-    static const std::string request = "SELECT username FROM accounts WHERE active = true;";
+    static const std::string request = "SELECT username FROM account WHERE active = true;";
 
     DBController::Users users;
     {
@@ -53,9 +53,9 @@ DBController::Users DBController::loadUsersNicknames() {
 }
 
 DBController::Users DBController::loadServiceAccountsNicknames() {
-    static const std::string request = "SELECT accounts.username FROM accounts "
-                                       "JOIN account_type ON account_type.id = accounts.account_type_id "
-                                       "WHERE accounts.active = true AND "
+    static const std::string request = "SELECT account.username FROM account "
+                                       "JOIN account_type ON account_type.id = account.account_type_id "
+                                       "WHERE account.active = true AND "
                                        "(account_type.name = 'service' OR account_type.name = 'main');";
 
     DBController::Users users;
@@ -81,7 +81,7 @@ DBController::Accounts DBController::loadAccounts() {
     static const std::string request = "SELECT id, username, display, oauth, channels_limit, "
                                        "whisper_per_sec_limit, auth_per_sec_limit, "
                                        "command_per_sec_limit, sessions_count "
-                                       "FROM accounts WHERE active = true;";
+                                       "FROM account WHERE active = true;";
 
     DBController::Accounts accounts;
     {
@@ -116,7 +116,7 @@ DBController::Account DBController::loadAccount(int id) {
     const std::string request = fmt::format("SELECT username, display, oauth, channels_limit, "
                                             "whisper_per_sec_limit, auth_per_sec_limit, "
                                             "command_per_sec_limit, sessions_count "
-                                            "FROM accounts WHERE id = {};", id);
+                                            "FROM account WHERE id = {};", id);
 
     DBController::Account account;
     {
@@ -170,9 +170,9 @@ DBController::Channels DBController::loadChannels() {
 DBController::Channels DBController::loadChannelsFor(const std::string &user) {
     const std::string request = fmt::format("SELECT channel.name FROM bot_account "
                                             "JOIN bot_channel ON bot_account.bot_id = bot_channel.bot_id "
-                                            "JOIN accounts ON bot_account.account_id = accounts.id "
+                                            "JOIN account ON bot_account.account_id = account.id "
                                             "JOIN channel ON bot_channel.channel_id = channel.id "
-                                            "WHERE accounts.username = '{}' AND channel.watch = true;", user);
+                                            "WHERE account.username = '{}' AND channel.watch = true;", user);
 
     DBController::Channels channels;
     {
@@ -213,12 +213,12 @@ DBController::Channels DBController::loadChannelsFor(int accountId) {
 }
 
 DBController::BotsConfigurations DBController::loadBotConfigurations() {
-    static const std::string request = "SELECT bot.id, bot.user_id, accounts.username, "
-                                       "       channel.name, eh.event_type_id, "
-                                       "       eh.id, eh.script, eh.additional "
+    static const std::string request = "SELECT bot.id, bot.user_id, account.username, "
+                                       "       channel.name, eh.id, eh.event_type_id, "
+                                       "       eh.script, eh.additional "
                                        "FROM bot "
                                        "JOIN bot_account ON bot.id = bot_account.bot_id "
-                                       "JOIN accounts ON bot_account.account_id = accounts.id "
+                                       "JOIN account ON bot_account.account_id = account.id "
                                        "JOIN bot_channel ON bot.id = bot_channel.bot_id "
                                        "JOIN channel ON bot_channel.channel_id = channel.id "
                                        "JOIN event_handler as eh on bot.id = eh.bot_id;";
@@ -239,19 +239,7 @@ DBController::BotsConfigurations DBController::loadBotConfigurations() {
                 config.userId = toNumber(row[1]);
                 config.account = std::move(row[2]);
                 config.channel = std::move(row[3]);
-                switch (static_cast<BotEventType>(toNumber(row[4]))) {
-                    case BotEventType::Message:
-                        config.onMessage.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
-                        break;
-                    case BotEventType::Interval:
-                        config.onInterval.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
-                        break;
-                    case BotEventType::Timer:
-                        config.onTimer.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
-                        break;
-                    default:
-                        break;
-                }
+                config.handlers.emplace_back(toNumber(row[4]), toNumber(row[5]), std::move(row[6]), std::move(row[7]));
             }
         }
     }
@@ -261,17 +249,16 @@ DBController::BotsConfigurations DBController::loadBotConfigurations() {
 }
 
 BotConfiguration DBController::loadBotConfiguration(int id) {
-    const std::string request = fmt::format("SELECT bot.id, bot.user_id, accounts.username, "
-                                            "       channel.name, eh.event_type_id, "
-                                            "       eh.id, eh.script, eh.additional "
+    const std::string request = fmt::format("SELECT bot.id, bot.user_id, account.username, "
+                                            "       channel.name, eh.id, eh.event_type_id, "
+                                            "       eh.script, eh.additional "
                                             "FROM bot "
                                             "JOIN bot_account ON bot.id = bot_account.bot_id "
-                                            "JOIN accounts ON bot_account.account_id = accounts.id "
+                                            "JOIN account ON bot_account.account_id = account.id "
                                             "JOIN bot_channel ON bot.id = bot_channel.bot_id "
                                             "JOIN channel ON bot_channel.channel_id = channel.id "
                                             "JOIN event_handler as eh on bot.id = eh.bot_id "
                                             "WHERE bot.id = {};", id);
-
     BotConfiguration config;
     {
         DBConnectionLock dbl(pg);
@@ -289,19 +276,7 @@ BotConfiguration DBController::loadBotConfiguration(int id) {
             config.account = std::move(res.front()[2]);
             config.channel = std::move(res.front()[3]);
             for(auto &row : res) {
-                switch (static_cast<BotEventType>(toNumber(row[4]))) {
-                    case BotEventType::Message:
-                        config.onMessage.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
-                        break;
-                    case BotEventType::Interval:
-                        config.onInterval.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
-                        break;
-                    case BotEventType::Timer:
-                        config.onTimer.emplace_back(toNumber(row[5]), std::move(row[6]), std::move(row[7]));
-                        break;
-                    default:
-                        break;
-                }
+                config.handlers.emplace_back(toNumber(row[4]), toNumber(row[5]), std::move(row[6]), std::move(row[7]));
             }
         }
     }
